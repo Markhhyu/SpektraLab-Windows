@@ -55,6 +55,26 @@ This repository ships Windows installers only. Release notes are written in
 
 ## History
 
+### v1.3.4-beta.3-win.2 — 测光回归修复 / Metering regression fix
+
+安装包：`SpektraLab_1.3.4-beta.3_x64-setup.exe`（NSIS，37.5 MiB），sha256
+`f47a48f419766bde3cdeaf61d0534c542cae553cd3ea50318b644eecfb0c38c1`。
+
+**中文**
+
+- 修复一个自动测光回归（win.1 引入）：`center_weighted`、`average`、`median` 三种测光方法在测光器并行化后
+  恒返回 0 EV，选择这些方法时自动曝光不施加增益、配光读数显示 0.000。现已修复并新增回归测试。
+- 质量门禁：engine 42/42 CTest（新增 `spk_exposure_metering`）、上游 parity 22/22。
+- 其余功能与 win.1 相同（Tone Mask、整图 parity、会话驻留、首帧预热、TIFF Deflate、显影与光源面板）。
+
+**English**
+
+- Fixes an auto-exposure regression introduced in win.1: after the meter was parallelised,
+  `center_weighted`, `average` and `median` always returned 0 EV, so choosing one applied no
+  exposure gain and the Process reading showed 0.000. Fixed, with a new regression test.
+- Gates: engine 42/42 CTest (new `spk_exposure_metering`), upstream parity 22/22.
+- Everything else is unchanged from win.1.
+
 ### v1.3.4-beta.3-win.1 — Windows port, P0/P1 optimisations, development and lighting
 
 安装包：`SpektraLab_1.3.4-beta.3_x64-setup.exe`（NSIS，37.5 MiB）。基于上游

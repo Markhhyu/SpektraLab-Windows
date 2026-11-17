@@ -928,31 +928,38 @@ bool Pipeline::measure_meter_evs(const Image& in, ExposureEvs& out, std::string&
     uint32_t sh = 0, sw = 0;
     if (!exposure_sample_y(framed, /*stride=*/false, Y, sh, sw, error)) return false;
     meter_stamp("sample");
-    // The four estimators read the same `Y` and write disjoint fields, so the
-    // three legacy ones run beside the intent set. The median alone is ~9 ms
-    // after the change below; the win here is that the 33 ms `evs_from` and
-    // the 8 ms centre-weighted pass stop queueing behind it on a cold meter.
-    ExposureEvs evs;
-    bool legacy_ok = true;
+    // All seven estimators read the same `Y`, so the three legacy ones run
+    // beside the intent set: the 33 ms `evs_from` hides the 8-9 ms passes
+    // instead of queueing behind them on a cold meter.
+    // The legacy estimators write locals, not `evs`: the intent set is
+    // assigned below while those threads are still running, and a whole-struct
+    // assignment races with (and used to clobber) the legacy fields. The
+    // overlap is the point -- the 33 ms `evs_from` hides the 8-9 ms passes --
+    // so join before the fields are stored.
+    double center_weighted = 0.0, average = 0.0, median = 0.0;
+    bool center_ok = true, average_ok = true, median_ok = true;
     std::string center_error, average_error, median_error;
     std::thread center_thread([&] {
-        legacy_ok = legacy_exposure_ev(Y, sh, sw, "center_weighted", evs.center_weighted, center_error) && legacy_ok;
+        center_ok = legacy_exposure_ev(Y, sh, sw, "center_weighted", center_weighted, center_error);
     });
     std::thread average_thread([&] {
-        legacy_ok = legacy_exposure_ev(Y, sh, sw, "average", evs.average, average_error) && legacy_ok;
+        average_ok = legacy_exposure_ev(Y, sh, sw, "average", average, average_error);
     });
     std::thread median_thread([&] {
-        legacy_ok = legacy_exposure_ev(Y, sh, sw, "median", evs.median, median_error) && legacy_ok;
+        median_ok = legacy_exposure_ev(Y, sh, sw, "median", median, median_error);
     });
-    evs = exposure_evs_from(Y, sh, sw);
+    ExposureEvs evs = exposure_evs_from(Y, sh, sw);
     meter_stamp("evs_from");
     center_thread.join();
     average_thread.join();
     median_thread.join();
-    if (!legacy_ok) {
+    if (!center_ok || !average_ok || !median_ok) {
         error = !center_error.empty() ? center_error : (!average_error.empty() ? average_error : median_error);
         return false;
     }
+    evs.center_weighted = center_weighted;
+    evs.average = average;
+    evs.median = median;
     meter_stamp("legacy");
     out = evs;
     return true;

@@ -368,6 +368,14 @@ if(SPEKTRALAB_PORTABLE_BACKEND)
             add_test(NAME spk_illuminants
                 COMMAND spk_illuminants "${vulkan_resource_dir}")
 
+            add_executable(spk_exposure_metering tests/exposure_metering.cpp)
+            target_include_directories(spk_exposure_metering PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/include"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src")
+            target_link_libraries(spk_exposure_metering PRIVATE spektralab_engine)
+            add_test(NAME spk_exposure_metering
+                COMMAND spk_exposure_metering "${vulkan_resource_dir}")
+
             add_executable(spk_vulkan_math_gate tests/gpu_vulkan_math_gate.cpp)
             target_include_directories(spk_vulkan_math_gate PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
             target_link_libraries(spk_vulkan_math_gate PRIVATE spektralab_engine)

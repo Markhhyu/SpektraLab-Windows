@@ -12,12 +12,15 @@ import { TopBar } from './TopBar';
 import { AboutDialog, HostFailure, SettingsDialog } from './Dialogs';
 import { ExportPage } from '../export/ExportPage';
 import { PanelResize } from '../controls/PanelResize';
+import { LibraryView } from './LibraryView';
+import { useLibrary } from '../state/library';
 
 export function EditorWindow() {
   const left = useSettings((s) => s.leftCollapsed);
   const right = useSettings((s) => s.rightCollapsed);
   const strip = useSettings((s) => s.filmstripCollapsed);
   const batch = useSession((s) => s.batchExporting);
+  const libraryOpen = useLibrary((s) => s.open);
   return (
     <>
       <div
@@ -40,6 +43,7 @@ export function EditorWindow() {
       <SettingsDialog />
       <AboutDialog />
       <ExportPage />
+      {libraryOpen && <LibraryView />}
     </>
   );
 }

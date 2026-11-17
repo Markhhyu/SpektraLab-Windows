@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：源自原项目最后一个
-Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.0.0**，
+Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.1.0**，
 并包含 Windows 移植修复、性能优化和两个原生扩展（见下）。
 
 胶片过程模型、28 个实测胶片/相纸 profile 与打印 LUT 来自
@@ -61,6 +61,12 @@ Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己
     扫描常量按命名光源重新烘焙；观看光源经 CAT02 做软打样并接管 glare 染色。
     两个字段都保持默认（空串）时，输出与 P1-8 之前完全一致。
 
+12. **图库（`v1.1.0`）**——持久的 Lightroom 式目录。导入文件夹或照片时只登记引用
+    （原文件不复制、不改写）；缩略图、0–5 星评分、Pick/Reject 旗标、关键字和“已编辑”
+    标记保存在 `<AppData>\app.spektralab.desktop\Catalog\catalog.json` 与
+    `...\Catalog\thumbs\`。启动后自动回到图库，可按文件夹/关键字/评分/旗标/搜索筛选、
+    排序、记住上次选择，双击直接进入修改。编辑仍以每图 sidecar 非破坏性保存，原图不变。
+
 ## 打包与 Releases
 
 - 发布用的 host 为**静态链接**（`-DSPEKTRALAB_STATIC_RUNTIME=ON`），只依赖系统 DLL
@@ -95,7 +101,7 @@ node scripts/package.mjs win      # 暂存 host、构建前端并产出 NSIS 安
 - `engine/tests/parity_upstream.py`——对公开上游 Python 包的整图 parity
   （需要装好 numpy/scipy/numba/colour-science 的 Python 环境）。
 - `engine/tests/calibration_sweep.py`——DIR/光晕/颗粒单调性。
-- `cd desktop && npx vitest run`——464 项前端测试。
+- `cd desktop && npx vitest run`——472 项前端测试。
 
 ## 已知限制
 

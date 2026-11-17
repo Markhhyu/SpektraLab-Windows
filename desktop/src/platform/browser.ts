@@ -19,6 +19,7 @@ function ls(): Storage | null {
 }
 
 export function browserPlatform(): Platform {
+  const catalogThumbs = new Map<string, string>();
   const dropListeners = new Set<(p: string[]) => void>();
   const openListeners = new Set<(p: string[]) => void>();
   const pairEntry = (path: string): FileEntry => ({ path, name: path.split('/').pop()!, size: ls()?.getItem(`pair:${path}`)?.length ?? 0, mtime_ms: Date.now() });
@@ -67,6 +68,18 @@ export function browserPlatform(): Platform {
     async storeWrite(area, name, value) {
       ls()?.setItem(`store:${area}/${name}`, JSON.stringify(value));
     },
+    async catalogThumbSave(image, data) {
+      let binary = '';
+      for (const byte of data) binary += String.fromCharCode(byte);
+      catalogThumbs.set(image, btoa(binary));
+      return image;
+    },
+    async catalogThumbRead(image) {
+      return catalogThumbs.get(image) ?? null;
+    },
+    async catalogThumbRemove(image) {
+      catalogThumbs.delete(image);
+    },
     takeLaunchPaths: async () => {
       const q = new URLSearchParams(location.search).get('open');
       return q === null ? [] : [q || ROLL];
@@ -80,7 +93,7 @@ export function browserPlatform(): Platform {
       home: '/mock',
       pictures: '/mock',
       os: 'browser',
-      version: '1.0.0',
+      version: '1.1.0',
     }),
     pickFolder: async () => ROLL,
     pickFiles: async () => entries(ROLL).slice(0, 3).map((e) => e.path),

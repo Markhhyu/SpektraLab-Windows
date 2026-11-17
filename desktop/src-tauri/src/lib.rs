@@ -2,6 +2,7 @@
 //! narrow file commands the webview needs. Everything else — the interface,
 //! the session, the menus — is the TypeScript app in `desktop/src`.
 
+pub mod catalog;
 pub mod files;
 pub mod framing;
 pub mod host;
@@ -362,6 +363,10 @@ pub fn run() {
             pair_save,
             pair_list,
             pair_delete,
+            catalog::catalog_thumb_save,
+            catalog::catalog_thumb_read,
+            catalog::catalog_thumb_remove,
+            catalog::catalog_thumb_clear,
             frame_cache_key,
             frame_cache_read,
             frame_cache_write,

@@ -40,6 +40,10 @@ export interface Platform {
   pairDelete(path: string): Promise<void>;
   storeRead(area: string, name: string): Promise<unknown | null>;
   storeWrite(area: string, name: string, value: unknown): Promise<void>;
+  /** Cache a library preview JPEG (base64-encoded read-back). */
+  catalogThumbSave(image: string, data: Uint8Array): Promise<string>;
+  catalogThumbRead(image: string): Promise<string | null>;
+  catalogThumbRemove(image: string): Promise<void>;
   takeLaunchPaths(): Promise<string[]>;
   pathExists(path: string): Promise<boolean>;
   ensureDir(path: string): Promise<void>;

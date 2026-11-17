@@ -5,7 +5,7 @@
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
 the spectral film-and-print simulator — derived from the original project's last
 Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
-version line, currently **v1.0.0**, plus the Windows port fixes, performance work
+version line, currently **v1.1.0**, plus the Windows port fixes, performance work
 and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs
@@ -84,6 +84,15 @@ the short version:
     CAT02 soft proof and takes over the glare tint. Leaving both on the stock
     default is the exact pre-P1-8 rendering.
 
+12. **Library (`v1.1.0`)** — a persistent, Lightroom-style catalog. Import
+    folders or photos by reference (originals are never copied or modified);
+    thumbnails, 0–5 star ratings, pick/reject flags, keywords and edit markers
+    live in `<AppData>\app.spektralab.desktop\Catalog\catalog.json` and
+    `...\Catalog\thumbs\`. The library restores on launch, filters by
+    folder/keyword/rating/flag/search, sorts, remembers the last selection, and
+    double-click opens a frame in the editor. Edits stay non-destructive
+    per-image sidecars, exactly as before.
+
 ## Packaging and releases
 
 - The shipped host is **static** (`-DSPEKTRALAB_STATIC_RUNTIME=ON`), so it
@@ -125,7 +134,7 @@ node scripts/package.mjs win      # stages host, builds the frontend and NSIS
   upstream Python package (needs a Python venv with numpy/scipy/numba/
   colour-science).
 - `engine/tests/calibration_sweep.py` — DIR/halation/grain monotonicity.
-- `cd desktop && npx vitest run` — 464 frontend tests.
+- `cd desktop && npx vitest run` — 472 frontend tests.
 
 ## Known limits
 

@@ -10,6 +10,7 @@ import { canMakePair, makePair, currentFitZoom, openFolder, pairComplete, reload
 import { forgetRecentFolders, settingsStore, useSettings } from '../state/settings';
 import { openDialog } from './actions';
 import { baseName } from '../platform';
+import { setLibraryOpen } from '../state/library';
 import type { PreviewGamut } from '../canvas/colorSpace';
 import { sourceGeometryFor } from '@shared/filmEdge';
 
@@ -57,6 +58,7 @@ export function TopBar() {
           <button className="icon-btn" title={t('helpOpen') + ' (Ctrl+O)'} onClick={() => void openDialog()} data-testid="open-button">
             <Import />
           </button>
+          <button className="icon-btn" title={tz('Library', '图库')} onClick={() => setLibraryOpen(true)} data-testid="library-button">▦</button>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button className="icon-btn dim recent-button" title={tz('Open Recent', '最近打开')} aria-label={tz('Open Recent', '最近打开')} data-testid="recent-button">▾</button>

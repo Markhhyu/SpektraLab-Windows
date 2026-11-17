@@ -56,6 +56,31 @@ This repository ships Windows installers only. Release notes are written in
 
 ## History
 
+### v1.2.0 — 图库到修改的胶片条连续浏览 / Library-to-filmstrip browsing
+
+安装包：`SpektraLab_1.2.0_x64-setup.exe`（NSIS，37.55 MiB），sha256
+`efe0f571d14f1cd3195a2eb8d7027493e217961de30490f55d18fb2558226e9c`。
+
+**中文**
+
+- 从图库双击（或 Enter）打开照片时，编辑器底部胶片条会装入**当前筛选/排序后的整页照片**，
+  可直接点缩略图或用方向键切换，不必先返回图库再选。
+- 编辑器工具栏的「图库」按钮现在会**把当前正在修改的照片带回图库并选中**，
+  在图库与修改之间来回操作时不会丢失位置。
+- 从图库进入修改、编辑、返回图库、再换下一张，形成连续的浏览-编辑循环。
+- 测试：474 项桌面测试通过（新增 2 项“图库开片时胶片条装入整页”用例）、typecheck/lint 干净；引擎未改动。
+
+**English**
+
+- Double-clicking (or Enter) a photo in the library now loads the **whole
+  filtered/sorted page** into the editor's filmstrip; switch frames by clicking
+  a thumbnail or with the arrow keys, without returning to the grid.
+- The editor's Library button now **reopens the grid with the photo being
+  edited selected**, so moving between the grid and the editor keeps place.
+- Editing becomes a continuous browse-edit loop: grid → editor → grid → next.
+- Gates: 474 desktop tests pass (including 2 new cases for the filmstrip
+  collection), typecheck/lint clean; the engine is unchanged.
+
 ### v1.1.1 — 图库入口与自动登记 / Library entry and auto-registration
 
 安装包：`SpektraLab_1.1.1_x64-setup.exe`（NSIS，37.54 MiB），sha256

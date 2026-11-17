@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：源自原项目最后一个
-Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.1.1**，
+Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.2.0**，
 并包含 Windows 移植修复、性能优化和两个原生扩展（见下）。
 
 胶片过程模型、28 个实测胶片/相纸 profile 与打印 LUT 来自
@@ -66,8 +66,9 @@ Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己
     通过普通打开方式打开的照片也会自动登记进图库。缩略图、0–5 星评分、Pick/Reject
     旗标、关键字和“已编辑”标记保存在 `<AppData>\app.spektralab.desktop\Catalog\catalog.json`
     与 `...\Catalog\thumbs\`。启动后自动回到图库，可按文件夹/关键字/评分/旗标/搜索
-    筛选、排序、记住上次选择，双击直接进入修改。编辑仍以每图 sidecar 非破坏性保存，
-    原图不变。
+    筛选、排序、记住上次选择，双击直接进入修改。从图库打开时会把当前筛选/排序后
+    的整页照片装进编辑器的胶片条，可直接在下方点缩略图切换，不必返回图库；编辑器里的
+    图库按钮会带着当前照片回到图库。编辑仍以每图 sidecar 非破坏性保存，原图不变。
 
 ## 打包与 Releases
 

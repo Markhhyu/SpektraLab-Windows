@@ -93,7 +93,7 @@ export function browserPlatform(): Platform {
       home: '/mock',
       pictures: '/mock',
       os: 'browser',
-      version: '1.1.1',
+      version: '1.2.0',
     }),
     pickFolder: async () => ROLL,
     pickFiles: async () => entries(ROLL).slice(0, 3).map((e) => e.path),

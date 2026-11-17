@@ -30,7 +30,7 @@ import {
 } from '@shared/catalog';
 import { type FileEntry, baseName, platform } from '../platform';
 import { host } from '../host/client';
-import { openPaths } from './session';
+import { openCollection } from './session';
 
 /** Long edge of the preview thumbnails the grid shows. */
 const THUMB_EDGE = 512;
@@ -357,11 +357,22 @@ export async function registerOpened(files: FileEntry[], folder: string): Promis
   if (store().open) hydrateThumbs();
 }
 
-/** Open the selection in the editor and leave the library. */
-export async function openSelection(paths: string[] = store().selection): Promise<void> {
+/**
+ * Open the selection in the editor and leave the library. The editor's
+ * filmstrip is filled with the whole visible (filtered/sorted) catalog page,
+ * with `focusPath` (the clicked photo) open, so browsing continues there.
+ */
+export async function openSelection(paths: string[] = store().selection, focusPath?: string): Promise<void> {
   if (paths.length === 0) return;
-  set({ open: false });
-  await openPaths(paths);
+  const wanted = new Set(paths);
+  const visible = visibleEntries();
+  const collection = visible.length > 0 ? visible : store().catalog.entries.filter((e) => wanted.has(e.path));
+  if (collection.length === 0) return;
+  const focus = focusPath ?? store().anchor ?? paths[paths.length - 1]!;
+  const folder = (collection.find((e) => e.path === focus) ?? collection[0]!).folder;
+  const files: FileEntry[] = collection.map((e) => ({ path: e.path, name: e.name, size: e.size, mtime_ms: e.mtimeMs }));
+  set({ open: false, selection: [focus], anchor: focus });
+  await openCollection(folder, files, focus);
 }
 
 export function clearError() {

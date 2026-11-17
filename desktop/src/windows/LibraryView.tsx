@@ -82,7 +82,7 @@ export function LibraryView() {
         if (editorHasPhoto) setLibraryOpen(false);
       } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') move(1);
       else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') move(-1);
-      else if (event.key === 'Enter') void openSelection();
+      else if (event.key === 'Enter') void openSelection(undefined, selection[selection.length - 1]);
       else if (/^[0-5]$/.test(event.key)) void setRating(Number(event.key) as Rating);
       else if (event.key === 'p' || event.key === 'P') void setFlag('pick');
       else if (event.key === 'x' || event.key === 'X') void setFlag('reject');
@@ -203,7 +203,7 @@ export function LibraryView() {
               data-path={entry.path}
               data-testid="library-cell"
               onClick={(e) => onCellClick(e, entry.path)}
-              onDoubleClick={() => void openSelection([entry.path])}
+              onDoubleClick={() => void openSelection([entry.path], entry.path)}
               title={entry.path}
             >
               <div className="library-thumb">

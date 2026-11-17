@@ -1717,6 +1717,28 @@ async function setLibrary(folder: string, files: FileEntry[]) {
   });
 }
 
+/**
+ * Open a whole collection with one frame focused. The library uses this so the
+ * filmstrip carries the filtered catalog set: after opening a photo the user
+ * can click any other thumbnail instead of going back to the library grid.
+ * The list is authoritative (it comes from the catalog, not from expanding a
+ * folder again), so a filtered collection keeps its order and members.
+ */
+export async function openCollection(folder: string, files: FileEntry[], focusPath?: string): Promise<void> {
+  if (!files.length) return;
+  try {
+    await setLibrary(folder, files);
+    void import('./library').then((library) => library.registerOpened(files, folder)).catch(() => undefined);
+    const target = focusPath && files.some((f) => f.path === focusPath) ? focusPath : files[0]!.path;
+    await select(target);
+    if (files.length > 1) {
+      set({ status: tz(`Filmstrip: ${files.length} photos from the library.`, `胶片条：图库中的 ${files.length} 张照片。`) });
+    }
+  } catch (e) {
+    noteError(tz('Opening from the library', '从图库打开'), e);
+  }
+}
+
 /** Move one thumbnail into the hovered slot without touching selection,
  * editor session, parameters or the selected export set. */
 export function moveFrame(path: string, target: string) {

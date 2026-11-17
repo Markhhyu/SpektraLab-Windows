@@ -93,6 +93,11 @@ described below.
     photo in the editor. Ratings and flags are catalog metadata; per-image
     adjustments stay in the existing sidecars, so editing is still
     non-destructive, and the library reopens with the last view/selection.
+    Opening a photo from the library (`openCollection` in
+    `desktop/src/state/session.ts`) loads the whole visible catalog page into the
+    editor filmstrip with the clicked frame focused, so frames can be browsed
+    there without returning to the grid; the editor's Library button syncs the
+    current frame back into the grid selection (v1.2.0).
     Tests: `desktop/src/shared/catalog.test.ts` (8 cases) plus the full desktop
     suite (472 passed / 2 skipped); typecheck and lint are clean.
 

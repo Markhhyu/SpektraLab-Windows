@@ -18,7 +18,7 @@ C++20 engine and drives it through a Vulkan host on Windows.
 
 ## Download and install
 
-Grab the installer from **[Releases](../../releases)** —
+Grab the installer from **[Releases](https://github.com/Markhhyu/SpektraLab-Windows/releases)** —
 `SpektraLab_<version>_x64-setup.exe` (NSIS, ~38 MB).
 
 - Windows 10/11, 64-bit.

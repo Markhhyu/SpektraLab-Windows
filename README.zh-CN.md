@@ -14,7 +14,7 @@ Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`），加上 Windows 移植�
 
 ## 下载与安装
 
-安装包见 **[Releases](../../releases)**：`SpektraLab_<version>_x64-setup.exe`（NSIS，约 38 MB）。
+安装包见 **[Releases](https://github.com/Markhhyu/SpektraLab-Windows/releases)**：`SpektraLab_<version>_x64-setup.exe`（NSIS，约 38 MB）。
 
 - Windows 10/11 64 位。
 - 需要可用的 Vulkan 1.1+ 显卡驱动（参考机为 RTX 4070 Laptop / 8 GB；近年的 AMD、Intel、NVIDIA 显卡均可）。

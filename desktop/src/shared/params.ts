@@ -11,6 +11,7 @@
 // The JSON keys of `FilmParams` are the Swift `Codable` keys, so a sidecar
 // written by the macOS app opens here and the other way round.
 
+import { tz } from '../i18n';
 import type { StockCatalog } from './stocks.ts';
 import { dateCamera, dateEffective, datePrints, dateScale, edgeEffective, filmFormatForWire } from './filmEdge.ts';
 
@@ -173,6 +174,31 @@ export const EFFECT_RANGES = {
   glare: [0, 30],
 } as const satisfies Record<string, readonly [number, number]>;
 
+/** P1-7: the parametric development model (push/pull and developer temperature).
+ *  `pushStops` bends the measured density curve; `temperatureC` folds C-41's
+ *  rule of thumb (1 °C ≈ 1/6 stop) into an equivalent push. */
+export interface DevelopmentSettings {
+  active: boolean;
+  pushStops: number;
+  temperatureC: number;
+}
+export const DEVELOPMENT_DEFAULT: DevelopmentSettings = { active: false, pushStops: 0, temperatureC: 20 };
+export const DEVELOPMENT_PUSH_RANGE: [number, number] = [-3, 3];
+export const DEVELOPMENT_TEMPERATURE_RANGE: [number, number] = [18, 24];
+
+/** P1-8: the lights the print is scanned and viewed under. The empty string is
+ *  the stock profile's own viewing illuminant (D50 for every shipped paper),
+ *  which keeps the colour path identical to versions before these fields. */
+export const ILLUMINANTS = ['', 'D50', 'D55', 'D65', 'A', 'TH-KG3', 'BB3200'] as const;
+export type Illuminant = (typeof ILLUMINANTS)[number];
+export function illuminantLabel(value: string): string {
+  if (value === '') return tz('Stock default', '片基默认');
+  if (value === 'A') return tz('A (tungsten)', 'A（钨丝灯）');
+  if (value === 'TH-KG3') return tz('TH-KG3 (enlarger)', 'TH-KG3（放大机）');
+  if (value.startsWith('BB')) return tz(`${value.slice(2)} K black body`, `${value.slice(2)} K 黑体`);
+  return value;
+}
+
 export const FILM_EDGE_FORMATS = [
   '135',
   '135_half',
@@ -285,6 +311,11 @@ export interface FilmParams {
   digitalIntermediate: boolean;
   extendedDynamicRange: boolean;
   preflashExposure: number;
+  /** P1-8: print/scanner light names; `''` = the stock profile's own light. */
+  scanIlluminant: string;
+  /** P1-8: the light the print is looked at under; `''` = same as the scan. */
+  viewingIlluminant: string;
+  development: DevelopmentSettings;
   contrastMask: ContrastMaskSettings;
   sceneLatitude: SceneLatitudeSettings;
   sceneLatitudeOther: SceneLatitudeSettings;
@@ -317,6 +348,9 @@ export const FILM_PARAMS_DEFAULT: FilmParams = {
   digitalIntermediate: false,
   extendedDynamicRange: false,
   preflashExposure: 0,
+  scanIlluminant: '',
+  viewingIlluminant: '',
+  development: DEVELOPMENT_DEFAULT,
   contrastMask: CONTRAST_MASK_DEFAULT,
   sceneLatitude: SCENE_LATITUDE_DEFAULT,
   sceneLatitudeOther: SCENE_LATITUDE_DEFAULT,
@@ -374,6 +408,7 @@ export function decodeFilmParams(raw: unknown): FilmParams {
     'autoExposureMethod' in o ? (typeof o.autoExposureMethod === 'string' ? o.autoExposureMethod : null) : null;
   if (!('filmStock' in o)) base.autoExposureMethod = FILM_PARAMS_DEFAULT.autoExposureMethod;
   base.filmSide = base.filmSide === 'long' ? 'long' : 'short';
+  base.development = decodeShape(o.development, DEVELOPMENT_DEFAULT);
   base.contrastMask = decodeShape(o.contrastMask, CONTRAST_MASK_DEFAULT);
   base.sceneLatitude = decodeShape(o.sceneLatitude, SCENE_LATITUDE_DEFAULT);
   base.sceneLatitudeOther = decodeShape(o.sceneLatitudeOther, SCENE_LATITUDE_DEFAULT);
@@ -489,6 +524,10 @@ export function wire(p: FilmParams, gate: FeatureGate = ALL_FEATURES, catalog?: 
     { name: 'scan_film', value: p.scanFilm, layer: 'print' },
     { name: 'extended_dynamic_range', value: effectiveEDR(p, catalog), layer: 'print' },
     { name: 'preflash_exposure', value: p.printEffects ? clamp(p.preflashExposure, 0, 1) : 0, layer: 'print' },
+    // P1-8. Sent always: `''` is the profile default, and clearing a sidecar's
+    // named light is a real edit the delta has to carry.
+    { name: 'scan_illuminant', value: p.scanIlluminant, layer: 'print' },
+    { name: 'viewing_illuminant', value: p.viewingIlluminant, layer: 'print' },
   );
   if (gate.contrastMask) {
     f.push(
@@ -545,6 +584,13 @@ export function wire(p: FilmParams, gate: FeatureGate = ALL_FEATURES, catalog?: 
     // 1.3.4 (API-SPEC §18): sent always; every film with an anti-halation layer ignores it.
     { name: 'halation_headroom_ev', value: clamp(e.highlightHeadroom, r.highlightHeadroom[0], r.highlightHeadroom[1]), layer: 'shoot' },
   );
+  f.push({ name: 'development_active', value: p.development.active, layer: 'shoot' });
+  if (p.development.active) {
+    f.push(
+      { name: 'development_push_stops', value: clamp(p.development.pushStops, -3, 3), layer: 'shoot' },
+      { name: 'development_temperature_c', value: clamp(p.development.temperatureC, 18, 24), layer: 'shoot' },
+    );
+  }
   if (catalog?.isMonochrome(p.filmStock) && catalog.isMonochrome(p.printStock)) {
     // Multigrade IV RC filter 2. There is no silver-paper row in the colour
     // neutral-filter database; sending no pack would retain the old colour pair.

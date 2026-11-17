@@ -10,10 +10,15 @@ import { cameraParams, cameraExposureBaseline, cameraExposureTotal, setCameraMet
 import { settingsStore, useSettings } from '../state/settings';
 import {
   type AEMethod,
+  DEVELOPMENT_DEFAULT,
+  DEVELOPMENT_PUSH_RANGE,
+  DEVELOPMENT_TEMPERATURE_RANGE,
   EFFECTS_DEFAULT,
   EFFECT_RANGES,
   FILM_FRAMES,
   FILM_FRAME_CUSTOM,
+  ILLUMINANTS,
+  illuminantLabel,
   SIDE_UNIT_DECIMALS,
   SIDE_UNIT_PER_MM,
   type SideUnit,
@@ -60,6 +65,8 @@ export function RightRail() {
             <LatitudeSection />
             <CameraSection />
             <FilmFormatSection />
+            <DevelopmentSection />
+            <LightingSection />
             <ScenePlacementSection />
           </>
         ) : (
@@ -372,6 +379,97 @@ function FilmFormatSection() {
       )}
       <ToggleRow label={t('filmGlare')} on={p.glareActive} disabled={!p.printEffects} reason={t('reasonPrintEffectsOff')} onChange={(v) => setParams((q) => ({ ...q, glareActive: v }))} />
       {decouple && strength(t('filmGlareStrength'), 'glare', p.glareActive && p.printEffects)}
+    </Section>
+  );
+}
+
+// -------------------------------------------------------------- Development
+
+/** P1-7: push/pull and developer temperature, for film already exposed and
+ *  developed. The engine folds temperature into an equivalent push, so this is
+ *  one continuous control with a separate temperature trim. */
+function DevelopmentSection() {
+  const p = useSession((s) => s.sidecar.params);
+  const d = p.development;
+  const setD = (patch: Partial<typeof d>) => setParams((q) => ({ ...q, development: { ...q.development, ...patch } }));
+  return (
+    <Section
+      id="development"
+      title={tz('Development', '显影')}
+      onReset={() => setD(DEVELOPMENT_DEFAULT)}
+      resetHelp={tz('Reset push/pull and temperature.', '重置推拉与显影温度。')}
+    >
+      <ToggleRow
+        label={tz('Push / pull', '推拉显影')}
+        on={d.active}
+        onChange={(v) => setD({ active: v })}
+        testId="development-toggle"
+      />
+      <ScrubSlider
+        label={tz('Push stops', '推拉档位')}
+        value={d.pushStops}
+        range={[...DEVELOPMENT_PUSH_RANGE] as [number, number]}
+        zero={0}
+        snap={1 / 3}
+        format={(v) => (v > 0 ? '+' : '') + v.toFixed(2)}
+        disabled={!d.active}
+        reason={tz('Enable push/pull first.', '请先启用推拉显影。')}
+        onChange={(v) => setD({ pushStops: v })}
+        testId="development-push"
+      />
+      <ScrubSlider
+        label={tz('Developer temperature', '显影温度')}
+        value={d.temperatureC}
+        range={[...DEVELOPMENT_TEMPERATURE_RANGE] as [number, number]}
+        zero={20}
+        snap={0.5}
+        format={(v) => v.toFixed(1) + ' °C'}
+        disabled={!d.active}
+        reason={tz('Enable push/pull first.', '请先启用推拉显影。')}
+        onChange={(v) => setD({ temperatureC: v })}
+        testId="development-temperature"
+      />
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------- Lighting
+
+/** P1-8: the lights the print is read and viewed under. Both default to the
+ *  print stock's own viewing illuminant, which is the pre-P1-8 colour path. */
+function LightingSection() {
+  const p = useSession((s) => s.sidecar.params);
+  const set = (patch: Partial<typeof p>) => setParams((q) => ({ ...q, ...patch }));
+  const stockDefault = tz('Stock default', '片基默认');
+  const sameAsScan = tz('Same as scan', '同扫描光源');
+  const scanOptions = ILLUMINANTS.map((v) => ({ value: v, label: v === '' ? stockDefault : illuminantLabel(v) }));
+  const viewOptions = [
+    { value: '', label: sameAsScan },
+    ...ILLUMINANTS.filter((v) => v !== '').map((v) => ({ value: v, label: illuminantLabel(v) })),
+  ];
+  return (
+    <Section
+      id="lighting"
+      title={tz('Lighting', '光源')}
+      onReset={() => set({ scanIlluminant: '', viewingIlluminant: '' })}
+      resetHelp={tz('Back to the print stock\'s own light.', '恢复为相纸默认光源。')}
+    >
+      <PillMenu
+        label={tz('Scan light', '扫描光源')}
+        value={p.scanIlluminant}
+        options={scanOptions}
+        onChange={(v) => set({ scanIlluminant: v })}
+        display={p.scanIlluminant === '' ? stockDefault : illuminantLabel(p.scanIlluminant)}
+        testId="scan-illuminant"
+      />
+      <PillMenu
+        label={tz('View light', '观看光源')}
+        value={p.viewingIlluminant}
+        options={viewOptions}
+        onChange={(v) => set({ viewingIlluminant: v })}
+        display={p.viewingIlluminant === '' ? sameAsScan : illuminantLabel(p.viewingIlluminant)}
+        testId="viewing-illuminant"
+      />
     </Section>
   );
 }

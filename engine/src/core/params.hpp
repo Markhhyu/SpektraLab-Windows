@@ -238,6 +238,21 @@ struct DateImprintParams {
     double inset_y = 2.4;            // mm from the gate's top/bottom to the text (frame placement)
 };
 
+// P1-7 (Windows port, 2026-11-17): development push/pull and developer
+// temperature. The reference has no development model -- it ships separately
+// measured push profiles for one stock -- so this is a product-native
+// extension: the measured curve is bent by a three-parameter morph
+// (`a * curve(g * logE + s)`) calibrated against Portra 800's measured push 1
+// and push 2 profiles, and temperature is expressed as the same morph through
+// an effective push (C-41's rule of thumb: 1 °C ~ 1/6 stop of development).
+// Off by default, and off is exact: `active = false` leaves the film curve,
+// the DIR inverse and the grain exactly as they were.
+struct DevelopmentParams {
+    bool active = false;
+    double push_stops = 0.0;       // -3..+3, 1/3-stop steps are the UI's
+    double temperature_c = 20.0;   // 18..24; 20 °C is the process's own
+};
+
 struct FilmRenderParams {
     double density_curve_gamma = 1.0;
     GrainParams grain;
@@ -246,6 +261,7 @@ struct FilmRenderParams {
     GlareParams glare;
     OverscanParams overscan;
     DateImprintParams date_imprint;
+    DevelopmentParams development;
 };
 
 // RFC-024: the virtual contrast mask, a neutral spatial gain on the
@@ -437,6 +453,15 @@ struct IOParams {
     /// RFC-028 §10: the optional blue-sector correction of the DI's colour
     /// step. Off by default, by the user's decision of 2026-09-29.
     bool digital_intermediate_blue_compensation = false;
+    /// P1-8: which light the print is *scanned* under. Empty means the stock
+    /// profile's own `viewing_illuminant`, which is what every version before
+    /// this field baked -- so the default is the exact old behaviour.
+    std::string scan_illuminant;
+    /// P1-8: which light the resulting print is *viewed* under. Empty means
+    /// the scan illuminant, i.e. no second adaptation, which again is the old
+    /// behaviour. Standard illuminant names (see `standard_illuminant`) are
+    /// accepted; `BB<n>` asks for a blackbody of n kelvin.
+    std::string viewing_illuminant;
     /// The long edge of the `live` tier, i.e. the size every interactive edit
     /// renders at — the app's **preview resolution**, and a user setting.
     /// `engine.cpp` resolves the `live` row of its tier table from here, so

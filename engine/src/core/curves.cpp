@@ -111,6 +111,66 @@ void build_interp_tables(const Vec& log_exposure, const double gamma[3],
         }
 }
 
+void development_morph(const DevelopmentParams& p, DevelopmentMorph& out) {
+    out = DevelopmentMorph{};
+    if (!p.active) return;
+    // Warm developer is more active, so it reads as a push; 1 degree is about
+    // a sixth of a stop (C-41's rule of thumb). Cold is a pull.
+    const double push = std::min(3.0, std::max(-3.0, p.push_stops + (p.temperature_c - 20.0) / 6.0));
+    // Pulls are gentler than pushes: no measured pull profile exists, so the
+    // same calibrated form is used at 35 % of the magnitude.
+    const double e = push >= 0.0 ? push : (push * 0.35);
+    // Fitted to Portra 800: `D_push = a * D_base(g * logE + s)`, per channel,
+    // with a quadratic in the push stops through the measured push 1 and push
+    // 2 points (and the identity at 0). Coefficients are the fit's; see
+    // `bench/` for the calibration script that produced them.
+    static const double kAmpB[3] = {0.2619, 0.1593, 0.0971};
+    static const double kAmpC[3] = {-0.0557, -0.0484, 0.0027};
+    static const double kScaleB[3] = {0.0052, 0.0143, 0.1728};
+    static const double kScaleC[3] = {0.0052, 0.0203, -0.0593};
+    static const double kShiftB[3] = {-0.3416, -0.2683, -0.1460};
+    static const double kShiftC[3] = {0.0856, 0.0838, 0.0115};
+    out.active = true;
+    out.effective_push_stops = push;
+    for (int c = 0; c < 3; ++c) {
+        const double x = e;
+        out.amplitude[c] = std::min(2.0, std::max(0.5, 1.0 + kAmpB[c] * x + kAmpC[c] * x * x));
+        out.exposure_scale[c] =
+            std::min(1.4, std::max(0.7, 1.0 + kScaleB[c] * x + kScaleC[c] * x * x));
+        out.shift[c] = std::min(0.3, std::max(-0.9, kShiftB[c] * x + kShiftC[c] * x * x));
+    }
+    // Push processing coarsens the grain (more development of the same
+    // particles); a pull smooths it. The temperature term is the same
+    // activity, at a third of the push's strength.
+    const double grain = 1.0 + 0.18 * push + 0.03 * (p.temperature_c - 20.0);
+    out.grain_scale = std::min(2.0, std::max(0.5, grain));
+}
+
+void build_interp_tables_development(const Vec& log_exposure, const double gamma[3],
+                                     const Vec& curves, const DevelopmentMorph& morph,
+                                     InterpTables& out) {
+    if (!morph.active) {
+        build_interp_tables(log_exposure, gamma, curves, out);
+        return;
+    }
+    const size_t k = log_exposure.size();
+    out.k = k;
+    out.x.assign(k * 3, 0.0);
+    out.y = curves;
+    for (size_t i = 0; i < k; ++i)
+        for (int c = 0; c < 3; ++c) {
+            const double scale = morph.exposure_scale[c] * gamma[c];
+            out.x[3 * i + size_t(c)] = (log_exposure[i] - morph.shift[c]) / scale;
+            out.y[3 * i + size_t(c)] = morph.amplitude[c] * curves[3 * i + size_t(c)];
+        }
+    out.inv.assign((k - 1) * 3, 0.0);
+    for (size_t i = 0; i + 1 < k; ++i)
+        for (int c = 0; c < 3; ++c) {
+            const double dx = out.x[3 * (i + 1) + size_t(c)] - out.x[3 * i + size_t(c)];
+            out.inv[3 * i + size_t(c)] = dx != 0.0 ? 1.0 / dx : 0.0;
+        }
+}
+
 void dir_couplers_matrix(const DirCouplersParams& p, double out[9]) {
     for (int i = 0; i < 9; ++i) out[i] = 0.0;
     for (int i = 0; i < 3; ++i) out[3 * i + i] = p.gamma_samelayer_rgb[i] * p.inhibition_samelayer;

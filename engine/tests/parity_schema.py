@@ -335,6 +335,34 @@ NATIVE_ONLY = {
         "path": "film_render.halation.headroom_ev", "type": "float", "layer": "shoot",
         "default": 4.0, "live": False, "range": [0.0, 8.0],
     },
+    # P1-7's development model. The reference has no development stage: it
+    # ships separately measured push profiles for Portra 800 only, so the
+    # product's push/pull is a native extension and `active = false` is the
+    # exact bypass. SHOOT layer (it sits between the film and the negative).
+    "development_active": {
+        "path": "film_render.development.active", "type": "bool", "layer": "shoot",
+        "default": False, "live": False, "range": None,
+    },
+    "development_push_stops": {
+        "path": "film_render.development.push_stops", "type": "float", "layer": "shoot",
+        "default": 0.0, "live": False, "range": [-3.0, 3.0],
+    },
+    "development_temperature_c": {
+        "path": "film_render.development.temperature_c", "type": "float", "layer": "shoot",
+        "default": 20.0, "live": False, "range": [18.0, 24.0],
+    },
+    # P1-8's two lights. The reference hardcodes the stock profile's own
+    # viewing illuminant on both sides (scan and view), so an empty string --
+    # the default -- is the exact old behaviour and the only value parity has
+    # to agree on. A named light is a product-only extension.
+    "scan_illuminant": {
+        "path": "io.scan_illuminant", "type": "str", "layer": "print",
+        "default": "", "live": False, "range": None,
+    },
+    "viewing_illuminant": {
+        "path": "io.viewing_illuminant", "type": "str", "layer": "print",
+        "default": "", "live": False, "range": None,
+    },
 }
 
 

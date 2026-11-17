@@ -805,6 +805,10 @@ private:
     Mat3 rgb_to_xyz_ae_;          // the auto-exposure meter's luminance row
     uint32_t output_cctf_mode_ = 4;
     uint32_t input_cctf_mode_ = 4;
+    // P1-7: the development morph's grain strength, folded into the grain
+    // node's own mix so every sampler path sees the same push. 1 = the film's
+    // measured grain, exactly.
+    double dev_grain_scale_ = 1.0;
 
     // print side, per run
     gpu::BufferRef print_chd_, print_base_, print_ixs_;

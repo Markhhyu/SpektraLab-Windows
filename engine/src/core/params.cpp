@@ -4,6 +4,7 @@
 #include "halation_psf.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -210,6 +211,21 @@ const SchemaField kFields[] = {
     // back-reflection halo only (a film with no anti-halation layer). Native
     // only, SHOOT, after `camera_filter`. Every film with a layer ignores it.
     {"halation_headroom_ev",     "film_render.halation.headroom_ev",      F, SHOOT, true, 0.0, 8.0, false},
+    // P1-7: development push/pull and developer temperature. Native-only,
+    // SHOOT (it sits between the film and the negative), before the app's
+    // preview resolution like every extension. `active = false` is the exact
+    // bypass; the two numbers are meaningful only when it is on.
+    {"development_active",       "film_render.development.active",        B, SHOOT, false, 0, 0, false},
+    {"development_push_stops",   "film_render.development.push_stops",    F, SHOOT, true, -3.0, 3.0, false},
+    {"development_temperature_c","film_render.development.temperature_c", F, SHOOT, true, 18.0, 24.0, false},
+    // P1-8: the light the print is scanned under, and the light it is viewed
+    // under. PRINT layer (they belong to the print-and-scan side), native
+    // only. Empty strings mean "the stock profile's own illuminant", which is
+    // what every earlier build baked; naming a light bakes different scanner
+    // constants, and a different viewing light adapts the result before it is
+    // encoded. Both are rebuilds (the scanner constants are baked per run).
+    {"scan_illuminant",          "io.scan_illuminant",                    S, PRINT, false, 0, 0, false},
+    {"viewing_illuminant",       "io.viewing_illuminant",                 S, PRINT, false, 0, 0, false},
     // The app's *preview resolution*: the `live` tier's long edge, and so the
     // size every interactive edit renders at. PRINT layer, because it is a
     // decision about the canvas rather than about the film -- but it is one of
@@ -239,6 +255,9 @@ double* float_slot(Params& p, const std::string& path) {
     if (path == "film_render.halation.headroom_ev") return &p.film_render.halation.headroom_ev;
     if (path == "film_render.dir_couplers.amount") return &p.film_render.dir_couplers.amount;
     if (path == "film_render.density_curve_gamma") return &p.film_render.density_curve_gamma;
+    if (path == "film_render.development.push_stops") return &p.film_render.development.push_stops;
+    if (path == "film_render.development.temperature_c")
+        return &p.film_render.development.temperature_c;
     if (path == "io.geometry.crop_x") return &p.io.geometry.crop_x;
     if (path == "io.geometry.crop_y") return &p.io.geometry.crop_y;
     if (path == "io.geometry.crop_w") return &p.io.geometry.crop_w;
@@ -287,6 +306,7 @@ bool* bool_slot(Params& p, const std::string& path) {
     if (path == "film_render.halation.antihalation_removed")
         return &p.film_render.halation.antihalation_removed;
     if (path == "film_render.grain.active") return &p.film_render.grain.active;
+    if (path == "film_render.development.active") return &p.film_render.development.active;
     if (path == "film_render.grain.sublayers_active") return &p.film_render.grain.sublayers_active;
     if (path == "film_render.dir_couplers.active") return &p.film_render.dir_couplers.active;
     if (path == "io.input_cctf_decoding") return &p.io.input_cctf_decoding;
@@ -317,6 +337,8 @@ std::string* str_slot(Params& p, const std::string& path) {
     if (path == "io.input_color_space") return &p.io.input_color_space;
     if (path == "enlarger.illuminant") return &p.enlarger.illuminant;
     if (path == "io.output_color_space") return &p.io.output_color_space;
+    if (path == "io.scan_illuminant") return &p.io.scan_illuminant;
+    if (path == "io.viewing_illuminant") return &p.io.viewing_illuminant;
     if (path == "camera.auto_exposure_method") return &p.camera.auto_exposure_method;
     if (path == "camera.filter") return &p.camera.filter;
     if (path == "camera.scene_latitude.norm") return &p.camera.scene_latitude.norm;
@@ -378,6 +400,27 @@ bool is_known_camera_filter(const std::string& name) {
     for (const CameraFilter& f : kCameraFilters) if (name == f.name) return true;
     return false;
 }
+
+namespace {
+// P1-8's two illuminant fields. The baked table is the authority
+// (`colour/sd_illuminant/*` plus the two light sources), and the three aliases
+// are what `standard_illuminant` understands on top of it: a blackbody by
+// kelvin. `""` means "use the stock profile's own illuminant", the old
+// behaviour, and is always accepted.
+bool is_known_illuminant_name(const std::string& name) {
+    if (name.empty()) return true;
+    static const char* kBaked[] = {"A", "D50", "D55", "D65", "D75", "E",
+                                   "Incandescent", "Kinoton 75P"};
+    for (const char* baked : kBaked) if (name == baked) return true;
+    if (name == "T" || name == "K75P" || name == "TH-KG3" || name == "TH-KG3-L") return true;
+    if (name.size() > 2 && name[0] == 'B' && name[1] == 'B') {
+        char* end = nullptr;
+        const double kelvin = std::strtod(name.c_str() + 2, &end);
+        return end != nullptr && *end == '\0' && kelvin >= 1000.0 && kelvin <= 100000.0;
+    }
+    return false;
+}
+}  // namespace
 
 const std::vector<SchemaField>& schema_fields() {
     static const std::vector<SchemaField> v(std::begin(kFields), std::end(kFields));
@@ -457,6 +500,14 @@ bool validate_delta(const Json& delta, std::string& error, std::string& param) {
         if (kv.first == "scene_latitude_norm" && !is_known_scene_latitude_norm(v.as_string())) {
             error = "'scene_latitude_norm' = '" + v.as_string() +
                     "' is not a norm (power, y, max)";
+            param = kv.first;
+            return false;
+        }
+        if ((kv.first == "scan_illuminant" || kv.first == "viewing_illuminant") &&
+            !is_known_illuminant_name(v.as_string())) {
+            error = "'" + kv.first + "' = '" + v.as_string() +
+                    "' is not an illuminant ('' for the stock profile's own; A, D50, D55, "
+                    "D65, D75, E, Incandescent, Kinoton 75P, T, K75P, TH-KG3, BB<kelvin>)";
             param = kv.first;
             return false;
         }

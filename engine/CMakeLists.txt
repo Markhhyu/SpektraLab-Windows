@@ -348,6 +348,26 @@ if(SPEKTRALAB_PORTABLE_BACKEND)
             add_test(NAME spk_host_residency
                 COMMAND spk_host_residency "${vulkan_resource_dir}")
 
+            # P1-7: the parametric development model's parameter surface,
+            # exact bypass, push direction and temperature equivalence.
+            add_executable(spk_development_morph tests/development_morph.cpp)
+            target_include_directories(spk_development_morph PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/include"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src")
+            target_link_libraries(spk_development_morph PRIVATE spektralab_engine)
+            add_test(NAME spk_development_morph
+                COMMAND spk_development_morph "${vulkan_resource_dir}")
+
+            # P1-8: the scan/viewing illuminants -- schema surface, the exact
+            # empty bypass and the named-light refusal.
+            add_executable(spk_illuminants tests/illuminants.cpp)
+            target_include_directories(spk_illuminants PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/include"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src")
+            target_link_libraries(spk_illuminants PRIVATE spektralab_engine)
+            add_test(NAME spk_illuminants
+                COMMAND spk_illuminants "${vulkan_resource_dir}")
+
             add_executable(spk_vulkan_math_gate tests/gpu_vulkan_math_gate.cpp)
             target_include_directories(spk_vulkan_math_gate PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
             target_link_libraries(spk_vulkan_math_gate PRIVATE spektralab_engine)

@@ -237,9 +237,15 @@ bool Pipeline::build(const Params& params, std::string& error) {
     const size_t k = film.data.n_exposure;
     double gamma[3];
     fill3(gamma, params_.film_render.density_curve_gamma);
+    // P1-7: development push/pull and temperature move the measured curve
+    // itself, so they go into both curve tables (the finished curve and the
+    // one the DIR inverse produces) and into the grain's strength.
+    DevelopmentMorph dev;
+    development_morph(params_.film_render.development, dev);
+    dev_grain_scale_ = dev.grain_scale;
     {
         InterpTables t;
-        build_interp_tables(film.data.log_exposure, gamma, film.normalized_curves, t);
+        build_interp_tables_development(film.data.log_exposure, gamma, film.normalized_curves, dev, t);
         baked_.film_curve_k = t.k;
         baked_.film_curve_x = gpu_->upload_persistent_f32(t.x.data(), t.x.size(), error);
         baked_.film_curve_inv = gpu_->upload_persistent_f32(t.inv.data(), t.inv.size(), error);
@@ -255,12 +261,20 @@ bool Pipeline::build(const Params& params, std::string& error) {
         density_curves_before_dir_couplers(film.normalized_curves, film.data.log_exposure, matrix,
                                            film.info.is_positive(), curves0);
         InterpTables t;
-        build_interp_tables(film.data.log_exposure, gamma, curves0, t);
+        build_interp_tables_development(film.data.log_exposure, gamma, curves0, dev, t);
         baked_.coupler_curve_x = gpu_->upload_persistent_f32(t.x.data(), t.x.size(), error);
         baked_.coupler_curve_inv = gpu_->upload_persistent_f32(t.inv.data(), t.inv.size(), error);
         baked_.coupler_curve_y = gpu_->upload_persistent_f32(t.y.data(), t.y.size(), error);
         baked_.coupler_matrix = gpu_->upload_persistent_f32(matrix, 9, error);
-        baked_.coupler_dmax = gpu_->upload_persistent_f32(film.density_max, 3, error);
+        // The couplers' ceiling follows the developed curve: a push raises the
+        // film's maximum density by the same factor the curve morph does.
+        double dmax_scale[3] = {1.0, 1.0, 1.0};
+        if (dev.active)
+            for (int c = 0; c < 3; ++c) dmax_scale[c] = dev.amplitude[c];
+        const double coupler_dmax[3] = {film.density_max[0] * dmax_scale[0],
+                                        film.density_max[1] * dmax_scale[1],
+                                        film.density_max[2] * dmax_scale[2]};
+        baked_.coupler_dmax = gpu_->upload_persistent_f32(coupler_dmax, 3, error);
         const double shift[1] = {0.0};   // high_exposure_couplers_shift, unused today
         baked_.coupler_shift = gpu_->upload_persistent_f32(shift, 1, error);
         if (!baked_.coupler_curve_x || !baked_.coupler_matrix || !baked_.coupler_dmax ||
@@ -337,10 +351,15 @@ bool Pipeline::build(const Params& params, std::string& error) {
     // --- the scanner's spectral integral and its illuminant ----------------
     {
         const Profile& scanned = params_.io.scan_film ? film : print;
-        const std::string illum_name = params_.io.scan_film ? film.info.viewing_illuminant
-                                                            : print.info.viewing_illuminant;
+        const std::string& profile_illum = params_.io.scan_film ? film.info.viewing_illuminant
+                                                                : print.info.viewing_illuminant;
+        // P1-8: `scan_illuminant` names the light the print is read under.
+        // Empty keeps the stock profile's own light, which is what every
+        // version before the field baked.
+        const std::string scan_name = params_.io.scan_illuminant.empty()
+                                          ? profile_illum : params_.io.scan_illuminant;
         Vec illum;
-        if (!standard_illuminant(*colour_, *blob_, illum_name, illum, error)) return false;
+        if (!standard_illuminant(*colour_, *blob_, scan_name, illum, error)) return false;
         const Vec& cmfs = colour_->cmfs_1931_2deg();
         double norm = 0.0;
         for (size_t i = 0; i < illum.size(); ++i) norm += illum[i] * cmfs[3 * i + 1];
@@ -352,20 +371,49 @@ bool Pipeline::build(const Params& params, std::string& error) {
         baked_.scan_ixs = gpu_->upload_persistent_f32(sc.illum_x_sens.data(), sc.illum_x_sens.size(), error);
         if (!baked_.scan_chd || !baked_.scan_base || !baked_.scan_ixs) return false;
 
-        // The glare's tint is the viewing illuminant's own XYZ.
-        double illum_xyz[3] = {0, 0, 0};
-        for (size_t i = 0; i < illum.size(); ++i)
-            for (int c = 0; c < 3; ++c) illum_xyz[c] += illum[i] * cmfs[3 * i + size_t(c)];
-        for (int c = 0; c < 3; ++c) illum_xyz[c] /= norm;
-        baked_.glare_illuminant = gpu_->upload_persistent_f32(illum_xyz, 3, error);
+        // P1-8: `viewing_illuminant` names the light the *print* is looked at
+        // under. Empty means "the scan light", and then the adaptation below
+        // is the exact identity, so the default is the old behaviour.
+        const std::string view_name = params_.io.viewing_illuminant.empty()
+                                          ? scan_name : params_.io.viewing_illuminant;
+        Vec view_illum = illum;
+        if (view_name != scan_name &&
+            !standard_illuminant(*colour_, *blob_, view_name, view_illum, error)) return false;
+        double scan_xyz[3] = {0, 0, 0};
+        double view_xyz[3] = {0, 0, 0};
+        double view_norm = 0.0;
+        for (size_t i = 0; i < illum.size(); ++i) {
+            view_norm += view_illum[i] * cmfs[3 * i + 1];
+            for (int c = 0; c < 3; ++c) {
+                scan_xyz[c] += illum[i] * cmfs[3 * i + size_t(c)];
+                view_xyz[c] += view_illum[i] * cmfs[3 * i + size_t(c)];
+            }
+        }
+        for (int c = 0; c < 3; ++c) scan_xyz[c] /= norm;
+        for (int c = 0; c < 3; ++c) view_xyz[c] /= view_norm;
+
+        // The glare's tint is the viewing light's own XYZ.
+        baked_.glare_illuminant = gpu_->upload_persistent_f32(view_xyz, 3, error);
         if (!baked_.glare_illuminant) return false;
 
-        // XYZ -> RGB, adapted to the scan illuminant, evaluated once.
-        double illum_xy[2];
-        Colour::XYZ_to_xy(illum_xyz, illum_xy);
+        // XYZ -> RGB, evaluated once against the *scan* light's white, which
+        // is the legacy matrix. A different viewing light then shifts the
+        // values (CAT02, scan -> view) before they reach the display's own
+        // white: the print is being proofed under that light rather than
+        // having its white re-normalised away. Identical lights leave the
+        // product with the exact old matrix.
+        double scan_xy[2], view_xy[2];
+        Colour::XYZ_to_xy(scan_xyz, scan_xy);
+        Colour::XYZ_to_xy(view_xyz, view_xy);
         Mat3 m;
-        if (!colour_->matrix_XYZ_to_RGB(params_.io.output_color_space, illum_xy, "CAT02", m, error))
-            return false;
+        if (!colour_->matrix_XYZ_to_RGB(params_.io.output_color_space, scan_xy, "CAT02",
+                                        m, error)) return false;
+        if (scan_name != view_name) {
+            Mat3 adaptation;
+            if (!colour_->matrix_chromatic_adaptation(scan_xy, view_xy, "CAT02",
+                                                      adaptation, error)) return false;
+            m = m * adaptation;
+        }
         double row[9];
         transposed(m, row);   // spk_matmul3's convention
         baked_.xyz_to_rgb = gpu_->upload_persistent_f32(row, 9, error);
@@ -1390,13 +1438,18 @@ bool Pipeline::node_dir_couplers(Image cmy, Image log_raw, Image& out,
 // the model. Pointwise, so a strip's band mixes exactly as the plane would.
 bool Pipeline::node_grain(const Image& in, Image& out, std::string& error) {
     const GrainParams& g = params_.film_render.grain;
-    if (!g.active || g.amount <= 0.0) { out = in; return true; }
-    if (g.amount == 1.0) return grain_realise(in, out, error);
+    // P1-7: a push develops the same particles harder, so the film's own
+    // measured grain is stronger; the decoupled strength the node already
+    // has is exactly the mix this needs. `dev_grain_scale_` is 1 exactly
+    // when development is off.
+    const double amount = std::min(2.0, std::max(0.0, g.amount * dev_grain_scale_));
+    if (!g.active || amount <= 0.0) { out = in; return true; }
+    if (amount == 1.0) return grain_realise(in, out, error);
     Image grained;
     if (!grain_realise(in, grained, error)) return false;
     double a[3], b[3];
-    fill3(a, 1.0 - g.amount);
-    fill3(b, g.amount);
+    fill3(a, 1.0 - amount);
+    fill3(b, amount);
     return blur_.lincomb(in, grained, a, b, out, error);
 }
 

@@ -56,6 +56,24 @@ described below.
    decode timings (`SPEKTRAFILM_DECODE_TIMINGS`) and a parallel 16-bit -> float
    pack step. Two-stage decode and batch prefetch are documented as follow-ups
    because they change product semantics.
+10. **Development model (`P1-7`, native extension):** parametric push/pull
+    (-3..+3 stops) and developer temperature (18-24 C). The measured density
+    curve is bent by `D_push = a * D(g * logE + s)`, fitted per channel to the
+    Portra 800 push1/push2 profiles, with temperature folded in at 1/6 stop
+    per degree C and grain RMS scaled with the push. `active=false` is an
+    exact bypass. Parameters: `film_render.development.*`; test:
+    `engine/tests/development_morph.cpp` (schema, bypass, direction,
+    temperature equivalence, range refusal); desktop panel in the right rail.
+    It is an approximation of the measured push profiles, not a per-stock
+    replacement - the measured mean difference is ~2.6% of the frame.
+11. **Scan / viewing illuminants (`P1-8`, native extension):** `io.scan_illuminant`
+    and `io.viewing_illuminant` (print layer, `''` = the stock profile's own
+    viewing illuminant, i.e. the old colour path). Scan constants are rebaked
+    for the named light; a different viewing light shifts the values with CAT02
+    for a soft proof and takes over the glare tint. Accepted names:
+    `D50/D55/D65/D75/E/A/Incandescent/Kinoton 75P/TH-KG3/BB<kelvin>`; unknown
+    names are refused by `validate_delta`. Test: `engine/tests/illuminants.cpp`;
+    desktop Lighting panel. Paper surface/gloss (the rest of P1-8) is not done.
 
 ### Packaging
 
@@ -85,7 +103,7 @@ built on Windows with:
 
 RTX 4070 Laptop, 8 GB, 32.95 MP Sony ARW, default Portra 400 / Portra Endura:
 
-- engine CTest 39/39; parity 22/22 cases within bar at 512 px.
+- engine CTest 41/41; parity 22/22 cases within bar at 512 px.
 - installed build: host hello ok (`backend.api=vulkan`), open 1.21-1.55 s
   (decode 1.11-1.16 s + engine open 90-130 ms), live first frame 226.7 ms,
   preview warm 34.6 ms, full warm 158 ms.
@@ -97,7 +115,10 @@ RTX 4070 Laptop, 8 GB, 32.95 MP Sony ARW, default Portra 400 / Portra Endura:
 - The other parity harnesses (`parity_render.py`, `parity_schema.py`, ...) need
   the private macOS-side Python reference; only `parity_upstream.py` and
   `calibration_sweep.py` run against the public package.
-- `P1-7` (development push/pull/temperature) and `P1-8` (scan/viewing
-  illuminant, paper surface) are feature decisions and are not implemented.
+- `P1-8`'s paper surface/gloss half (a paper BRDF and observer choice) is not
+  implemented; the scan/viewing illuminant half is (see above).
+- P1-7 is a fitted parametric model, not measured per-stock push curves: the
+  measured push1 profile and the model differ by ~1.7k counts mean on a
+  32.95 MP frame (shape residual of the three-parameter family).
 - `P0-2` fork-only nodes and the six product stocks are only compared where the
   public reference exposes them.

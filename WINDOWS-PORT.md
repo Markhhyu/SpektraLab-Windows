@@ -75,6 +75,23 @@ described below.
     names are refused by `validate_delta`. Test: `engine/tests/illuminants.cpp`;
     desktop Lighting panel. Paper surface/gloss (the rest of P1-8) is not done.
 
+### Application features (v1.1.0)
+
+12. **Persistent Lightroom-style library (v1.1.0):** importing a folder or a
+    photo registers references only (nothing is copied and originals are never
+    written). The catalog lives at
+    `%AppData%\app.spektralab.desktop\Catalog\catalog.json` with thumbnails in
+    `Catalog\thumbs\` (Rust commands in `desktop/src-tauri/src/catalog.rs`;
+    logic in `desktop/src/shared/catalog.ts` and `desktop/src/state/library.ts`).
+    The library view (`desktop/src/windows/LibraryView.tsx`) provides 0-5 star
+    ratings, Pick/Reject flags, keywords, an "edited" badge, folder/keyword/
+    rating/flag/search filtering, sorting, multi-select, and double-click/Enter
+    to open a photo in the editor. Ratings and flags are catalog metadata;
+    per-image adjustments stay in the existing sidecars, so editing is still
+    non-destructive, and the library reopens with the last view/selection.
+    Tests: `desktop/src/shared/catalog.test.ts` (8 cases) plus the full desktop
+    suite (472 passed / 2 skipped); typecheck and lint are clean.
+
 ### Packaging
 
 - Static-runtime host build (`-DSPEKTRALAB_STATIC_RUNTIME=ON`; the static
@@ -103,12 +120,16 @@ built on Windows with:
 
 RTX 4070 Laptop, 8 GB, 32.95 MP Sony ARW, default Portra 400 / Portra Endura:
 
-- engine CTest 41/41; parity 22/22 cases within bar at 512 px.
+- engine CTest 42/42; parity 22/22 cases within bar at 512 px.
 - installed build: host hello ok (`backend.api=vulkan`), open 1.21-1.55 s
   (decode 1.11-1.16 s + engine open 90-130 ms), live first frame 226.7 ms,
   preview warm 34.6 ms, full warm 158 ms.
-- installer 37.53 MiB, host static (ADVAPI32/KERNEL32/SHELL32/USER32/WS2_32/
-  ole32/UCRT only), install verification 166 files / 150.4 MiB.
+- desktop suite: 472 passed / 2 skipped (68 files), typecheck/lint clean.
+- installer 37.54 MiB (39,362,478 B, sha256
+  `eec29bb665ef9cf60ec0d74d34d1c33ccc4f3b0ace4d25a5e019d30009fe33c8`), host
+  static (ADVAPI32/KERNEL32/SHELL32/USER32/WS2_32/ole32/UCRT only); install
+  verification 166 files / 150.4 MiB on the earlier build; the v1.1.0 bundle
+  reuses the same host.
 
 ## Known limits
 
@@ -122,3 +143,6 @@ RTX 4070 Laptop, 8 GB, 32.95 MP Sony ARW, default Portra 400 / Portra Endura:
   32.95 MP frame (shape residual of the three-parameter family).
 - `P0-2` fork-only nodes and the six product stocks are only compared where the
   public reference exposes them.
+- Library thumbnails come from the camera-embedded preview; files the host
+  cannot preview keep a placeholder cell, and removing an original from disk
+  leaves an entry that is reported as missing when reopened.

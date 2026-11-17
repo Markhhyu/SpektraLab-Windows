@@ -28,7 +28,7 @@ import {
   sortEntries,
   updateEntries,
 } from '@shared/catalog';
-import { baseName, platform } from '../platform';
+import { type FileEntry, baseName, platform } from '../platform';
 import { host } from '../host/client';
 import { openPaths } from './session';
 
@@ -120,6 +120,61 @@ async function toJpeg(image: { width: number; height: number; data: Uint8Array }
   return new Uint8Array(await blob.arrayBuffer());
 }
 
+/** Pull one camera-embedded preview through the host and cache it as a JPEG. */
+async function readThumb(entry: CatalogEntry, thumbs: Record<string, string>): Promise<boolean> {
+  const preview = await host().thumbnail(entry.path, THUMB_EDGE, true);
+  const jpeg = await toJpeg(preview);
+  if (!jpeg) return false;
+  await platform().catalogThumbSave(entry.path, jpeg).catch(() => '');
+  thumbs[entry.path] = bytesToDataUrl(jpeg);
+  return true;
+}
+
+let hydrating = false;
+
+/**
+ * Fill in previews for catalog entries that were registered by the normal
+ * open path (or whose preview failed earlier). Runs in the background while
+ * the Library is on screen and stops as soon as it closes; the host is
+ * single-threaded, so a couple at a time keeps the editor responsive.
+ */
+export function hydrateThumbs(): void {
+  if (hydrating) return;
+  const missing = store().catalog.entries.filter((e) => !e.thumb && !store().thumbs[e.path]);
+  if (missing.length === 0) return;
+  hydrating = true;
+  void (async () => {
+    let next = 0;
+    const worker = async () => {
+      for (;;) {
+        const index = next++;
+        const entry = missing[index];
+        if (!entry || !store().open) return;
+        try {
+          const thumbs = { ...store().thumbs };
+          if (await readThumb(entry, thumbs)) {
+            set({
+              thumbs,
+              catalog: {
+                ...store().catalog,
+                entries: store().catalog.entries.map((e) => (e.path === entry.path ? { ...e, thumb: true } : e)),
+              },
+            });
+          }
+        } catch {
+          // Files the host cannot preview keep their placeholder.
+        }
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(2, missing.length) }, () => worker()));
+      await persist();
+    } finally {
+      hydrating = false;
+    }
+  })();
+}
+
 /** Load the catalog and whatever thumbnails were cached last session. */
 export async function bootLibrary(): Promise<void> {
   const decoded = decodeCatalog(await platform().storeRead(CATALOG_STORE_AREA, CATALOG_STORE_NAME).catch(() => null));
@@ -129,6 +184,7 @@ export async function bootLibrary(): Promise<void> {
     if (base64) thumbs[entry.path] = base64ToDataUrl(base64);
   }));
   set({ catalog: decoded, thumbs, ready: true, open: decoded.entries.length > 0 });
+  if (decoded.entries.length > 0) hydrateThumbs();
 }
 
 /** Import the given files or folders (folders are expanded by the platform). */
@@ -157,13 +213,8 @@ export async function importPaths(paths: string[]): Promise<void> {
         const entry = added[index];
         if (!entry) return;
         try {
-          const preview = await host().thumbnail(entry.path, THUMB_EDGE, true);
-          const jpeg = await toJpeg(preview);
-          if (jpeg) {
-            await platform().catalogThumbSave(entry.path, jpeg).catch(() => '');
-            thumbs[entry.path] = bytesToDataUrl(jpeg);
-          }
-          catalog.entries = catalog.entries.map((e) => (e.path === entry.path ? { ...e, thumb: !!jpeg } : e));
+          const ok = await readThumb(entry, thumbs);
+          catalog.entries = catalog.entries.map((e) => (e.path === entry.path ? { ...e, thumb: ok } : e));
           set({ thumbs: { ...thumbs }, catalog: { ...catalog, entries: [...catalog.entries] } });
         } catch {
           // A file the host cannot preview stays in the catalog without a thumb.
@@ -177,6 +228,7 @@ export async function importPaths(paths: string[]): Promise<void> {
     const lastAdded = added.length > 0 ? added[added.length - 1] : null;
     set({ busy: null, progress: null, selection: lastAdded ? [lastAdded.path] : store().selection, anchor: lastAdded ? lastAdded.path : store().anchor });
     await persist();
+    hydrateThumbs();
   } catch (e) {
     set({ busy: null, error: `Import failed: ${String(e)}` });
   }
@@ -287,6 +339,22 @@ export function visibleEntries(): CatalogEntry[] {
 
 export function setLibraryOpen(open: boolean) {
   set({ open });
+  if (open) hydrateThumbs();
+}
+
+/**
+ * Remember photos opened through the normal open path (folder picker, drop,
+ * launch) so they show up in the library without importing them again. The
+ * entry is registered immediately; previews are filled in when the library is
+ * next opened.
+ */
+export async function registerOpened(files: FileEntry[], folder: string): Promise<void> {
+  if (files.length === 0) return;
+  const { catalog, added } = addImportedFiles(store().catalog, folder, files);
+  if (added.length === 0) return;
+  set({ catalog });
+  await persist();
+  if (store().open) hydrateThumbs();
 }
 
 /** Open the selection in the editor and leave the library. */

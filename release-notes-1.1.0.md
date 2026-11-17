@@ -5,7 +5,7 @@
 
 **中文**
 
-- 新增 Lightroom 式图库：导入文件夹或单张照片（只登记引用，不复制、不改原图），
+- 新增持久图库：导入文件夹或单张照片（只登记引用，不复制、不改原图），
   带缩略图、0–5 星评分、Pick/Reject 旗标、关键字和“已编辑”标记。
 - 目录持久化在 `%AppData%\app.spektralab.desktop\Catalog\catalog.json`，缩略图在同目录
   `thumbs/`；关闭软件再打开会自动回到图库。
@@ -18,7 +18,7 @@
 
 **English**
 
-- New Lightroom-style library: import folders or single photos by reference
+- New persistent library: import folders or single photos by reference
   (originals are never copied or modified), with thumbnails, 0–5 star ratings,
   pick/reject flags, keywords and an edited marker.
 - The catalog persists at `%AppData%\app.spektralab.desktop\Catalog\catalog.json`

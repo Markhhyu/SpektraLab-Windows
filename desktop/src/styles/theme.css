@@ -1066,3 +1066,14 @@ input {
 /* The filmstrip's own menu: anchored to the strip, above the thumbnails. */
 .filmstrip { position: relative; }
 .filmstrip-menu { bottom: auto; transform: translateY(-100%); }
+
+/* The Library entry: a labelled pill next to the import controls, so the
+   persistent catalog is discoverable without hovering the icon bar. */
+.library-entry {
+  height: 22px;
+  min-width: 0;
+  padding: 0 9px;
+  gap: 5px;
+  justify-content: center;
+  font-weight: 600;
+}

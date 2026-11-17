@@ -34,6 +34,7 @@ import {
   zoomToFit,
 } from '../state/session';
 import { forgetRecentFolders, settingsStore } from '../state/settings';
+import { setLibraryOpen } from '../state/library';
 import { turned } from '@shared/geometry';
 import { platform } from '../platform';
 
@@ -41,6 +42,7 @@ import { platform } from '../platform';
 export const MENU_CHORDS = new Set([
   'ctrl+o',
   'ctrl+shift+o',
+  'ctrl+shift+l',
   'ctrl+e',
   'ctrl+j',
   'ctrl+z',
@@ -153,6 +155,7 @@ async function rebuild(): Promise<void> {
   const file = await submenu(tz('&File', '文件(&F)'), [
     await item(tz('Open Folder…', '打开文件夹…'), () => void openDialog(), 'CmdOrCtrl+O'),
     await item(tz('Open Photographs…', '打开照片…'), () => void openFilesDialog(), 'CmdOrCtrl+Shift+O'),
+    await item(tz('Library…', '图库…'), () => setLibraryOpen(true), 'CmdOrCtrl+Shift+L'),
     recent,
     await item(tz('Export…', '导出…'), openExport, 'CmdOrCtrl+E'),
     await sep(),

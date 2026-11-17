@@ -1,4 +1,4 @@
-// catalog.ts — the library's persistent index (Lightroom-style catalog).
+// catalog.ts — the library's persistent index (the catalog).
 //
 // Every imported photograph is one entry. The originals are never copied or
 // modified: an entry remembers the absolute path, its file identity and the

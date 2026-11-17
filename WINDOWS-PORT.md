@@ -77,17 +77,21 @@ described below.
 
 ### Application features (v1.1.0)
 
-12. **Persistent Lightroom-style library (v1.1.0):** importing a folder or a
-    photo registers references only (nothing is copied and originals are never
-    written). The catalog lives at
-    `%AppData%\app.spektralab.desktop\Catalog\catalog.json` with thumbnails in
-    `Catalog\thumbs\` (Rust commands in `desktop/src-tauri/src/catalog.rs`;
-    logic in `desktop/src/shared/catalog.ts` and `desktop/src/state/library.ts`).
-    The library view (`desktop/src/windows/LibraryView.tsx`) provides 0-5 star
-    ratings, Pick/Reject flags, keywords, an "edited" badge, folder/keyword/
-    rating/flag/search filtering, sorting, multi-select, and double-click/Enter
-    to open a photo in the editor. Ratings and flags are catalog metadata;
-    per-image adjustments stay in the existing sidecars, so editing is still
+12. **Persistent library (v1.1.0, entry reworked in v1.1.1):** importing a
+    folder or a photo registers references only (nothing is copied and originals
+    are never written), and photos opened through the normal open path are
+    registered automatically since v1.1.1. The library is reachable from the
+    labelled toolbar button and **File → Library…** (`Ctrl+Shift+L`). The catalog
+    lives at `%AppData%\app.spektralab.desktop\Catalog\catalog.json` with
+    thumbnails in `Catalog\thumbs\` (Rust commands in
+    `desktop/src-tauri/src/catalog.rs`; logic in
+    `desktop/src/shared/catalog.ts` and `desktop/src/state/library.ts`); missing
+    previews are hydrated in the background when the library opens. The library
+    view (`desktop/src/windows/LibraryView.tsx`) provides 0-5 star ratings,
+    Pick/Reject flags, keywords, an "edited" badge, folder/keyword/rating/flag/
+    search filtering, sorting, multi-select, and double-click/Enter to open a
+    photo in the editor. Ratings and flags are catalog metadata; per-image
+    adjustments stay in the existing sidecars, so editing is still
     non-destructive, and the library reopens with the last view/selection.
     Tests: `desktop/src/shared/catalog.test.ts` (8 cases) plus the full desktop
     suite (472 passed / 2 skipped); typecheck and lint are clean.

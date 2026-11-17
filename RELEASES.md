@@ -56,6 +56,33 @@ This repository ships Windows installers only. Release notes are written in
 
 ## History
 
+### v1.1.1 — 图库入口与自动登记 / Library entry and auto-registration
+
+安装包：`SpektraLab_1.1.1_x64-setup.exe`（NSIS，37.54 MiB），sha256
+`5a848d2331f28c3728b47887909560a81ce628441bd94046fe298f5e6c5b7e7a`。
+
+**中文**
+
+- 图库入口更明确：工具栏新增带文字的「图库」按钮，文件菜单新增 **图库…**（`Ctrl+Shift+L`）。
+- 通过「打开文件夹 / 打开照片 / 拖放 / 启动参数」打开的照片会自动登记进图库
+  （只记录引用，原文件不动），关闭软件再打开后可在图库中直接找到。
+- 图库缺缩略图的条目会在打开图库时后台补齐预览，不阻塞浏览。
+- 内部说明与发布文档统一使用中性名称「图库 / 持久图库」，不再引用其他软件名称。
+- 测试：472 项桌面测试通过、typecheck/lint 干净；引擎未改动。
+
+**English**
+
+- Clearer library entry point: a labelled **Library** button in the toolbar and
+  **File → Library…** (`Ctrl+Shift+L`).
+- Photos opened through Open Folder / Open Photographs / drag-and-drop / launch
+  arguments are registered in the catalog automatically (references only; the
+  originals are untouched), so they are there after a restart.
+- Entries without previews get their thumbnails filled in the background when
+  the library is opened; browsing is never blocked.
+- Documentation now uses the neutral name "library / catalog" and no longer
+  references other software by name.
+- Gates: 472 desktop tests pass, typecheck/lint clean; the engine is unchanged.
+
 ### v1.1.0 — 图库 / Library
 
 安装包：`SpektraLab_1.1.0_x64-setup.exe`（NSIS，37.54 MiB），sha256
@@ -63,7 +90,7 @@ This repository ships Windows installers only. Release notes are written in
 
 **中文**
 
-- 新增 Lightroom 式图库：导入文件夹或单张照片（只登记引用，不复制、不改原图），
+- 新增持久图库：导入文件夹或单张照片（只登记引用，不复制、不改原图），
   带缩略图、0–5 星评分、Pick/Reject 旗标、关键字和“已编辑”标记。
 - 目录持久化在 `%AppData%\app.spektralab.desktop\Catalog\catalog.json`，缩略图在同目录
   `thumbs/`；关闭软件再打开会自动回到图库。
@@ -76,7 +103,7 @@ This repository ships Windows installers only. Release notes are written in
 
 **English**
 
-- New Lightroom-style library: import folders or single photos by reference
+- New persistent library: import folders or single photos by reference
   (originals are never copied or modified), with thumbnails, 0–5 star ratings,
   pick/reject flags, keywords and an edited marker.
 - The catalog persists at `%AppData%\app.spektralab.desktop\Catalog\catalog.json`

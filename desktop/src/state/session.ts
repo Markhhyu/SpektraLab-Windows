@@ -1678,6 +1678,10 @@ export async function openPaths(paths: string[]) {
       return imported;
     }));
     await setLibrary(folder, entries);
+    // Every photo opened here becomes a catalog entry too, so the library shows
+    // what has been opened before. Dynamic import keeps the store cycle out of
+    // module initialisation; a catalog failure must never block opening.
+    void import('./library').then((library) => library.registerOpened(entries, folder)).catch(() => undefined);
     // A folder came in whole (launch, drop): it is one people may want back.
     if (!singleFile && paths.length === 1) rememberFolder(folder);
     await select(get().frames[0]!.path);

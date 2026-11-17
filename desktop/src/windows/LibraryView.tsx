@@ -1,4 +1,4 @@
-// LibraryView.tsx — the persistent catalog browser (the Lightroom-style grid).
+// LibraryView.tsx — the persistent catalog browser (the library grid).
 //
 // The originals stay where the user keeps them; this window only reads the
 // catalog and the preview thumbnails. Double-clicking a photograph opens it in

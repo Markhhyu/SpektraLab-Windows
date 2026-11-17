@@ -1,0 +1,129 @@
+# Engine parity against the public Python reference: whole-image, in CI.
+#
+# build.yml is the macOS gate; desktop.yml builds the port and runs CTest and
+# the host smoke test. Neither compares the *whole image* with the numba
+# reference, so a pipeline that renders the wrong picture could still be green
+# (ARCHITECTURE.md §8.6, AGENTS.md trap 23). This job is that comparison, run
+# where the engine can be built natively: Linux with Mesa's lavapipe as the
+# Vulkan device.
+#
+# What this does not do: grade Metal. `engine/tests/parity_metal_vulkan.py` is
+# the Metal-vs-Vulkan grader and needs a Mac (`engine/LINUX_WINDOWS.md` §7).
+# This job grades the portable pipeline against the reference the port claims
+# to implement, which is what the parity bars in `engine/tests/` were measured
+# against on a real GPU.
+#
+# The reference is the **public** upstream package, pinned by commit and
+# checksum: the private fork the other `parity_*.py` harnesses need is not in
+# this repository and is not installed on a hosted runner. That means the
+# fork-only features (contrast mask, scene latitude, Cineon DI, EDR) are out of
+# scope here - their parity needs the private reference. The six product
+# stocks ARE covered, by `parity_product_stocks.py`: its six files are
+# materialized from `engine/resources_product/profiles/` and loaded through the
+# upstream dataclasses, so the same oracle compares them.
+#
+# Bars: the same `3e-5` absolute / `1e-5`-of-samples-over-one-count the other
+# harnesses use, at `--size 256` (a quarter of the 512 px baseline, so the job
+# stays a few minutes). If lavapipe's float32 maths ever drifts past a bar, the
+# run prints the worst offset and its index; that is a finding about the CPU
+# Vulkan device, not licence to widen the bar - record it, then decide.
+
+name: Engine parity (public Python reference)
+
+on:
+  push:
+    branches: [Windows_Linux]
+    paths:
+      - "engine/**"
+      - ".github/workflows/parity.yml"
+  pull_request:
+    branches: [Windows_Linux]
+    paths:
+      - "engine/**"
+      - ".github/workflows/parity.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: parity-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # `andreavolpato/spektrafilm` main at the commit this port's baseline was
+  # measured against; there is no v0.3.4 tag upstream. Same bytes the harness
+  # was developed on (codeload tarball, checksum included).
+  SPEKTRAFILM_REF_COMMIT: 3bb2c2d2801ff68b92019cf1dbcbb133d60832bc
+  SPEKTRAFILM_REF_SHA256: b2aca043227bb76f7f09eef4466cd8f9410f0cd5832ae2f4d045b80cb13b328f
+
+jobs:
+  parity:
+    name: Whole image vs numba (Linux, lavapipe)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain and Mesa's CPU Vulkan
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build nasm glslang-tools \
+            libvulkan1 mesa-vulkan-drivers vulkan-tools python3 python3-venv pkg-config
+          python3 -m venv "$RUNNER_TEMP/spk-build-python"
+          "$RUNNER_TEMP/spk-build-python/bin/pip" install meson==1.9.2
+          echo "$RUNNER_TEMP/spk-build-python/bin" >> "$GITHUB_PATH"
+
+      - name: Vulkan device
+        run: vulkaninfo --summary
+
+      # The oracle's own requirements (see the harness docstrings): numpy scipy
+      # colour-science numba opt-einsum. Python 3.13 is what upstream's
+      # `requires-python` names.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install the reference's dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy colour-science numba opt-einsum
+
+      # LibRaw 0.22.2 + Vulkan-Headers, pinned and checksum-verified by the
+      # script. Key matches desktop.yml's native job so the two share a cache.
+      - uses: actions/cache@v4
+        with:
+          path: build/deps
+          key: engine-deps-${{ runner.os }}-native-${{ hashFiles('engine/setup-*.sh', 'engine/setup-*.py', 'engine/cmake/*pins.json', 'engine/cmake/input-dependencies/**') }}
+
+      - name: Build the engine and its test shared library
+        run: engine/build-linux.sh
+
+      - name: Fetch the pinned reference
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/spektrafilm-ref.tar.gz" \
+            "https://codeload.github.com/andreavolpato/spektrafilm/tar.gz/$SPEKTRAFILM_REF_COMMIT"
+          echo "$SPEKTRAFILM_REF_SHA256  $RUNNER_TEMP/spektrafilm-ref.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/spektrafilm-ref"
+          tar -xzf "$RUNNER_TEMP/spektrafilm-ref.tar.gz" \
+            -C "$RUNNER_TEMP/spektrafilm-ref" --strip-components=1
+          # Import the package once here: a broken reference should fail on its
+          # own step, not inside the first parity case.
+          python -c "import sys; sys.path.insert(0, '$RUNNER_TEMP/spektrafilm-ref/src'); import spektrafilm.profiles.io as io; print('reference', io.__file__)"
+
+      - name: Whole-image parity, the 28 shared stocks
+        env:
+          SPEKTRAFILM_REF_SRC: ${{ runner.temp }}/spektrafilm-ref/src
+        run: |
+          python engine/tests/parity_upstream.py --size 256 -v \
+            --library build/linux/engine/spektrafilm_engine.so \
+            --resources build/linux/engine/resources
+
+      - name: Whole-image parity, the six product stocks
+        env:
+          SPEKTRAFILM_REF_SRC: ${{ runner.temp }}/spektrafilm-ref/src
+        run: |
+          python engine/tests/parity_product_stocks.py --size 256 -v \
+            --library build/linux/engine/spektrafilm_engine.so \
+            --resources build/linux/engine/resources

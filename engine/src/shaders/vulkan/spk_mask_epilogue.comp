@@ -1,0 +1,111 @@
+#version 450
+
+// RFC-024's virtual contrast mask, the application half. Pointwise over a band:
+// the enlarger's spectral integral, the bilinear base sample, the bounded curve,
+// and the gain on the image exposure *before* the pre-flash is added. Port of
+// `spk_mask_epilogue` in src/shaders/contrast_mask.metal.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input { float value[]; } input_data;
+layout(set = 0, binding = 1, std430) readonly buffer Characteristic { float value[]; } characteristic;
+layout(set = 0, binding = 2, std430) readonly buffer Base { float value[]; } base_data;
+layout(set = 0, binding = 3, std430) readonly buffer Integral { float value[]; } integral_data;
+layout(set = 0, binding = 4, std430) readonly buffer Params { float value[]; } params;
+layout(set = 0, binding = 5, std430) readonly buffer Coef { float value[]; } coef;
+layout(set = 0, binding = 6, std430) readonly buffer Meta { uint value[]; } meta;
+layout(set = 0, binding = 7, std430) writeonly buffer Output { float value[]; } output_data;
+
+const float kMaskLog2Floor = -20.0;
+
+uint spk_global_index() {
+    return gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) + gl_GlobalInvocationID.x;
+}
+
+vec3 mask_image_exposure(uint i, uint nl) {
+    float c0 = input_data.value[3u * i];
+    float c1 = input_data.value[3u * i + 1u];
+    float c2 = input_data.value[3u * i + 2u];
+    vec3 accumulated = vec3(0.0);
+    for (uint l = 0u; l < nl; ++l) {
+        float d = c0 * characteristic.value[3u * l]
+                + c1 * characteristic.value[3u * l + 1u]
+                + c2 * characteristic.value[3u * l + 2u]
+                + base_data.value[l];
+        float t = exp2(-d * 3.321928094887362);
+        accumulated.x += t * integral_data.value[3u * l];
+        accumulated.y += t * integral_data.value[3u * l + 1u];
+        accumulated.z += t * integral_data.value[3u * l + 2u];
+    }
+    return vec3(accumulated.x * params.value[0], accumulated.y * params.value[1],
+                accumulated.z * params.value[2]);
+}
+
+float mask_x(vec3 a) {
+    float s = 0.0;
+    for (uint c = 0u; c < 3u; ++c) {
+        float r = max(a[c] * params.value[3u + c], 0.0);
+        s += max(log2(r), kMaskLog2Floor);
+    }
+    return s * (1.0 / 3.0);
+}
+
+// RFC-023's m = 2 branch, `D * H / sqrt(H^2 + D^2)`: slope 1 at the knee,
+// asymptote H.
+float mask_g(float d, float h) { return d * h * inversesqrt(h * h + d * d); }
+
+// delta = f(b) - b, bounded. Exactly 0.0 inside the core and on a disabled
+// branch, so the gain there is exp2(0) = 1.
+float mask_delta(float b) {
+    float delta = 0.0;
+    if (params.value[11] != 0.0 && b < params.value[9]) {
+        float d = params.value[9] - b;
+        delta = d - mask_g(d, params.value[10]);
+    } else if (params.value[14] != 0.0 && b > params.value[12]) {
+        float d = b - params.value[12];
+        delta = mask_g(d, params.value[13]) - d;
+    }
+    // The same smooth-min bounds the gain itself (RFC-023 §15's fix for an
+    // unbounded shadow gain): |delta| < limit for any base.
+    float lim = params.value[15];
+    return delta * lim * inversesqrt(lim * lim + delta * delta);
+}
+
+void main() {
+    uint i = spk_global_index();
+    uint n = meta.value[0];
+    if (i >= n) return;
+    uint nl = meta.value[1];
+    uint W = meta.value[2];
+    uint H = meta.value[3];
+    uint row0 = meta.value[4];
+    uint gw = meta.value[5];
+    uint gh = meta.value[6];
+
+    vec3 a = mask_image_exposure(i, nl);
+
+    uint px = i % W;
+    uint py = row0 + i / W;
+    float u = clamp((float(px) + 0.5) * float(gw) / float(W) - 0.5, 0.0, float(gw - 1u));
+    float v = clamp((float(py) + 0.5) * float(gh) / float(H) - 0.5, 0.0, float(gh - 1u));
+    uint u0 = uint(floor(u));
+    uint v0 = uint(floor(v));
+    uint u1 = min(u0 + 1u, gw - 1u);
+    uint v1 = min(v0 + 1u, gh - 1u);
+    float tu = u - float(u0);
+    float tv = v - float(v0);
+    vec2 c00 = vec2(coef.value[2u * (v0 * gw + u0)], coef.value[2u * (v0 * gw + u0) + 1u]);
+    vec2 c01 = vec2(coef.value[2u * (v0 * gw + u1)], coef.value[2u * (v0 * gw + u1) + 1u]);
+    vec2 c10 = vec2(coef.value[2u * (v1 * gw + u0)], coef.value[2u * (v1 * gw + u0) + 1u]);
+    vec2 c11 = vec2(coef.value[2u * (v1 * gw + u1)], coef.value[2u * (v1 * gw + u1) + 1u]);
+    vec2 ab = mix(mix(c00, c01, tu), mix(c10, c11, tu), tv);
+
+    float b = ab.x * mask_x(a) + ab.y;
+    float k = exp2(mask_delta(b));
+    float v0e = max(k * a.x + params.value[6], 0.0) + 1e-10;
+    float v1e = max(k * a.y + params.value[7], 0.0) + 1e-10;
+    float v2e = max(k * a.z + params.value[8], 0.0) + 1e-10;
+    output_data.value[3u * i] = log(v0e) * 0.4342944819032518;
+    output_data.value[3u * i + 1u] = log(v1e) * 0.4342944819032518;
+    output_data.value[3u * i + 2u] = log(v2e) * 0.4342944819032518;
+}

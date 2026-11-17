@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "externalBin": [
+      "binaries/spektralab-host"
+    ],
+    "resources": {
+      "host-staging/engine": "host/engine",
+      "host-staging/licenses": "host/licenses",
+      "host-staging/agents": "agents"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

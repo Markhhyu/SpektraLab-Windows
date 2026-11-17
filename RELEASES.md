@@ -56,6 +56,34 @@ This repository ships Windows installers only. Release notes are written in
 
 ## History
 
+### v1.2.1 — 稳定性、兼容性验证与文档同步 / Stability, compatibility checks and docs
+
+安装包：`SpektraLab_1.2.1_x64-setup.exe`（NSIS，37.55 MiB），sha256
+`2268737ed3f8d24b2cd25fe42555135bb3f1b43b5a02c7d7c8add215bd28caca`。
+
+**中文**
+
+- 关闭窗口时先向渲染宿主发送 shutdown 请求并等待其自行退出（最多 700 ms），
+  不再直接强杀；正常关闭降为 INFO，异常退出仍按预算自动重启并上报。
+- 新增强制 Dekker split CTest（`spk_math_fallback`）与 Windows CI 编译门
+  （MSYS2 MinGW，无 GPU 仅编译）。
+- 兼容矩阵/能力/移植文档同步到实现：51 个 Vulkan kernel、43 个 CTest；
+  scene latitude、overscan/片边、date back、Cineon DI 均已支持并测试。
+- 帧缓存 LRU 复核确认已具备（默认 16 GiB，按 mtime 清理，设置页可调）。
+- 测试：引擎 43/43 CTest，`cargo check` 通过，桌面 474 项通过。
+
+**English**
+
+- Graceful host shutdown (send `shutdown`, wait up to 700 ms, then kill),
+  clean close logged at INFO, unexpected exits still restart within budget.
+- New forced-Dekker CTest and a Windows CI compile gate (MSYS2 MinGW,
+  compile-only on a GPU-less runner).
+- Compatibility matrix and port docs now match the implementation: 51 Vulkan
+  kernels, 43 CTests; scene latitude, overscan/film edge, date back and Cineon DI
+  are supported and tested.
+- Frame cache LRU reviewed: 16 GiB default cap, mtime trim, adjustable in Settings.
+- Tests: engine 43/43 CTests, `cargo check` clean, 474 desktop tests passing.
+
 ### v1.2.0 — 图库到修改的胶片条连续浏览 / Library-to-filmstrip browsing
 
 安装包：`SpektraLab_1.2.0_x64-setup.exe`（NSIS，37.55 MiB），sha256

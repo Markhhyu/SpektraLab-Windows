@@ -1,0 +1,74 @@
+# Windows clean-checkout build gate (P1-12 compatibility matrix).
+#
+# The hosted Windows runner has no Vulkan device, so this job stops after a
+# successful MinGW configure + compile (`-SkipTests`). The numerical gates
+# (43 CTest cases, upstream parity, the forced math-probe fallback) run on a
+# real RTX machine before each release; this job only proves that a clean
+# checkout of the Windows engine builds from the checked-in sources with an
+# independently provisioned MinGW toolchain (MSYS2, not the maintainer's
+# E:\deepseekHerness\SpektraLab-src\deps copy).
+#
+# The desktop app is deliberately excluded: it needs Rust/cargo, Node/npm and
+# the Tauri bundler, all covered by the local release checklist in
+# RELEASES.md instead of a 10 GB hosted toolchain.
+
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'engine/**'
+      - '.github/workflows/windows-build.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - '.github/workflows/windows-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MinGW toolchain and Vulkan build inputs
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-glslang
+            mingw-w64-x86_64-vulkan-headers
+            mingw-w64-x86_64-vulkan-loader
+
+      - name: LibRaw 0.22.2 (official release + ARW6 overlay)
+        shell: pwsh
+        run: engine/setup-libraw.ps1 -DependencyDirectory ..\deps
+
+      - name: Configure and build the engine
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\msys64\mingw64\bin;$env:PATH"
+          engine/build-windows.ps1 `
+            -BuildDirectory build/windows `
+            -Fresh -SkipTests -Jobs 4 -Desktop:$false `
+            -LibRawSourceDirectory ..\deps\LibRaw-0.22.2 `
+            -VulkanIncludeDirectory C:\msys64\mingw64\include `
+            -VulkanLibrary C:\msys64\mingw64\bin\vulkan-1.dll `
+            -GlslangExecutable C:\msys64\mingw64\bin\glslangValidator.exe
+
+      - name: Upload the build manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-toolchain-manifest
+          path: build/windows/toolchain.json
+          if-no-files-found: error

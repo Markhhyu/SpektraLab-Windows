@@ -2,6 +2,7 @@
 #include "spektrafilm/spk_engine.h"
 
 #include <array>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -26,10 +27,36 @@ void render(spk_engine* engine, spk_session* session) {
     spk_result result{};
     const spk_status status = spk_render(session, "full", &result);
     const bool valid = status == SPK_OK && result.rgba16 && result.texture &&
-                       result.width == 32 && result.height == 16;
+                       result.width == 36 && result.height == 24;
     const std::string error = spk_last_error(engine);
     spk_result_free(&result);
     require(valid, "default render failed after a refused request: " + error);
+}
+
+// FNV-1a over the RGB halfwords, row by row with the result's own row pitch.
+// Rendering through this covers the tier and the whole frame rather than a
+// single node, so a stale print cache or an off-by-one dimension shows up.
+uint64_t render_digest(spk_engine* engine, spk_session* session,
+                       uint32_t* out_width = nullptr, uint32_t* out_height = nullptr) {
+    spk_result result{};
+    const spk_status status = spk_render(session, "full", &result);
+    const std::string error = spk_last_error(engine);
+    const bool valid = status == SPK_OK && result.rgba16 && result.texture;
+    require(valid, "full render failed: " + error);
+    uint64_t hash = 1469598103934665603ull;
+    for (uint32_t row = 0; row < result.height; ++row) {
+        const uint16_t* line = result.rgba16 + std::size_t(row) * result.row_stride_px;
+        for (uint32_t col = 0; col < result.width; ++col) {
+            for (int channel = 0; channel < 3; ++channel) {
+                hash ^= line[std::size_t(col) * 4 + channel];
+                hash *= 1099511628211ull;
+            }
+        }
+    }
+    if (out_width) *out_width = result.width;
+    if (out_height) *out_height = result.height;
+    spk_result_free(&result);
+    return hash;
 }
 
 }  // namespace
@@ -49,9 +76,11 @@ int main(int argc, char** argv) {
         require(std::string(capabilities).find("contrast_mask") == std::string::npos,
                 "Windows capabilities still hide the ported contrast mask");
 
-        std::vector<float> pixels(32 * 16 * 3);
-        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = 0.025f + float(i % 31) * 0.025f;
-        const spk_image input{pixels.data(), 32, 16, 3};
+        std::vector<float> pixels(36 * 24 * 3);
+        // A deliberately wide range: the headroom effects (scene latitude,
+        // overscan canvas masks) need real shadows and highlights to act on.
+        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = 0.02f + float(i % 31) * 0.25f;
+        const spk_image input{pixels.data(), 36, 24, 3};
         std::unique_ptr<spk_session, decltype(&spk_session_release)> session(
             spk_open(engine.get(), &input, nullptr, nullptr), spk_session_release);
         require(bool(session), std::string("default open failed: ") + spk_last_error(engine.get()));
@@ -129,7 +158,60 @@ int main(int argc, char** argv) {
         require(latitude_status == SPK_OK && latitude_valid, "latitude analysis failed: " + latitude_error);
         require(params(session.get()) == before_di, "latitude analysis mutated the session");
         render(engine.get(), session.get());
-        std::cout << "Windows feature boundaries passed (contrast mask on/off, Cineon DI, latitude analysis)\n";
+
+        // The digests below need a deterministic frame: grain is a stochastic
+        // draw, and auto exposure would move the whole-image level. Everything
+        // else keeps its default so the effects under test are the only
+        // difference between the digests.
+        require(spk_set_params(session.get(),
+                               "{\"grain_active\":false,\"halation_active\":false,"
+                               "\"glare_active\":false,\"auto_exposure\":false,"
+                               "\"print_exposure\":1.0}",
+                               nullptr) == SPK_OK,
+                std::string("could not pin the deterministic frame: ") + spk_last_error(engine.get()));
+        render(engine.get(), session.get());
+
+        // Applying the scene-latitude mapping (RFC-023) is an effect now:
+        // turning it on changes the frame, turning it off restores it.
+        const uint64_t plain_digest = render_digest(engine.get(), session.get());
+        const std::string scene_delta =
+            "{\"scene_latitude_active\":true,\"scene_latitude_norm\":\"y\","
+            "\"scene_latitude_shadow_room\":3.0,\"scene_latitude_highlight_room\":3.0}";
+        require(spk_set_params(session.get(), scene_delta.c_str(), nullptr) == SPK_OK,
+                std::string("scene latitude mapping was refused: ") + spk_last_error(engine.get()));
+        const uint64_t lifted_digest = render_digest(engine.get(), session.get());
+        require(lifted_digest != plain_digest, "scene latitude mapping did not change the frame");
+        require(spk_set_params(session.get(), "{\"scene_latitude_active\":false}", nullptr) == SPK_OK,
+                "could not disable the scene-latitude mapping");
+        require(render_digest(engine.get(), session.get()) == plain_digest,
+                "disabling scene latitude did not restore the plain frame");
+
+        // Overscan and its film edge (RFC-031/032): an active canvas changes
+        // the rendered dimensions instead of being refused.
+        require(spk_set_params(session.get(),
+                               "{\"overscan_active\":true,\"overscan_format\":\"135\"}", nullptr) == SPK_OK,
+                std::string("overscan was refused: ") + spk_last_error(engine.get()));
+        uint32_t framed_width = 0;
+        uint32_t framed_height = 0;
+        render_digest(engine.get(), session.get(), &framed_width, &framed_height);
+        require(framed_width > 32 && framed_height > 0, "overscan canvas did not widen the frame");
+        require(spk_set_params(session.get(), "{\"overscan_active\":false}", nullptr) == SPK_OK,
+                "could not disable overscan");
+
+        // The printed date back (RFC-032) is accepted and echoed; its visual
+        // gate on a 36 x 24 synthetic frame is covered by the full-scale host
+        // probe (the glyphs are laid out in millimetres on the film edge).
+        require(spk_set_params(session.get(),
+                               "{\"date_imprint_active\":true,\"date_imprint_text\":\"2026 11 17\"}",
+                               nullptr) == SPK_OK,
+                std::string("date imprint was refused: ") + spk_last_error(engine.get()));
+        require(params(session.get()).find("\"date_imprint_active\":true") != std::string::npos,
+                "date imprint was not applied to the session params");
+        require(spk_set_params(session.get(), "{\"date_imprint_active\":false}", nullptr) == SPK_OK,
+                "could not disable the date imprint");
+
+        std::cout << "Windows feature boundaries passed (contrast mask on/off, Cineon DI, latitude "
+                     "analysis and mapping, overscan canvas, date back)\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

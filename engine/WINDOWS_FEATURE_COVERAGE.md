@@ -6,14 +6,26 @@ was Windows, MinGW GCC 15.2, Vulkan and RTX 5070 Ti. It does not imply that
 every stock, camera, parameter combination or later upstream feature is
 supported. Later features require explicit porting and validation.
 
-The backend contains 34 kernels, including two diagnostic probes. The full
-Win32 integration passed 16 CTests and 47 Python tool tests. Original baked
+The backend contains 51 kernels, including the diagnostic probes. The Win32
+integration passed 43 CTests (2026-11-18) and 47 Python tool tests. Original baked
 profile/resource files were unchanged; native TIFF export adds a separate
 provenance-described sRGB ICC resource. Whole-image Metal/Python film-model
 parity remains unverified — as of 2026-11-16 the Vulkan engine does have a
 whole-image baseline against the **public** Python reference for the 28 shared
 and six product stocks (`engine/tests/parity_upstream*.py`, run at 256 px by
 workflow `parity.yml`); the Metal half still needs a Mac.
+
+## Compatibility matrix (2026-11-18)
+
+| Platform / driver | Status | Evidence |
+|---|---|---|
+| Windows 11, MinGW GCC 15.2, NVIDIA RTX 4070 Laptop (driver 616.56) | **accepted** | 43/43 CTests, full RAW + host protocol probes, Vulkan backend with `math=probed` |
+| Windows 11, MSVC | not built | CMake presets are MinGW-only; no CI or local run |
+| MSYS2-MINGW64 hosted CI runner (no GPU) | build gate only | `.github/workflows/windows-build.yml` compiles the engine and native-RAW/host targets; no device means no render gate |
+| AMD / Intel Vulkan drivers | not verified | no hardware; kernels use only core Vulkan 1.0 + `SPK_FUSED_FMA` specialisation |
+| CPU device / lavapipe | partially verified | `probe_cpu_storage_range` lifts the 128 MiB SSBO limit; math probe falls back to the Dekker split path |
+| Unfused FMA devices | **forced-path CTest** | `spk_math_fallback` sets `SPEKTRAFILM_VULKAN_FORCE_SPLIT=1` and asserts `math_mode` names the Dekker path and that a live render is non-constant |
+| macOS / Metal | not replaced | upstream path unchanged; Metal↔Vulkan whole-image parity still needs a Mac |
 
 | Operation | Implemented path | Exercised scope and remaining boundary |
 |---|---|---|
@@ -42,8 +54,8 @@ workflow `parity.yml`); the Metal half still needs a Mac.
 | Minimal Win32 viewer | Serial worker and immutable RGBA16/BGRA8 frames | Full RAW open, film/paper/brightness edits, fit/100% pan, same-frame export and failed-open preservation |
 | Qt Quick editor | Shared native host, three-panel layout and single-photo strip | Full RAW/controller/offscreen scene regression; physical 100% samples, repeated texture updates and failure recovery; live display validation pending |
 | Window drawing | sRGB-labelled bitmap and requested GDI ICM | Offscreen handlers/layout and 1:1 BGR pixel checks; visible gestures, calibrated monitor ICC, HDR and multi-monitor acceptance remain pending |
-| Scene latitude analysis | Existing pipeline and explicit probe readback | Real C ABI analysis test; applying scene latitude mapping remains unsupported |
-| New upstream effects | Explicit Windows capability and request rejection | Cineon DI, scene latitude mapping, film edge and date imprint are refused before session mutation; the old normalised-density DI tap remains available. Contrast mask (RFC-024) is implemented on Vulkan: `spk_vulkan_mask` checks both kernels against a float64 oracle (striped band rows, exact bypass) and the C API, and `spk_windows_feature_boundaries` no longer expects the capability |
+| Scene latitude analysis | Existing pipeline and explicit probe readback | Real C ABI analysis test; applying the returned mapping is now a working effect (see "New upstream effects") |
+| New upstream effects | Implemented on Vulkan; no capability refusal remains | Contrast mask (RFC-024): `spk_vulkan_mask` checks both kernels against a float64 oracle (striped band rows, exact bypass) and the C API. Scene latitude mapping (RFC-023), overscan/film edge (RFC-031), date back (RFC-032) and Cineon DI (`spk_di_encode` / `export_di`) are accepted by `spk_windows_feature_boundaries` and the host probe (`probe_released.py`): mapping and date back change the frame, a 135 canvas widens it, a full-res 32.95 MP `export_di` writes a paired 197.7 MB Cineon file. `backend.unsupported_features` is now absent (`null` in `hello`) |
 
 ## Test interpretation
 

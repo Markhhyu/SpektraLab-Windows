@@ -1,14 +1,17 @@
 # Porting the five refused features to Vulkan -- a handoff
 
-**Status (owner's decision, 2026-10-06; contrast mask ported 2026-11-16):**
-scene latitude mapping, Cineon Digital Intermediate, overscan/film edge and
-the date back stay **refused** off Apple. The contrast mask now has a Vulkan
-path: the two kernels, the portable `contrast_mask.cpp`, its host-side field
-and the mask/windows feature tests are in the tree (§3). `capabilities.backend.unsupported_features` no longer names
-the contrast mask; the remaining four still fail with `SPK_ERR_USER` before
-the session changes, and the default render is unaffected. This file is for the engineer
-who ports them: what each feature touches, what is Apple-only, the portable
-replacement, how to test it on lavapipe, and an estimate.
+**Status (2026-11-18): all five are implemented and tested on Windows.**
+The 1.3.4 engine already carried the scene-latitude, overscan/film-edge,
+date-back and Cineon-DI implementations; they were still documented as refused
+here and gated off in the old port, so this handoff's "refused" status is
+stale. The contrast mask was ported on 2026-11-16: its two kernels, the portable
+`contrast_mask.cpp`, the host-side field and `spk_vulkan_mask` are in the tree.
+On 2026-11-18 `spk_windows_feature_boundaries` exercises the scene-latitude
+mapping (on/off), a 135 overscan canvas, the date back and the full-res Cineon
+DI export through the C ABI, and `bench/probe_released.py` showed all of them
+accepted by the host with `capabilities.backend.unsupported_features = null`.
+`spk_open_device` remains Metal-only. This file is kept as the record of what
+each feature touches, the portable replacements and the lavapipe test recipe.
 
 Line numbers are as of commit 880cffa (branch
 `claude/spektralab-windows-linux-port-mi7r55`). Read `AGENTS.md` traps 19

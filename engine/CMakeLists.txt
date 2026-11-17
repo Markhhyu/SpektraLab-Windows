@@ -376,6 +376,17 @@ if(SPEKTRALAB_PORTABLE_BACKEND)
             add_test(NAME spk_exposure_metering
                 COMMAND spk_exposure_metering "${vulkan_resource_dir}")
 
+            # P1-12: the Dekker split-product fallback must keep working on
+            # devices/drivers that cannot reproduce a fused multiply-add. The
+            # test forces the fallback before engine creation.
+            add_executable(spk_math_fallback tests/math_fallback.cpp)
+            target_include_directories(spk_math_fallback PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/include"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src")
+            target_link_libraries(spk_math_fallback PRIVATE spektralab_engine)
+            add_test(NAME spk_math_fallback
+                COMMAND spk_math_fallback "${vulkan_resource_dir}")
+
             add_executable(spk_vulkan_math_gate tests/gpu_vulkan_math_gate.cpp)
             target_include_directories(spk_vulkan_math_gate PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
             target_link_libraries(spk_vulkan_math_gate PRIVATE spektralab_engine)

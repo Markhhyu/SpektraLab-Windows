@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：源自原项目最后一个
-Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.2.0**，
+Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.2.1**，
 并包含 Windows 移植修复、性能优化和两个原生扩展（见下）。
 
 胶片过程模型、28 个实测胶片/相纸 profile 与打印 LUT 来自

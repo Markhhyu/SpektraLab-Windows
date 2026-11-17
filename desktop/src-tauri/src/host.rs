@@ -105,9 +105,23 @@ async fn wait_child(mut child: Child, stop_requested: oneshot::Receiver<()>) -> 
         result = child.wait() => result,
         _ = stop_requested => {
             // A cancelled stop sender also means its owner went away.
-            // Always reap the process; dropping stdin is not completion.
-            let _ = child.start_kill();
-            child.wait().await
+            // Dropping stdin has already asked the host to quit; give it a
+            // moment to do that on its own so the exit status stays 0 and the
+            // process is not reported as terminated. Only kill it if it is
+            // still running after the grace period.
+            let deadline = tokio::time::Instant::now() + Duration::from_millis(700);
+            loop {
+                match child.try_wait()? {
+                    Some(status) => return Ok(status),
+                    None if tokio::time::Instant::now() < deadline => {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    None => {
+                        let _ = child.start_kill();
+                        return child.wait().await;
+                    }
+                }
+            }
         }
     }
 }
@@ -382,10 +396,13 @@ impl HostManager {
             return; // superseded (restart or fail_and_kill)
         }
         let reason = format!("the engine host exited ({status})");
-        log::warn!(target: "host", "{reason}");
         if self.shutting_down.load(Ordering::SeqCst) {
+            // A clean quit is the expected end of a shutdown; do not report it
+            // as a warning, and never restart it.
+            log::info!(target: "host", "{reason}");
             return;
         }
+        log::warn!(target: "host", "{reason}");
         let attempt = {
             let mut r = self.restarts.lock().unwrap();
             let now = Instant::now();

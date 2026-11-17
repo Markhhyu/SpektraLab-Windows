@@ -16,6 +16,8 @@ param(
     [switch]$NativeRaw = $true,
     [switch]$Desktop = $true,
     [switch]$Fresh,
+    # Clean-checkout compile gate only (hosted CI has no Vulkan device).
+    [switch]$SkipTests,
     [ValidateRange(1, 64)][int]$Jobs = 4
 )
 
@@ -142,8 +144,10 @@ try {
         $runtimeManifest += [ordered]@{ name = $runtimeName; source = $runtimeSource;
             sha256 = (Get-FileHash -LiteralPath $runtimeSource -Algorithm SHA256).Hash.ToLowerInvariant() }
     }
-    & $CTestExecutable --test-dir $BuildDirectory --output-on-failure 2>&1 | Tee-Object -FilePath (Join-Path $BuildDirectory 'ctest.log')
-    if ($LASTEXITCODE -ne 0) { throw "CTest failed ($LASTEXITCODE)." }
+    if (-not $SkipTests) {
+        & $CTestExecutable --test-dir $BuildDirectory --output-on-failure 2>&1 | Tee-Object -FilePath (Join-Path $BuildDirectory 'ctest.log')
+        if ($LASTEXITCODE -ne 0) { throw "CTest failed ($LASTEXITCODE)." }
+    }
 
     $sourceFiles = @('CMakeLists.txt', 'engine\CMakeLists.txt', 'engine\windows_exports.def', 'engine\build-windows.ps1', 'engine\setup-libraw.ps1') |
         ForEach-Object { Get-Item -LiteralPath (Join-Path $sourceDirectory $_) }
@@ -176,7 +180,8 @@ try {
         glslang_sha256 = (Get-FileHash -LiteralPath $GlslangExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
         dll = (Join-Path $BuildDirectory 'engine\spektrafilm_engine.dll')
         dll_sha256 = (Get-FileHash -LiteralPath (Join-Path $BuildDirectory 'engine\spektrafilm_engine.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
-        ctest_passed = $true
+        ctest_passed = (-not $SkipTests)
+        tests = $(if ($SkipTests) { 'skipped (clean-checkout build only)' } else { 'ctest' })
         native_raw = [bool]$NativeRaw
         host = [bool]$HostBuild
         input_codec_prefix = $InputCodecPrefix

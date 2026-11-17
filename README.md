@@ -3,9 +3,10 @@
 **English** · [简体中文](README.zh-CN.md)
 
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
-the spectral film-and-print simulator — based on the original project's last
-Windows beta, **v1.3.4-beta.3** (tag `9ceca33`), plus the Windows port fixes,
-performance work and two native extensions described below.
+the spectral film-and-print simulator — derived from the original project's last
+Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
+version line, currently **v1.0.0**, plus the Windows port fixes, performance work
+and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs
 come from [spektrafilm](https://github.com/andreavolpato/spektrafilm). The
@@ -91,8 +92,9 @@ the short version:
 - Release notes are written in **both Chinese and English**, and list what
   changed in that build. See [`RELEASES.md`](RELEASES.md) for the release
   process and the history.
-- Every code update gets a rebuilt installer and a new release entry; the
-  tag scheme is `v<upstream version>-win.<n>`.
+- Every code update gets a rebuilt installer and a new release entry; tags
+  follow this repository's own semantic versioning, `v<major>.<minor>.<patch>`
+  (the first release is `v1.0.0`).
 
 ## Build from source
 
@@ -127,8 +129,8 @@ node scripts/package.mjs win      # stages host, builds the frontend and NSIS
 
 ## Known limits
 
-- This snapshot is **v1.3.4-beta.3**: the macOS app has since added features
-  (newer UI, Local Adjustments, etc.) that are not in this tree.
+- This tree is based on upstream **v1.3.4-beta.3**: the macOS app has since added
+  features (newer UI, Local Adjustments, etc.) that are not in this tree.
 - P1-8's paper surface/gloss half (paper BRDF, 2°/10° observer) is not
   implemented; only the illuminant half is.
 - Whole-image parity is checked against the public `spektrafilm` package; the

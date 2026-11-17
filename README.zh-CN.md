@@ -2,8 +2,9 @@
 
 [English](README.md) · **简体中文**
 
-这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：基于原项目最后一个
-Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`），加上 Windows 移植修复、性能优化和两个原生扩展（见下）。
+这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：源自原项目最后一个
+Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.0.0**，
+并包含 Windows 移植修复、性能优化和两个原生扩展（见下）。
 
 胶片过程模型、28 个实测胶片/相纸 profile 与打印 LUT 来自
 [spektrafilm](https://github.com/andreavolpato/spektrafilm)。原项目是 macOS 产品（SwiftUI + Metal）；
@@ -65,7 +66,8 @@ Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`），加上 Windows 移植�
 - 发布用的 host 为**静态链接**（`-DSPEKTRALAB_STATIC_RUNTIME=ON`），只依赖系统 DLL
   （ADVAPI32、KERNEL32、SHELL32、USER32、WS2_32、ole32、UCRT），与原 Windows 测试版一致。
 - Release 说明**中英文各写一份**，列出本次构建的改动。发布流程与历史见 [`RELEASES.md`](RELEASES.md)。
-- 每次代码更新都会重新构建安装包并发布新的 Release；tag 规则为 `v<上游版本>-win.<序号>`。
+- 每次代码更新都会重新构建安装包并发布新的 Release；tag 使用本仓库自己的语义化版本
+  `v<主>.<次>.<修订>`（首个版本为 `v1.0.0`），安装包文件名与应用/安装器属性版本保持一致。
 
 ## 从源码构建
 
@@ -97,7 +99,7 @@ node scripts/package.mjs win      # 暂存 host、构建前端并产出 NSIS 安
 
 ## 已知限制
 
-- 本快照是 **v1.3.4-beta.3**：macOS 应用后续新增的功能（新 UI、局部调整等）不在本仓库中。
+- 本仓库基于上游 **v1.3.4-beta.3**：macOS 应用后续新增的功能（新 UI、局部调整等）不在本仓库中。
 - P1-8 的相纸表面/光泽部分（纸面 BRDF、2°/10° 观察者）未实现，只做了光源部分。
 - 整图 parity 对公开 `spektrafilm` 包验证；其余 `parity_*.py` 依赖的 macOS 私有 Python 参考在这里不可用，
   因此 fork 专属 stock 只由 `parity_product_stocks.py` 覆盖。

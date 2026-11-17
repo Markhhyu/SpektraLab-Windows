@@ -3,9 +3,10 @@
 This repository ships Windows installers only. Release notes are written in
 **both Chinese and English** and list what changed in that build.
 
-- Tag scheme: `v<upstream version>-win.<n>` — the `.n` counter is per upstream
-  version, so `v1.3.4-beta.3-win.2` would be the second Windows build of the
-  same upstream snapshot.
+- Tag scheme: `v<major>.<minor>.<patch>` on this repository's own semantic
+  version line (the first release is `v1.0.0`). Builds published before the
+  switch used `v<upstream version>-win.<n>` (`v1.3.4-beta.3-win.1`, `-win.2`);
+  they stay online as history but are superseded by the new line.
 - Assets: the NSIS installer and a `.sha256` file next to it.
 
 ## Release process (for the next update)
@@ -44,8 +45,8 @@ This repository ships Windows installers only. Release notes are written in
 
    ```bash
    sha256sum SpektraLab_<version>_x64-setup.exe > SpektraLab_<version>_x64-setup.exe.sha256
-   gh release create v<version>-win.<n> \
-       --title "v<version>-win.<n> — <short title>" \
+   gh release create v<version> \
+       --title "v<version> — <short title>" \
        --notes-file release-notes.md \
        <installer> <installer>.sha256
    ```
@@ -54,6 +55,25 @@ This repository ships Windows installers only. Release notes are written in
    keep the two in sync.
 
 ## History
+
+### v1.0.0 — 独立版本线与命名统一 / Independent version line
+
+安装包：`SpektraLab_1.0.0_x64-setup.exe`（NSIS，37.54 MiB），sha256
+`ac0dd67502be75e537d8624235bef68f73a5745b9d67bbd0bd2e46c4c638aa41`。
+
+**中文**
+
+- Windows 版改用独立语义化版本号，首个版本为 **1.0.0**，不再沿用上游 `1.3.4-beta.3`，避免与 macOS 版本混淆。
+- 安装包文件名、NSIS 安装器属性、应用可执行文件的 `FileVersion`/`ProductVersion` 全部统一为 1.0.0。
+- 应用内“检查更新”改为读取本仓库 Releases，按 `v<主>.<次>.<修订>` 与 `SpektraLab_<version>_x64-setup.exe` 匹配。
+- 功能与 win.2 相同：Tone Mask、整图 parity、会话驻留、首帧预热、测光回归修复、TIFF Deflate、显影与光源面板。
+
+**English**
+
+- The Windows edition now uses its own semantic version line (starting at **1.0.0**) rather than the upstream `1.3.4-beta.3` number.
+- Installer filename, NSIS installer properties and the app executable's `FileVersion`/`ProductVersion` all report 1.0.0.
+- The in-app release check now reads this repository's Releases and matches `v<major>.<minor>.<patch>` / `SpektraLab_<version>_x64-setup.exe`.
+- The feature set is unchanged from win.2: Tone Mask, whole-image parity, editor residency, warm first frame, metering regression fix, TIFF Deflate, development and lighting panels.
 
 ### v1.3.4-beta.3-win.2 — 测光回归修复 / Metering regression fix
 

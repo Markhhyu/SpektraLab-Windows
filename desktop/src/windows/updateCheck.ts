@@ -1,27 +1,38 @@
-// A user-initiated release check, never an installer. The Mac release number
-// alone says nothing about an available Windows build.
-const REPO = 'https://github.com/JamesQiu2005/SpektraLab';
-export const RELEASE_API = 'https://api.github.com/repos/JamesQiu2005/SpektraLab/releases?per_page=30';
+// A user-initiated release check, never an installer. The Windows build follows
+// its own semantic version line, so the check reads this repository's releases
+// rather than the upstream macOS ones.
+const REPO = 'https://github.com/Markhhyu/SpektraLab-Windows';
+export const RELEASE_API = 'https://api.github.com/repos/Markhhyu/SpektraLab-Windows/releases?per_page=30';
 export type UpdateStatus = { kind: 'available' | 'current'; version: string; url: string; asset: string }
   | { kind: 'unavailable' | 'failed'; reason: string };
 
-type ReleaseVersion = { parts: number[]; pre?: { label: string; sequence: number } };
+type ReleaseVersion = { parts: number[]; pre?: string };
 function version(text: unknown): ReleaseVersion | null {
   if (typeof text !== 'string') return null;
-  const m = /^(?:spektralab-(?:windows-)?v|v)?(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?(?:[-_]windows(?:[-_]x64)?)?$/i.exec(text);
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z][0-9A-Za-z.-]*))?$/.exec(text.trim());
   if (!m) return null;
-  const parts = m.slice(1, 4).map(Number);
-  const pre = m[4] ? { label: m[4].toLowerCase(), sequence: Number(m[5]) } : undefined;
-  return parts.every(Number.isSafeInteger) && (!pre || Number.isSafeInteger(pre.sequence)) ? { parts, pre } : null;
+  const parts = [Number(m[1]!), Number(m[2]!), Number(m[3]!)];
+  const pre = m[4]?.toLowerCase();
+  return parts.every(Number.isSafeInteger) ? { parts, pre } : null;
 }
 function compare(a: ReleaseVersion, b: ReleaseVersion) {
   const base = a.parts[0]! - b.parts[0]! || a.parts[1]! - b.parts[1]! || a.parts[2]! - b.parts[2]!;
   if (base) return base;
+  // A stable release outranks any prerelease of the same number.
   if (!a.pre || !b.pre) return Number(!a.pre) - Number(!b.pre);
-  const ranks = ['alpha', 'beta', 'rc'];
-  return ranks.indexOf(a.pre.label) - ranks.indexOf(b.pre.label) || a.pre.sequence - b.pre.sequence;
+  // Prerelease identifiers compare segment by segment, numerically when both
+  // sides are numbers, so beta.10 follows beta.9.
+  const as = a.pre.split('.'), bs = b.pre.split('.');
+  for (let i = 0; i < Math.max(as.length, bs.length); i++) {
+    const x = as[i], y = bs[i];
+    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
+    const nx = /^\d+$/.test(x) ? Number(x) : null, ny = /^\d+$/.test(y) ? Number(y) : null;
+    const d = nx !== null && ny !== null ? nx - ny : x.localeCompare(y);
+    if (d) return d;
+  }
+  return 0;
 }
-function displayVersion(v: ReleaseVersion) { return v.parts.join('.') + (v.pre ? `-${v.pre.label}.${v.pre.sequence}` : ''); }
+function displayVersion(v: ReleaseVersion) { return v.parts.join('.') + (v.pre ? `-${v.pre}` : ''); }
 function officialUrl(value: unknown, prefix: string) {
   if (typeof value !== 'string' || !value.startsWith(prefix)) return false;
   try { const u = new URL(value); return !u.username && !u.password && !u.search && !u.hash && u.origin === 'https://github.com'; }
@@ -36,18 +47,17 @@ export function selectWindowsRelease(body: unknown, currentVersion: string): Upd
     if (!r || r.draft !== false || typeof r.prerelease !== 'boolean' || !Array.isArray(r.assets)) continue;
     const v = version(r.tag_name);
     if (!v || !officialUrl(r.html_url, REPO + '/releases/tag/')) continue;
-    const windowsTag = /^spektralab-windows-v|[-_]windows(?:[-_]x64)?$/i.test(r.tag_name);
-    // A beta follows the independent Windows line, not a numerically equal
-    // stable Mac tag carrying an older rolling Windows installer.
-    if (installed.pre && !windowsTag) continue;
-    if (r.prerelease !== Boolean(v.pre) || (v.pre && (!installed.pre || !windowsTag))) continue;
+    if (r.prerelease !== Boolean(v.pre)) continue;
+    // Stable clients ignore prereleases of this line.
+    if (!installed.pre && v.pre) continue;
     const asset = r.assets.find((a: { name?: unknown; browser_download_url?: unknown; size?: unknown; state?: unknown }) => {
       if (typeof a?.name !== 'string' || typeof a.size !== 'number' || a.size <= 0 || a.state !== 'uploaded') return false;
       const n = a.name.toLowerCase();
-      return n.includes('spektralab') && /(?:^|[-_. ])(?:windows|win64|win32|win)(?:[-_. ]|$)/.test(n)
+      return n.includes('spektralab')
         && /(?:^|[-_. ])(?:x64|amd64|win64)(?:[-_. ]|$)/.test(n)
         && !/(?:darwin|macos|arm64|aarch64|source|symbols|debug)/.test(n)
-        && /\.(?:zip|7z|exe|msi)$/.test(n) && officialUrl(a.browser_download_url, REPO + '/releases/download/');
+        && /\.(?:exe|msi)$/.test(n)
+        && officialUrl(a.browser_download_url, REPO + '/releases/download/');
     });
     if (asset) matches.push({ version: v, url: r.html_url, asset: asset.name });
   }

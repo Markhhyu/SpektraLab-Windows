@@ -1,8 +1,8 @@
 {
   "name": "spektralab",
   "productName": "SpektraLab",
-  "version": "1.3.4-beta.3",
-  "description": "SpektraLab — film and print emulation for Linux and Windows",
+  "version": "1.0.0",
+  "description": "SpektraLab \u2014 film and print emulation for Linux and Windows",
   "license": "GPL-3.0-or-later",
   "author": {
     "name": "SpektraLab contributors"

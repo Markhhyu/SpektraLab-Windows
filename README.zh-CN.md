@@ -1,117 +1,117 @@
-# SpektraLab
+# SpektraLab for Windows（Windows 版）
 
-[English](README.md) · **简体中文** · [spektralab.app](https://spektralab.app)
+[English](README.md) · **简体中文**
 
-macOS 上的胶片与放大相纸模拟器。打开一张 RAW，选好胶片和相纸，约一秒内得到一张按物理过程建模的照片——颗粒、光晕、成色剂耦合、放大机滤色，一样不少。
+这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：基于原项目最后一个
+Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`），加上 Windows 移植修复、性能优化和两个原生扩展（见下）。
 
-![SpektraLab：曼哈顿下城，Kodak Portra 160 胶片，Kodak Vision 2383 放映拷贝片](screenshots/Screenshot_ZH_HANS.png)
+胶片过程模型、28 个实测胶片/相纸 profile 与打印 LUT 来自
+[spektrafilm](https://github.com/andreavolpato/spektrafilm)。原项目是 macOS 产品（SwiftUI + Metal）；
+本仓库保留其 C++20 引擎，并新增 Vulkan host 在 Windows 上驱动它。
 
-- **光谱计算，不是 LUT。** 光线以 81 个波长穿过胶片与相纸各自的染料层，和暗房里的过程一致。
-- **物理尺度。** 告诉它底片是 120 还是 135，颗粒、光晕和成色剂扩散就按画幅以微米为单位缩放。
-- **快。** C++ Metal 引擎直接编译进应用：4500 万像素在预览尺寸下重印约 0.01 秒，全分辨率渲染不到一秒。
-- **一条色彩管线。** 全程 ProPhoto RGB；每次导出只做一次色域映射，映射到你指定的色彩空间，写入前可先软打样。
-- **胶片本身。** “片边”把画面印在它自己的胶片上——片基、齿孔、各胶片自己的片边字与格号，均按真实胶片实测——支持 135、半格、XPan、645 至 6×9、6×12 与 6×17。“日期后背”把日期曝在底片上。
-- **半格拼接。** 两张照片同在一段胶片上，左右或上下排列，各自有独立的曝光、白平衡、印相与调色。
-- **可脚本化。** `spektralab` 命令行与 MCP 服务器驱动的是与窗口同一个会话。默认关闭，在设置中开启。
+> **这是衍生项目，不是上游。** macOS 应用的问题请提给
+> [JamesQiu2005/SpektraLab](https://github.com/JamesQiu2005/SpektraLab)；本 Windows 构建的问题提到本仓库。
 
-| RAW 解码 ⟷ 胶片与相纸（⌥\\） | 1:1 颗粒 |
-|---|---|
-| ![前后对比](screenshots/natural_halation.png) | ![1:1 颗粒](screenshots/physically_accurate_grain.png) |
+## 下载与安装
 
-## 安装
+安装包见 **[Releases](../../releases)**：`SpektraLab_<version>_x64-setup.exe`（NSIS，约 38 MB）。
 
-**Windows x64：**[beta.3](https://github.com/JamesQiu2005/SpektraLab/releases/tag/spektralab-windows-v1.3.4-beta.3)
-提供安装包和便携 ZIP。Windows 使用独立的版本标签；下方 DMG 适用于 Mac。
-后续发布方式见 [Windows 发布流程](desktop/docs/WINDOWS-RELEASES.md)。
+- Windows 10/11 64 位。
+- 需要可用的 Vulkan 1.1+ 显卡驱动（参考机为 RTX 4070 Laptop / 8 GB；近年的 AMD、Intel、NVIDIA 显卡均可）。
+- WebView2 运行时（安装包缺少时会自动下载）。
+- 安装包**未做代码签名**，SmartScreen 会提示"Windows 已保护你的电脑"——选择"更多信息 → 仍要运行"。
+- 默认按"所有用户"安装，需要管理员权限；与原 Windows 测试版行为一致。
 
-从 [spektralab.app](https://spektralab.app) 或 [Releases](https://github.com/JamesQiu2005/SpektraLab/releases) 下载 DMG，打开后把 SpektraLab 拖进“应用程序”文件夹。应用已用 Developer ID 签名，并通过 Apple 公证，可以像其他应用一样直接打开。
+首次使用：打开一张 RAW（LibRaw 支持），选胶片与相纸后即可编辑。右侧栏是参数，左侧栏是胶片/相纸选择。
+在参考机上，32.95 MP 的 Sony ARW 打开约 1.2 秒，首帧实时预览约 0.2 秒。
 
-需要 Apple 芯片、macOS 15 或更高版本。
+## 本构建新增了什么
 
-1.3.3 之前的版本为 ad-hoc 签名。使用这些版本时，首次运行前需解除隔离：
+完整清单与实测数据在 [`WINDOWS-PORT.md`](WINDOWS-PORT.md)（英文），速览：
 
-```bash
-xattr -d -r com.apple.quarantine /Applications/SpektraLab.app
+#### 正确性与健壮性（P0）
+
+1. **Vulkan 后端的 Tone Mask**——把 macOS 的对比度蒙版节点平台化，并新增两个 compute kernel；
+   host 不再把 `contrast_mask` 列为不支持，UI 因此可用。
+2. **整图 parity 基线**——对公开 Python 参考包 `engine/tests/parity_upstream.py`：22 个 case 全部落在 3e-5 误差线内，
+   已有记录的语义分歧单独断言。
+3. **编辑会话驻留预算**——最多 2 个编辑会话缓存常驻，更旧的挂起到磁盘并释放显存
+   （`SPEKTRAFILM_HOST_RESIDENT_EDITORS` 可调）。
+4. **首帧延迟**——在引擎 open 之前先显示相机内嵌预览；host 增加 `warm_up`；测光计算不再对 170 万个 double 排序。
+
+#### 性能（P1）
+
+5. 首帧预热：RAW 解码期间循环调用 `spk_warm_up`；冷启动 live 首帧约 260 ms → 180 ms。
+6. TIFF **Deflate + predictor** 选项（`tiff_compression: "deflate"`）：16-bit 导出约小 11%，
+   无损（已用 libtiff/OIIO 交叉验证）。
+7. 统一导出路径：`export_image` 复用 GPU 渲染 + 流式编码器——32.95 MP 下 `tiff16` 2079 → 217 ms、
+   `jpeg` 1849 → 243 ms。
+8. 标定扫描 harness（`engine/tests/calibration_sweep.py`）：对参考实现的 DIR 耦合、光晕、颗粒单调性检查，
+   13 个采样点 0 失败。
+9. 解码分段计时（`SPEKTRAFILM_DECODE_TIMINGS`）与 16-bit→float 打包并行；两段解码已记录为产品决策项。
+
+#### 原生扩展（macOS 版没有）
+
+10. **显影面板（P1-7）**——推拉 −3…+3 档（1/3 档步进）与显影温度 18–24 °C。实测密度曲线由拟合
+    Portra 800 push1/push2 profile 的三参数族弯曲；温度按 1 °C ≈ 1/6 档折算，颗粒随推档增强。
+    关闭时是**逐字节精确旁路**。该模型是实测推档曲线的近似（平均差约 2.6%），不是逐 stock 的替代品。
+11. **光源面板（P1-8）**——扫描光源与观看光源可选
+    （`D50/D55/D65/D75/E/A/Incandescent/Kinoton 75P/TH-KG3/BB<色温>`）。
+    扫描常量按命名光源重新烘焙；观看光源经 CAT02 做软打样并接管 glare 染色。
+    两个字段都保持默认（空串）时，输出与 P1-8 之前完全一致。
+
+## 打包与 Releases
+
+- 发布用的 host 为**静态链接**（`-DSPEKTRALAB_STATIC_RUNTIME=ON`），只依赖系统 DLL
+  （ADVAPI32、KERNEL32、SHELL32、USER32、WS2_32、ole32、UCRT），与原 Windows 测试版一致。
+- Release 说明**中英文各写一份**，列出本次构建的改动。发布流程与历史见 [`RELEASES.md`](RELEASES.md)。
+- 每次代码更新都会重新构建安装包并发布新的 Release；tag 规则为 `v<上游版本>-win.<序号>`。
+
+## 从源码构建
+
+Windows + MinGW-w64 GCC + CMake。完整依赖（Vulkan headers + glslang、LibRaw、导出编解码器、
+OpenEXR/lcms/heif、lensfun + 静态 GLib）与 configure 命令见 [`WINDOWS-PORT.md`](WINDOWS-PORT.md)（英文）
+与 [`engine/WINDOWS.md`](engine/WINDOWS.md)。简要步骤：
+
+```powershell
+# host + engine（Vulkan）、资源、测试
+cmake -S engine -B build/win-host -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build build/win-host -j
+ctest --test-dir build/win-host --output-on-failure     # 41 项测试
 ```
 
-## 多选与同步照片
-
-单击照片将其设为当前照片，再按住 Command 单击其他照片即可增选或取消选择，
-当前照片保持不变。Command+A（编辑 → 全选照片）选中图库中的全部照片，并保留
-当前照片作为同步源；刚打开文件夹时则打开第一张。在文字输入框中，Command+A
-仍然用于全选文字。
-
-在“设置剪贴板”中勾选需要传递的项目，再点击 **同步到 N 张**（或编辑 → 同步设置）。
-同步读取当前照片的最新编辑，不改变剪贴板和源照片，立即保存其他选中照片的设置，
-并在打开它们时重新显影。沿用现有剪贴板规则，裁剪、显影后调整、镜头校正、
-Film Edge 和 Date Back 不参与同步；拍摄时白平衡和场景放置拟合由目标照片自行解析。
-同步没有批量撤销，状态栏会报告写入和失败数量。批量导出期间禁止修改选择和同步。
-
-## 片边、日期后背与半格拼接
-
-**片边**（左栏）让画布变成胶片：选定画幅后，画面按片门裁切并显示在片条上，带有该胶片自己的片边字和可设定的格号；条扫的画面止于胶片边缘。裁剪成为片门内的取景，因此属于底片的一部分。**日期后背**把拍摄日期（或自行输入的日期）曝进画面，无需开启片边；开启片边后可同时把拍摄数据印在画面旁，120（645 至 6×9）的日期与数据则印在画面旁的片边上，一如中画幅后背。
-
-**半格拼接**是把两张照片放在一格 135 的胶片上。片边画幅选“半格”时，其下方出现 **进入半格拼接**（或选中两张照片后按 ⌘J）。画布显示两个片格，空格上有 **+**。点击片格即选中其中的照片：此时“输入 / 相机”、场景置位、放大机与显影后调整只作用于这一格，选“含片基”则连同周围的胶片一起变化。右键片格可替换、旋转或裁剪其中的照片。裁剪模式下，拖动移动画面，滚动或捏合以指针为中心缩放。一组拼接在胶片条中是一个项目，导出为一张图。
-
-在胶片条上拖动缩略图即可调整文件夹内的顺序，顺序按文件夹保存。从访达拖入的文件仍然直接打开并编辑。
-
-## 构建
-
-Xcode 26.6。
+桌面应用（Tauri + Rust + Node）：
 
 ```bash
-engine/build.sh bundle                 # 引擎、着色器、预烘焙资源
-cd modern_UI/Spektrafilm
-xcodebuild -project Spektrafilm.xcodeproj -scheme Spektrafilm \
-           -derivedDataPath build/DerivedData build
+cd desktop && npm ci
+node scripts/package.mjs win      # 暂存 host、构建前端并产出 NSIS 安装包
 ```
-
-`engine/resources/` 有改动时请重新运行 `engine/build.sh bundle`。若 Xcode 突然找不到 `metal`，清理构建文件夹（⇧⌘K）即可：Metal 工具链的挂载路径变了，而旧构建缓存了原路径。
 
 ## 测试
 
-```bash
-xcodebuild -project Spektrafilm.xcodeproj -scheme SpektrafilmTests \
-           -derivedDataPath build/DerivedData test       # 约 550 个用例，约 6 分钟
-```
+- `ctest`——41 项引擎/host 测试，包括 mask kernel oracle、驻留策略、显影模型与光源测试。
+- `engine/tests/parity_upstream.py`——对公开上游 Python 包的整图 parity
+  （需要装好 numpy/scipy/numba/colour-science 的 Python 环境）。
+- `engine/tests/calibration_sweep.py`——DIR/光晕/颗粒单调性。
+- `cd desktop && npx vitest run`——464 项前端测试。
 
-相机测试样片来自上游 `spektrafilm` 仓库，通过 `tests` 软链接接入（`ln -s ../spektrafilm/tests tests`）。缺少样片时有 25 个用例会被跳过，运行结果依然显示 0 失败，只需约 20 秒——请以耗时判断，而非失败数。
+## 已知限制
 
-## 目录
-
-| | |
-|---|---|
-| `modern_UI/Spektrafilm/` | 应用本体：SwiftUI、AppKit、Metal |
-| `engine/` | C++20 渲染引擎、MSL 着色器与 C ABI |
-| `engine/resources/` | 预烘焙常量、28 款胶片与相纸配置、放大 LUT |
-| `ARCHITECTURE.md` | 整体结构——从这里开始读 |
-| `AGENTS.md` | 约定，以及真正耗过时间的坑 |
-
-## Windows 开发版
-
-本分支增加了 C++/Vulkan 后端、原生 LibRaw 解码、RGB16 TIFF 导出和 Windows 桌面界面。
-构建方法见 [Windows 说明](engine/WINDOWS.md)，已验证功能及限制见 [功能覆盖表](engine/WINDOWS_FEATURE_COVERAGE.md)。
-[Qt Quick 前端](windows_UI/README.md) 已开始复刻胶片与相纸编辑布局，同时保留[最小 Win32 窗口](engine/WINDOWS_DESKTOP.md)。
-上文介绍的 macOS 产品还包含尚未完成 Windows 迁移的界面与显示功能。
-
-## 参与贡献
-
-欢迎提交 Pull Request，请遵守以下三条规则：
-
-- **Windows 与 Linux 相关的工作只提交到 `Windows_Linux` 分支，不要提交到 `main`。**
-  `main` 是 macOS 产品；针对它的 Windows 或 Linux 相关 PR 会被关闭，并请你改投目标分支。
-- **把工作拆成可审阅的多个提交。** 每个提交只做一件事，提交信息写清做了什么、为什么。
-  把整个功能、重命名和格式调整塞进一个大提交的 PR 无法审阅，不会被合并。
-- **尊重开源社区。** 保留许可与致谢（见下文），注明你所依赖的他人工作，在 issue 与评审中保持礼貌。
+- 本快照是 **v1.3.4-beta.3**：macOS 应用后续新增的功能（新 UI、局部调整等）不在本仓库中。
+- P1-8 的相纸表面/光泽部分（纸面 BRDF、2°/10° 观察者）未实现，只做了光源部分。
+- 整图 parity 对公开 `spektrafilm` 包验证；其余 `parity_*.py` 依赖的 macOS 私有 Python 参考在这里不可用，
+  因此 fork 专属 stock 只由 `parity_product_stocks.py` 覆盖。
+- GUI 是 Windows 的 Tauri/React 移植，不是 macOS 的 SwiftUI 界面。
 
 ## 致谢与许可
 
-胶片过程模型、28 款实测配置与放大 LUT 来自 Andrea Volpato 的 [spektrafilm](https://github.com/andreavolpato/spektrafilm)；4 款黑白胶片配置来自开发者本人 Hanze Qiu; SpektraLab 是该引擎的原生 C++/Metal 移植，以及围绕它构建的应用。
+- 原项目：[JamesQiu2005/SpektraLab](https://github.com/JamesQiu2005/SpektraLab)（GPL-3.0-or-later），快照 tag `9ceca33`。
+- 胶片过程模型、profile 与 LUT：[spektrafilm](https://github.com/andreavolpato/spektrafilm)，
+  作者 Andrea Volpato（profiles 为 CC BY-SA 4.0）。
+- 黑白 profile：Hanze Qiu。
 
 | | |
 |---|---|
-| 应用与引擎 | GPL-3.0-or-later |
-| 胶片与相纸配置、放大 LUT | CC BY-SA 4.0 |
-| metal-cpp | Apache-2.0 |
-
-全部许可文本随应用附带，见 **SpektraLab → 关于 SpektraLab**。
+| 应用与引擎 | GPL-3.0-or-later — [`license/LICENSE`](license/LICENSE) |
+| 胶片/相纸 profile、打印 LUT | CC BY-SA 4.0 — [`license/SPEKTRAFILM_LICENSE.txt`](license/SPEKTRAFILM_LICENSE.txt) |
+| 第三方声明 | `license/windows-runtime-notices.json` |

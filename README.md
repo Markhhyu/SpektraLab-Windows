@@ -1,176 +1,152 @@
-# SpektraLab
+# SpektraLab for Windows
 
-**English** · [简体中文](README.zh-CN.md) · [spektralab.app](https://spektralab.app)
+**English** · [简体中文](README.zh-CN.md)
 
-A film and print simulator for macOS. Open a RAW, pick a film and a paper,
-and get a physically modelled print — grain, halation, couplers, the enlarger's
-filter pack — in about a second.
+A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
+the spectral film-and-print simulator — based on the original project's last
+Windows beta, **v1.3.4-beta.3** (tag `9ceca33`), plus the Windows port fixes,
+performance work and two native extensions described below.
 
-> **This repository is a Windows/Vulkan derivative of
-> [JamesQiu2005/SpektraLab](https://github.com/JamesQiu2005/SpektraLab), forked at
-> tag `9ceca33` (v1.3.4-beta.3), plus the Windows port and optimisation work
-> described in [`WINDOWS-PORT.md`](WINDOWS-PORT.md). The original product is a
-> macOS app (SwiftUI + Metal); this tree keeps its engine and adds a
-> Vulkan/Windows host. Film model and profile data derive from
-> [andreavolpato/spektrafilm](https://github.com/andreavolpato/spektrafilm).
-> Licences: GPL-3.0-or-later (`license/LICENSE`), profiles CC BY-SA 4.0.
+The film process model, the 28 measured film/paper profiles and the print LUTs
+come from [spektrafilm](https://github.com/andreavolpato/spektrafilm). The
+original app is a macOS product (SwiftUI + Metal); this repository keeps its
+C++20 engine and drives it through a Vulkan host on Windows.
 
-![SpektraLab: Lower Manhattan on Kodak Portra 160, printed on Kodak Vision 2383](screenshots/Screenshot_English.png)
+> **This is a derivative, not the upstream project.** Bug reports about the
+> macOS app belong to [JamesQiu2005/SpektraLab](https://github.com/JamesQiu2005/SpektraLab);
+> issues about this Windows build belong here.
 
-- **Spectral, not a LUT.** Light is traced through 81 wavelengths, the film's
-  dye layers and the paper's, the way a darkroom does it.
-- **Physical units.** Tell it the negative is 120 or 35 mm and the grain,
-  halation and coupler diffusion scale with the frame in micrometres.
-- **Fast.** A C++ Metal engine compiled into the app: a 45 MP reprint in
-  ~0.01 s at preview size, a full-resolution render in under a second.
-- **One colour pipeline.** ProPhoto RGB throughout; each export is gamut-mapped
-  once into the space you ask for, and proofed before it is written.
-- **The film itself.** Film Edge prints the frame on its own strip — rebate,
-  perforations, each stock's edge print and frame numbers, measured on real
-  strips — in 135, half frame, XPan, 645 to 6×9, 6×12 and 6×17. Date Back
-  exposes a date onto the negative.
-- **Half-frame pairs.** Two frames on one piece of film, side by side or one
-  above the other, each with its own exposure, white balance, print and grade.
-- **Scriptable.** `spektralab` (CLI) and an MCP server drive the same session
-  the window does. Off until enabled in Settings.
+## Download and install
 
-| RAW decode ⟷ film and paper (⌥\\) | grain at 1:1 |
-|---|---|
-| ![Before and after](screenshots/natural_halation.png) | ![Grain at 1:1](screenshots/physically_accurate_grain.png) |
+Grab the installer from **[Releases](../../releases)** —
+`SpektraLab_<version>_x64-setup.exe` (NSIS, ~38 MB).
 
-## Install
+- Windows 10/11, 64-bit.
+- A GPU with a working Vulkan 1.1+ driver (RTX 4070 Laptop / 8 GB was the
+  reference machine; any recent AMD, Intel or NVIDIA GPU should work).
+- WebView2 Runtime (the installer downloads it if missing).
+- The installer is **not code-signed**, so SmartScreen says "Windows protected
+  your PC" — choose *More info → Run anyway*.
+- Default install mode is per-machine and needs elevation. That is the same
+  behaviour as the original Windows beta.
 
-**Windows x64:** [beta.3](https://github.com/JamesQiu2005/SpektraLab/releases/tag/spektralab-windows-v1.3.4-beta.3)
-has an installer and a portable ZIP. Windows releases use their own versioned
-tags; the Mac downloads below are separate. See
-[the Windows release process](desktop/docs/WINDOWS-RELEASES.md).
+First run: **Open** a RAW (LibRaw-supported), pick a film and a paper, edit.
+The right rail has the parameters; the left rail has the film/print choice.
+Interactively, a 32.95 MP Sony ARW opens in ~1.2 s and shows its first live
+frame in ~0.2 s on the reference machine.
 
-Download the DMG from [spektralab.app](https://spektralab.app) or
-[Releases](https://github.com/JamesQiu2005/SpektraLab/releases), open it and
-drag SpektraLab to Applications. It is signed with a Developer ID and
-notarised by Apple, so it opens like any other app.
+## What this build adds
 
-Apple silicon, macOS 15 or later.
+Everything is listed with measurements in [`WINDOWS-PORT.md`](WINDOWS-PORT.md);
+the short version:
 
-Releases before 1.3.3 are ad-hoc signed. For one of those, clear the
-quarantine once:
+#### Correctness and robustness (P0)
 
-```bash
-xattr -d -r com.apple.quarantine /Applications/SpektraLab.app
+1. **Tone Mask on the Vulkan backend** — the macOS contrast-mask node was made
+   platform-neutral and two compute kernels were added; the host no longer
+   advertises `contrast_mask` as unsupported, so the UI works.
+2. **Whole-image parity harness** against the public Python reference
+   (`engine/tests/parity_upstream.py`): 22 cases, all inside the 3e-5 bar;
+   documented semantic divergences are asserted separately.
+3. **Editor residency budget** — at most two editor caches stay resident;
+   older ones are suspended to disk and their GPU memory released
+   (`SPEKTRAFILM_HOST_RESIDENT_EDITORS` overrides).
+4. **First-viewer latency** — the embedded camera preview is painted before
+   the engine open; the host gained `warm_up`, and meter computation no longer
+   sorts 1.7 M doubles.
+
+#### Performance (P1)
+
+5. First-frame warm-up: `spk_warm_up` runs while the RAW decodes; cold live
+   first frame ~260 ms → ~180 ms.
+6. TIFF **Deflate + predictor** option (`tiff_compression: "deflate"`):
+   ~11 % smaller 16-bit exports (lossless, validated against libtiff/OIIO).
+7. Unified export path: `export_image` reuses the GPU render + streaming
+   encoder — `tiff16` 2079 → 217 ms, `jpeg` 1849 → 243 ms on 32.95 MP.
+8. Calibration sweep harness (`engine/tests/calibration_sweep.py`): DIR
+   couplers, halation and grain monotonicity against the reference, 13 points,
+   0 failures.
+9. Decode instrumentation (`SPEKTRAFILM_DECODE_TIMINGS`) and a parallel
+   16-bit→float pack step; two-stage decode is documented as a product decision.
+
+#### Native extensions (not in the macOS app)
+
+10. **Development panel (`P1-7`)** — push/pull −3…+3 stops in 1/3 stops and
+    developer temperature 18–24 °C. The measured density curve is bent by a
+    three-parameter family fitted to the Portra 800 push1/push2 profiles;
+    temperature folds in at 1/6 stop per °C and grain scales with the push.
+    `Off` is a byte-exact bypass. This is an approximation of the measured
+    push profiles (~2.6 % mean difference), not a per-stock replacement.
+11. **Lighting panel (`P1-8`)** — scan light and viewing light are selectable
+    (`D50/D55/D65/D75/E/A/Incandescent/Kinoton 75P/TH-KG3/BB<kelvin>`).
+    Scan constants rebake for the named light; a different viewing light is a
+    CAT02 soft proof and takes over the glare tint. Leaving both on the stock
+    default is the exact pre-P1-8 rendering.
+
+## Packaging and releases
+
+- The shipped host is **static** (`-DSPEKTRALAB_STATIC_RUNTIME=ON`), so it
+  depends only on system DLLs (ADVAPI32, KERNEL32, SHELL32, USER32, WS2_32,
+  ole32, UCRT) — same as the original Windows beta.
+- Release notes are written in **both Chinese and English**, and list what
+  changed in that build. See [`RELEASES.md`](RELEASES.md) for the release
+  process and the history.
+- Every code update gets a rebuilt installer and a new release entry; the
+  tag scheme is `v<upstream version>-win.<n>`.
+
+## Build from source
+
+Windows, MinGW-w64 GCC and CMake. The full dependency list (Vulkan headers +
+glslang, LibRaw, export codecs, OpenEXR/lcms/heif, lensfun + static GLib) and
+the exact configure lines are in [`WINDOWS-PORT.md`](WINDOWS-PORT.md) and
+[`engine/WINDOWS.md`](engine/WINDOWS.md). Short version:
+
+```powershell
+# host + engine (Vulkan), resources, tests
+cmake -S engine -B build/win-host -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build build/win-host -j
+ctest --test-dir build/win-host --output-on-failure     # 41 tests
 ```
 
-## Select and sync photos
-
-Click a photo to make it the current photo, then Command-click other photos to
-add or remove them without moving the current photo. Command+A (Edit → Select
-All Photos) selects the library and keeps the current photo as the sync source.
-In a newly opened folder it opens the first photo. Command+A inside a text field
-still selects text.
-
-Under Settings Clipboard, tick the groups to transfer and choose **Sync to N**
-(or Edit → Sync Settings). This reads the current photo's latest edits, preserves
-the clipboard and source photo, and saves the other selected photos immediately.
-They develop with those settings when opened. Crop, Post-Dev adjustments, lens
-correction, Film Edge and Date Back stay with each photo, following the existing
-clipboard rules. As Shot white balance and fitted Scene Placement are resolved
-for each target. Sync has no batch undo; the status reports writes and failures.
-Selection and sync are disabled during batch export.
-
-## Film Edge, Date Back and half-frame pairs
-
-**Film Edge** (left rail) turns the canvas into the film: pick a format and the
-frame is cut to its gate and shown on the strip, with the stock's own edge
-print and a frame number you can set; a strip scan ends at the film's edges.
-The crop becomes the framing in the gate, so it is part of the
-negative. **Date Back** exposes the shooting date (or a date you type) into the
-frame; it needs no film edge. With one, it can print the shooting data beside
-the frame at the same time, and on 120 (645 to 6×9) the date and the data go
-in the film margin, where a medium-format back printed them.
-
-**A half-frame pair** is two frames on one frame's worth of 135. With Film Edge
-on *Half*, **Enter Half-Frame Pair** appears under the format (or pick two
-photos and press ⌘J). The canvas shows two holes; an empty one has a **+**.
-Click a hole to pick its frame: Input / Camera, Scene Placement, the Enlarger
-and Post-Dev then act on that frame alone, and *+ Film* moves the film around
-it too. Right-click a hole to replace, turn or crop its frame. In the crop
-mode, drag moves the picture under its hole and scroll or pinch scales it about
-the pointer. A pair is one item in the filmstrip and exports as one picture.
-
-Drag a thumbnail along the filmstrip to reorder a folder; the order is kept for
-that folder. A file dropped from Finder still opens and edits.
-
-## Build
-
-Xcode 26.6.
+Desktop app (Tauri + Rust + Node):
 
 ```bash
-engine/build.sh bundle                 # engine, kernels, baked resources
-cd modern_UI/Spektrafilm
-xcodebuild -project Spektrafilm.xcodeproj -scheme Spektrafilm \
-           -derivedDataPath build/DerivedData build
+cd desktop && npm ci
+node scripts/package.mjs win      # stages host, builds the frontend and NSIS
 ```
 
-Re-run `engine/build.sh bundle` whenever `engine/resources/` changes. If Xcode
-suddenly cannot find `metal`, clean the build folder (⇧⌘K): the Metal
-toolchain's mount path changed under a cached build.
+## Tests
 
-## Test
+- `ctest` — 41 engine/host tests, including the mask kernel oracle, residency
+  policy, development model and illuminant tests.
+- `engine/tests/parity_upstream.py` — whole-image parity against the public
+  upstream Python package (needs a Python venv with numpy/scipy/numba/
+  colour-science).
+- `engine/tests/calibration_sweep.py` — DIR/halation/grain monotonicity.
+- `cd desktop && npx vitest run` — 464 frontend tests.
 
-```bash
-xcodebuild -project Spektrafilm.xcodeproj -scheme SpektrafilmTests \
-           -derivedDataPath build/DerivedData test       # ~550 tests, ~6 min
-```
+## Known limits
 
-Camera fixtures come from the upstream `spektrafilm` repository through a
-`tests` symlink (`ln -s ../spektrafilm/tests tests`). Without it 25 cases skip
-and the run still reports 0 failures in ~20 s — trust the duration.
-
-## Layout
-
-| | |
-|---|---|
-| `modern_UI/Spektrafilm/` | the app: SwiftUI, AppKit, Metal |
-| `engine/` | the C++20 render engine, its MSL kernels and C ABI |
-| `engine/resources/` | baked constants, 28 film and paper profiles, print LUTs |
-| `ARCHITECTURE.md` | how it fits together — start here |
-| `AGENTS.md` | conventions and the traps that cost real time |
-
-## Windows development
-
-This branch also contains a C++/Vulkan backend, native LibRaw decoding,
-RGB16 TIFF export and Windows desktop viewers.
-See the [Windows build guide](engine/WINDOWS.md) and
-[feature coverage](engine/WINDOWS_FEATURE_COVERAGE.md) for the tested scope.
-The [Qt Quick frontend](windows_UI/README.md) brings the film/print editor layout
-to Windows; the [minimal Win32 viewer](engine/WINDOWS_DESKTOP.md) is also retained.
-The macOS product described above has additional interface and display features.
-
-## Contributing
-
-Pull requests are welcome. Three rules:
-
-- **Windows and Linux work goes to the `Windows_Linux` branch, never to `main`.**
-  `main` is the macOS product; a Windows- or Linux-related pull request against
-  it will be closed and asked to retarget.
-- **Split your work into reviewable commits.** One commit per change, each with
-  a message that says what it does and why. A single commit that dumps a whole
-  feature, a rename and a reformat together cannot be reviewed and will not be
-  merged.
-- **Respect the open-source community.** Keep the licences and credits intact
-  (see below), credit the work you build on, and be civil in issues and reviews.
+- This snapshot is **v1.3.4-beta.3**: the macOS app has since added features
+  (newer UI, Local Adjustments, etc.) that are not in this tree.
+- P1-8's paper surface/gloss half (paper BRDF, 2°/10° observer) is not
+  implemented; only the illuminant half is.
+- Whole-image parity is checked against the public `spektrafilm` package; the
+  private macOS-side reference used by the other `parity_*.py` harnesses is not
+  available here, so the fork-only stocks are only covered by
+  `parity_product_stocks.py`.
+- The GUI is a Windows Tauri/React port, not the macOS SwiftUI interface.
 
 ## Credits and licence
 
-The film process model, its 28 measured color profiles and the print LUTs are
-[spektrafilm](https://github.com/andreavolpato/spektrafilm) by Andrea Volpato;
-4 new measured B&W profiles are by Hanze Qiu;
-SpektraLab is a native C++/Metal port of that engine and the application built
-around it.
+- Original project: [JamesQiu2005/SpektraLab](https://github.com/JamesQiu2005/SpektraLab)
+  (GPL-3.0-or-later), snapshot tag `9ceca33`.
+- Film process model, profiles and LUTs: [spektrafilm](https://github.com/andreavolpato/spektrafilm)
+  by Andrea Volpato (profiles CC BY-SA 4.0).
+- B&W profiles: Hanze Qiu.
 
 | | |
 |---|---|
-| app and engine | GPL-3.0-or-later |
-| film and paper profiles, print LUTs | CC BY-SA 4.0 |
-| metal-cpp | Apache-2.0 |
-
-All texts ship inside the app, under **SpektraLab → About SpektraLab**.
+| app and engine | GPL-3.0-or-later — [`license/LICENSE`](license/LICENSE) |
+| film/paper profiles, print LUTs | CC BY-SA 4.0 — [`license/SPEKTRAFILM_LICENSE.txt`](license/SPEKTRAFILM_LICENSE.txt) |
+| third-party notices | `license/windows-runtime-notices.json` |

@@ -11,6 +11,7 @@ export const CATALOG_STORE_NAME = 'catalog.json';
 
 export type Rating = 0 | 1 | 2 | 3 | 4 | 5;
 export type Flag = 'none' | 'pick' | 'reject';
+export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 export type LibraryView = 'library' | 'editor';
 
 export interface CatalogEntry {
@@ -29,6 +30,27 @@ export interface CatalogEntry {
   edited: boolean;
   /** A cached JPEG preview exists in the catalog thumbs store. */
   thumb: boolean;
+  /** Colour label, as in the classic grid workflow. */
+  label: ColorLabel;
+  /** Free-text metadata edited in the library (never written into the RAW). */
+  title: string;
+  caption: string;
+}
+
+export interface CatalogCollection {
+  id: string;
+  name: string;
+  /** Lower-case entry paths; the collection is a subset of the catalog. */
+  paths: string[];
+  createdAt: number;
+}
+
+export interface SmartCollection {
+  id: string;
+  name: string;
+  /** Saved filter preset; collection/smart/label view keys are cleared. */
+  filters: LibraryFilters;
+  createdAt: number;
 }
 
 export interface CatalogFolder {
@@ -40,13 +62,24 @@ export interface Catalog {
   version: typeof CATALOG_VERSION;
   folders: CatalogFolder[];
   entries: CatalogEntry[];
+  collections: CatalogCollection[];
+  smartCollections: SmartCollection[];
   lastView: LibraryView;
   lastSelection: string | null;
   updatedAt: number;
 }
 
 export function emptyCatalog(): Catalog {
-  return { version: CATALOG_VERSION, folders: [], entries: [], lastView: 'library', lastSelection: null, updatedAt: 0 };
+  return {
+    version: CATALOG_VERSION,
+    folders: [],
+    entries: [],
+    collections: [],
+    smartCollections: [],
+    lastView: 'library',
+    lastSelection: null,
+    updatedAt: 0,
+  };
 }
 
 const RATINGS: readonly number[] = [0, 1, 2, 3, 4, 5];
@@ -58,6 +91,12 @@ function clampRating(value: unknown): Rating {
 
 function flagOf(value: unknown): Flag {
   return value === 'pick' || value === 'reject' ? value : 'none';
+}
+
+const LABELS: readonly ColorLabel[] = ['none', 'red', 'yellow', 'green', 'blue', 'purple'];
+
+function labelOf(value: unknown): ColorLabel {
+  return LABELS.includes(value as ColorLabel) ? (value as ColorLabel) : 'none';
 }
 
 function str(value: unknown, fallback = ''): string {
@@ -95,6 +134,9 @@ function entryOf(value: unknown, now: number): CatalogEntry | null {
     keywords: Array.isArray(o.keywords) ? [...new Set(o.keywords.filter((k): k is string => typeof k === 'string').map((k) => k.trim()).filter(Boolean))] : [],
     edited: o.edited === true,
     thumb: o.thumb === true,
+    label: labelOf(o.label),
+    title: str(o.title),
+    caption: str(o.caption),
   };
 }
 
@@ -124,10 +166,37 @@ export function decodeCatalog(value: unknown, now = Date.now()): Catalog {
     foldersSeen.add(id);
     folders.push({ path, addedAt: num(f.addedAt, now) });
   }
+  const collections: CatalogCollection[] = [];
+  const collectionSeen = new Set<string>();
+  for (const raw of Array.isArray(o.collections) ? o.collections : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    const id = str(c.id).trim();
+    const name = str(c.name).trim();
+    if (!id || !name || collectionSeen.has(id)) continue;
+    collectionSeen.add(id);
+    const paths = Array.isArray(c.paths)
+      ? [...new Set(c.paths.filter((p): p is string => typeof p === 'string').map((p) => p.toLowerCase()))]
+      : [];
+    collections.push({ id, name, paths, createdAt: num(c.createdAt, now) });
+  }
+  const smartCollections: SmartCollection[] = [];
+  const smartSeen = new Set<string>();
+  for (const raw of Array.isArray(o.smartCollections) ? o.smartCollections : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    const id = str(c.id).trim();
+    const name = str(c.name).trim();
+    if (!id || !name || smartSeen.has(id)) continue;
+    smartSeen.add(id);
+    smartCollections.push({ id, name, filters: normalizeFilters(c.filters), createdAt: num(c.createdAt, now) });
+  }
   return {
     version: CATALOG_VERSION,
     folders,
     entries,
+    collections,
+    smartCollections,
     lastView: o.lastView === 'editor' ? 'editor' : 'library',
     lastSelection: typeof o.lastSelection === 'string' ? o.lastSelection : null,
     updatedAt: num(o.updatedAt, now),
@@ -140,6 +209,8 @@ export function encodeCatalog(catalog: Catalog): unknown {
     version: CATALOG_VERSION,
     folders: catalog.folders,
     entries: catalog.entries,
+    collections: catalog.collections,
+    smartCollections: catalog.smartCollections,
     lastView: catalog.lastView,
     lastSelection: catalog.lastSelection,
     updatedAt: Date.now(),
@@ -179,6 +250,9 @@ export function addImportedFiles(
       keywords: [],
       edited: false,
       thumb: false,
+      label: 'none',
+      title: '',
+      caption: '',
     };
     entries.push(entry);
     added.push(entry);
@@ -192,6 +266,8 @@ export function addImportedFiles(
 export interface LibraryFilters {
   /** A folder path, or null for the whole catalog. */
   folder: string | null;
+  /** Only this colour label; 'all' for any. */
+  label: ColorLabel | 'all';
   /** Entries with at least this many stars; 0 means any. */
   ratingMin: Rating;
   /** Only this flag; 'all' for any. */
@@ -202,16 +278,40 @@ export interface LibraryFilters {
   editedOnly: boolean;
   /** Case-insensitive substring of the file or folder name. */
   search: string;
+  /** Restrict to a user collection (id), or null for the whole catalog. */
+  collectionId: string | null;
+  /** Restrict to a smart collection (id), or null. */
+  smartId: string | null;
 }
 
 export const FILTERS_DEFAULT: LibraryFilters = {
   folder: null,
+  label: 'all',
   ratingMin: 0,
   flag: 'all',
   keyword: null,
   editedOnly: false,
   search: '',
+  collectionId: null,
+  smartId: null,
 };
+
+/** Tolerant decode used for smart-collection presets and the persisted UI state. */
+export function normalizeFilters(value: unknown): LibraryFilters {
+  if (!value || typeof value !== 'object') return { ...FILTERS_DEFAULT };
+  const o = value as Record<string, unknown>;
+  return {
+    folder: typeof o.folder === 'string' ? o.folder : null,
+    label: LABELS.includes(o.label as ColorLabel) ? (o.label as ColorLabel) : 'all',
+    ratingMin: clampRating(o.ratingMin),
+    flag: o.flag === 'pick' || o.flag === 'reject' || o.flag === 'none' ? o.flag : 'all',
+    keyword: typeof o.keyword === 'string' ? o.keyword : null,
+    editedOnly: o.editedOnly === true,
+    search: typeof o.search === 'string' ? o.search : '',
+    collectionId: typeof o.collectionId === 'string' ? o.collectionId : null,
+    smartId: typeof o.smartId === 'string' ? o.smartId : null,
+  };
+}
 
 export function folderContains(folder: string, entryFolder: string): boolean {
   const f = folder.toLowerCase();
@@ -223,11 +323,34 @@ export function filterEntries(entries: readonly CatalogEntry[], filters: Library
   const needle = filters.search.trim().toLowerCase();
   return entries.filter((e) =>
     (!filters.folder || folderContains(filters.folder, e.folder))
+    && (filters.label === 'all' || e.label === filters.label)
     && e.rating >= filters.ratingMin
     && (filters.flag === 'all' || e.flag === filters.flag)
     && (!filters.keyword || e.keywords.includes(filters.keyword))
     && (!filters.editedOnly || e.edited)
-    && (!needle || e.name.toLowerCase().includes(needle) || e.folder.toLowerCase().includes(needle)));
+    && (!needle || e.name.toLowerCase().includes(needle) || e.folder.toLowerCase().includes(needle) || e.title.toLowerCase().includes(needle) || e.caption.toLowerCase().includes(needle)));
+}
+
+/**
+ * The entries a view starts from: the catalog, a user collection, or the
+ * saved filter preset of a smart collection. The grid then applies `filters`.
+ */
+export function sourceEntries(catalog: Catalog, filters: LibraryFilters): CatalogEntry[] {
+  if (filters.smartId) {
+    const smart = catalog.smartCollections.find((s) => s.id === filters.smartId);
+    if (smart) {
+      const preset = { ...normalizeFilters(smart.filters), collectionId: null, smartId: null };
+      return filterEntries(catalog.entries, preset);
+    }
+  }
+  if (filters.collectionId) {
+    const collection = catalog.collections.find((c) => c.id === filters.collectionId);
+    if (collection) {
+      const wanted = new Set(collection.paths);
+      return catalog.entries.filter((e) => wanted.has(e.path.toLowerCase()));
+    }
+  }
+  return catalog.entries;
 }
 
 export type SortKey = 'imported' | 'name' | 'folder' | 'rating' | 'date';
@@ -267,7 +390,7 @@ export function keywordGroups(entries: readonly CatalogEntry[]): { word: string;
 export function updateEntries(
   catalog: Catalog,
   paths: readonly string[],
-  patch: { rating?: Rating; flag?: Flag; keywords?: string[]; thumb?: boolean; edited?: boolean },
+  patch: { rating?: Rating; flag?: Flag; label?: ColorLabel; keywords?: string[]; thumb?: boolean; edited?: boolean; title?: string; caption?: string },
 ): Catalog {
   const targets = new Set(paths.map((p) => p.toLowerCase()));
   return {
@@ -276,10 +399,115 @@ export function updateEntries(
   };
 }
 
-/** Remove entries (never the originals) and their folder rows when empty. */
+/** Remove entries (never the originals), their collection memberships and empty folder rows. */
 export function removeEntries(catalog: Catalog, paths: readonly string[]): Catalog {
   const targets = new Set(paths.map((p) => p.toLowerCase()));
   const entries = catalog.entries.filter((e) => !targets.has(e.path.toLowerCase()));
   const remaining = new Set(entries.map((e) => e.folder.toLowerCase()));
-  return { ...catalog, entries, folders: catalog.folders.filter((f) => remaining.has(f.path.toLowerCase())) };
+  const collections = catalog.collections.map((c) => ({ ...c, paths: c.paths.filter((p) => !targets.has(p)) }));
+  return {
+    ...catalog,
+    entries,
+    collections,
+    folders: catalog.folders.filter((f) => remaining.has(f.path.toLowerCase())),
+  };
+}
+
+const COLLECTION_ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+/** A short, human-readable id (col-…) for collections created in this session. */
+function newCollectionId(prefix: string, taken: readonly string[]): string {
+  const used = new Set(taken);
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    let id = `${prefix}-`;
+    for (let i = 0; i < 8; i += 1) {
+      id += COLLECTION_ID_CHARS[Math.floor(Math.random() * COLLECTION_ID_CHARS.length)];
+    }
+    if (!used.has(id)) return id;
+  }
+  return `${prefix}-${Date.now().toString(36)}`;
+}
+
+/** Create a collection holding the given entry paths (deduplicated). */
+export function createCollection(
+  catalog: Catalog,
+  name: string,
+  paths: readonly string[],
+  now = Date.now(),
+): { catalog: Catalog; collection: CatalogCollection | null } {
+  const trimmed = name.trim();
+  if (!trimmed) return { catalog, collection: null };
+  const id = newCollectionId('col', catalog.collections.map((c) => c.id));
+  const collection: CatalogCollection = {
+    id,
+    name: trimmed,
+    paths: [...new Set(paths.map((p) => p.toLowerCase()))],
+    createdAt: now,
+  };
+  return { catalog: { ...catalog, collections: [...catalog.collections, collection] }, collection };
+}
+
+export function renameCollection(catalog: Catalog, id: string, name: string): Catalog {
+  const trimmed = name.trim();
+  if (!trimmed) return catalog;
+  return { ...catalog, collections: catalog.collections.map((c) => (c.id === id ? { ...c, name: trimmed } : c)) };
+}
+
+export function deleteCollection(catalog: Catalog, id: string): Catalog {
+  return { ...catalog, collections: catalog.collections.filter((c) => c.id !== id) };
+}
+
+/** Add/remove entry paths from a user collection; `add=false` removes them. */
+export function setCollectionMembership(
+  catalog: Catalog,
+  id: string,
+  paths: readonly string[],
+  add = true,
+): Catalog {
+  const wanted = new Set(paths.map((p) => p.toLowerCase()));
+  return {
+    ...catalog,
+    collections: catalog.collections.map((c) => {
+      if (c.id !== id) return c;
+      const current = new Set(c.paths);
+      if (add) {
+        for (const p of wanted) current.add(p);
+        return { ...c, paths: [...current] };
+      }
+      for (const p of wanted) current.delete(p);
+      return { ...c, paths: [...current] };
+    }),
+  };
+}
+
+/** Save the current filter preset as a smart collection (collection/smart keys cleared). */
+export function createSmartCollection(
+  catalog: Catalog,
+  name: string,
+  filters: LibraryFilters,
+  now = Date.now(),
+): { catalog: Catalog; smart: SmartCollection | null } {
+  const trimmed = name.trim();
+  if (!trimmed) return { catalog, smart: null };
+  const id = newCollectionId('smart', catalog.smartCollections.map((c) => c.id));
+  const smart: SmartCollection = {
+    id,
+    name: trimmed,
+    filters: { ...normalizeFilters(filters), collectionId: null, smartId: null },
+    createdAt: now,
+  };
+  return { catalog: { ...catalog, smartCollections: [...catalog.smartCollections, smart] }, smart };
+}
+
+export function renameSmartCollection(catalog: Catalog, id: string, name: string): Catalog {
+  const trimmed = name.trim();
+  if (!trimmed) return catalog;
+  return {
+    ...catalog,
+    smartCollections: catalog.smartCollections.map((c) => (c.id === id ? { ...c, name: trimmed } : c)),
+  };
+}
+
+export function deleteSmartCollection(catalog: Catalog, id: string): Catalog {
+  return { ...catalog, smartCollections: catalog.smartCollections.filter((c) => c.id !== id) };
 }

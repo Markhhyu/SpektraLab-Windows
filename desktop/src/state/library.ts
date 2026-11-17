@@ -10,6 +10,7 @@ import { useStore } from 'zustand';
 import {
   type Catalog,
   type CatalogEntry,
+  type ColorLabel,
   type Flag,
   type LibraryFilters,
   type Rating,
@@ -19,13 +20,21 @@ import {
   FILTERS_DEFAULT,
   SORT_DEFAULT,
   addImportedFiles,
+  createCollection,
+  createSmartCollection,
   decodeCatalog,
+  deleteCollection,
+  deleteSmartCollection,
   emptyCatalog,
   encodeCatalog,
   filterEntries,
   folderContains,
   removeEntries,
+  renameCollection,
+  renameSmartCollection,
+  setCollectionMembership,
   sortEntries,
+  sourceEntries,
   updateEntries,
 } from '@shared/catalog';
 import { type FileEntry, baseName, platform } from '../platform';
@@ -334,7 +343,122 @@ export function setSort(sort: SortSetting) {
 /** Entries after filtering + sorting; the grid, ranges and Select All use it. */
 export function visibleEntries(): CatalogEntry[] {
   const s = store();
-  return sortEntries(filterEntries(s.catalog.entries, s.filters), s.sort);
+  return sortEntries(filterEntries(sourceEntries(s.catalog, s.filters), s.filters), s.sort);
+}
+
+/** Show the whole catalog (clears folder, collection and smart-collection scopes). */
+export function showAllPhotographs() {
+  set({ filters: { ...store().filters, folder: null, collectionId: null, smartId: null } });
+}
+
+export function showFolder(folder: string | null) {
+  set({ filters: { ...store().filters, folder, collectionId: null, smartId: null } });
+}
+
+export function showCollection(id: string) {
+  set({ filters: { ...store().filters, collectionId: id, smartId: null, folder: null } });
+}
+
+export function showSmartCollection(id: string) {
+  set({ filters: { ...store().filters, smartId: id, collectionId: null, folder: null } });
+}
+
+export async function setColorLabel(label: ColorLabel, paths: string[] = store().selection): Promise<void> {
+  if (paths.length === 0) return;
+  set({ catalog: updateEntries(store().catalog, paths, { label }) });
+  await persist();
+}
+
+/** Edit title/caption/keywords for one entry (metadata panel). */
+export async function setEntryMetadata(
+  path: string,
+  patch: { title?: string; caption?: string; keywords?: string[] },
+): Promise<void> {
+  const entry = store().catalog.entries.find((e) => e.path === path);
+  if (!entry) return;
+  const keywords = patch.keywords
+    ? [...new Set(patch.keywords.map((k) => k.trim()).filter(Boolean))]
+    : entry.keywords;
+  set({ catalog: updateEntries(store().catalog, [path], { ...patch, keywords }) });
+  await persist();
+}
+
+export async function createCollectionFromSelection(name: string, paths: string[] = store().selection): Promise<void> {
+  if (paths.length === 0) return;
+  const { catalog, collection } = createCollection(store().catalog, name, paths);
+  if (!collection) return;
+  set({ catalog, filters: { ...store().filters, collectionId: collection.id, smartId: null, folder: null } });
+  await persist();
+}
+
+export async function deleteCollectionById(id: string): Promise<void> {
+  const filters = store().filters.collectionId === id ? { ...store().filters, collectionId: null } : store().filters;
+  set({ catalog: deleteCollection(store().catalog, id), filters });
+  await persist();
+}
+
+export async function renameCollectionById(id: string, name: string): Promise<void> {
+  set({ catalog: renameCollection(store().catalog, id, name) });
+  await persist();
+}
+
+export async function addSelectionToCollection(id: string, paths: string[] = store().selection): Promise<void> {
+  if (paths.length === 0) return;
+  set({ catalog: setCollectionMembership(store().catalog, id, paths, true) });
+  await persist();
+}
+
+export async function removeSelectionFromCollection(id: string, paths: string[] = store().selection): Promise<void> {
+  if (paths.length === 0) return;
+  set({ catalog: setCollectionMembership(store().catalog, id, paths, false) });
+  await persist();
+}
+
+export async function createSmartCollectionFromFilters(name: string): Promise<void> {
+  const { catalog, smart } = createSmartCollection(store().catalog, name, store().filters);
+  if (!smart) return;
+  set({ catalog, filters: { ...store().filters, smartId: smart.id, collectionId: null, folder: null } });
+  await persist();
+}
+
+export async function deleteSmartCollectionById(id: string): Promise<void> {
+  const filters = store().filters.smartId === id ? { ...store().filters, smartId: null } : store().filters;
+  set({ catalog: deleteSmartCollection(store().catalog, id), filters });
+  await persist();
+}
+
+export async function renameSmartCollectionById(id: string, name: string): Promise<void> {
+  set({ catalog: renameSmartCollection(store().catalog, id, name) });
+  await persist();
+}
+
+/**
+ * Copy the develop settings (the per-image sidecar) of the last-selected
+ * photograph onto every other selected photograph — the batch workflow.
+ */
+export async function syncDevelopSettings(paths: string[] = store().selection): Promise<void> {
+  if (paths.length < 2) return;
+  const source = paths[paths.length - 1];
+  if (!source) return;
+  const sidecar = await platform().sidecarLoad(source).catch(() => null);
+  if (!sidecar) {
+    set({ error: 'The anchor photograph has no saved edits to sync.' });
+    return;
+  }
+  set({ busy: `Syncing settings (0/${paths.length - 1})…` });
+  let done = 0;
+  for (const path of paths.slice(0, -1)) {
+    if (path === source) continue;
+    try {
+      await platform().sidecarSave(path, sidecar);
+      done += 1;
+      set({ busy: `Syncing settings (${done}/${paths.length - 1})…` });
+    } catch {
+      // A sidecar that cannot be written leaves the photograph unchanged.
+    }
+  }
+  set({ busy: null, catalog: updateEntries(store().catalog, paths.slice(0, -1), { edited: true }) });
+  await persist();
 }
 
 export function setLibraryOpen(open: boolean) {

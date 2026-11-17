@@ -211,3 +211,186 @@
 .library-busy { color: var(--accent); }
 .library-hint { margin-left: auto; }
 .library-error { border: 0; background: transparent; color: #e88f8f; cursor: pointer; }
+
+/* Module switch (Library / Develop), like the classic two-module workflow. */
+.library-modules { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.library-module {
+  height: calc(24px * var(--ui-scale));
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--secondary-text);
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+.library-module:hover { background: var(--field); color: var(--text); }
+.library-module.is-active { background: var(--rule); color: var(--text); }
+.library-module:disabled { opacity: var(--disabled-opacity); cursor: default; }
+
+/* Sidebar rows that carry their own tools (collections, smart collections). */
+.library-side-item { display: flex; align-items: center; border-radius: 4px; }
+.library-side-item.is-active { background: var(--rule); }
+.library-side-item .library-side-row { flex: 1; background: transparent; }
+.library-side-tools { display: inline-flex; gap: 1px; padding-right: 4px; opacity: 0; }
+.library-side-item:hover .library-side-tools { opacity: 1; }
+.library-side-tools button {
+  width: 18px; height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dim);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.library-side-tools button:hover { background: var(--field); color: var(--text); }
+.library-side-add {
+  float: right;
+  width: 18px; height: 18px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--field);
+  color: var(--secondary-text);
+  font-size: var(--fs-small);
+  line-height: 1;
+  cursor: pointer;
+}
+.library-draft { display: flex; gap: 4px; padding: 3px 6px; }
+.library-draft input {
+  flex: 1;
+  min-width: 0;
+  height: calc(22px * var(--ui-scale));
+  padding: 0 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+
+/* Colour label dot on the thumbnail. */
+.library-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: calc(9px * var(--ui-scale));
+  height: calc(9px * var(--ui-scale));
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #000000a0;
+}
+
+/* Collection scope bar above the grid. */
+.library-collection-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px 2px;
+  color: var(--dim);
+  font-size: var(--fs-small);
+}
+
+/* Metadata panel on the right of the grid. */
+.library-meta {
+  width: calc(250px * var(--ui-scale));
+  flex: 0 0 auto;
+  padding: 10px;
+  overflow-y: auto;
+  background: var(--card);
+  border-left: 1px solid var(--rule-region);
+  font-size: var(--fs-small);
+}
+.library-meta-empty { padding: 20px 4px; color: var(--dim); text-align: center; }
+.library-meta-title { color: var(--text); font-size: var(--fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-meta-sub { margin: 2px 0 8px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-meta-facts { display: grid; gap: 3px; margin-bottom: 10px; color: var(--dim); }
+.library-meta-facts div { display: flex; justify-content: space-between; gap: 8px; }
+.library-meta-facts b { color: var(--secondary-text); font-weight: 500; }
+.library-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 5px 0; color: var(--dim); }
+.library-meta-row select {
+  max-width: 120px;
+  height: calc(22px * var(--ui-scale));
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+.library-meta-field { display: block; margin: 8px 0; color: var(--dim); }
+.library-meta-field input, .library-meta-field textarea {
+  width: 100%;
+  margin-top: 3px;
+  padding: 4px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-small);
+  resize: vertical;
+}
+.library-meta-wide { width: 100%; justify-content: center; margin-top: 8px; }
+.library-meta-hint { color: var(--dim); font-size: var(--fs-small); margin-top: 4px; }
+.library-keywords { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.library-keyword {
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--secondary-text);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.library-keyword:hover { border-color: var(--accent); color: var(--text); }
+.library-keyword-add { display: flex; gap: 4px; }
+.library-keyword-add input {
+  flex: 1;
+  min-width: 0;
+  height: calc(22px * var(--ui-scale));
+  padding: 0 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+
+/* Import modal. */
+.library-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #00000080;
+}
+.library-modal {
+  width: calc(420px * var(--ui-scale));
+  max-width: 90vw;
+  padding: 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 12px 40px #00000080;
+}
+.library-modal-title { font-size: var(--fs-title, var(--fs-body)); margin-bottom: 10px; }
+.library-modal-body { display: grid; gap: 8px; }
+.library-radio { display: flex; align-items: center; gap: 6px; color: var(--secondary-text); cursor: pointer; }
+.library-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.library-btn.is-primary { border-color: var(--accent); color: var(--accent); }
+.library-progress { color: var(--accent); }
+
+.library-side-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised, #1b1b1b);
+  color: inherit;
+  font-size: 12px;
+}

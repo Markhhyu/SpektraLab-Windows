@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   addImportedFiles,
+  createCollection,
+  createSmartCollection,
   decodeCatalog,
+  deleteCollection,
+  deleteSmartCollection,
+  setCollectionMembership,
+  sourceEntries,
   emptyCatalog,
   encodeCatalog,
   filterEntries,
@@ -12,6 +18,7 @@ import {
   sortEntries,
   updateEntries,
   FILTERS_DEFAULT,
+  normalizeFilters,
   type CatalogEntry,
   type ImportFile,
 } from './catalog';
@@ -58,9 +65,9 @@ describe('catalog', () => {
   });
 
   const entries: CatalogEntry[] = [
-    { path: 'C:\\A\\one.ARW', name: 'one.ARW', folder: 'C:\\A', size: 1, mtimeMs: 3, importedAt: 1, rating: 5, flag: 'pick', keywords: ['sky'], edited: true, thumb: true },
-    { path: 'C:\\A\\two.ARW', name: 'two.ARW', folder: 'C:\\A', size: 1, mtimeMs: 1, importedAt: 2, rating: 0, flag: 'none', keywords: [], edited: false, thumb: true },
-    { path: 'C:\\B\\three.ARW', name: 'three.ARW', folder: 'C:\\B', size: 1, mtimeMs: 2, importedAt: 3, rating: 2, flag: 'reject', keywords: ['sky', 'moon'], edited: false, thumb: false },
+    { path: 'C:\\A\\one.ARW', name: 'one.ARW', folder: 'C:\\A', size: 1, mtimeMs: 3, importedAt: 1, rating: 5, flag: 'pick', keywords: ['sky'], edited: true, thumb: true, label: 'red', title: 'First', caption: 'Sunset' },
+    { path: 'C:\\A\\two.ARW', name: 'two.ARW', folder: 'C:\\A', size: 1, mtimeMs: 1, importedAt: 2, rating: 0, flag: 'none', keywords: [], edited: false, thumb: true, label: 'none', title: '', caption: '' },
+    { path: 'C:\\B\\three.ARW', name: 'three.ARW', folder: 'C:\\B', size: 1, mtimeMs: 2, importedAt: 3, rating: 2, flag: 'reject', keywords: ['sky', 'moon'], edited: false, thumb: false, label: 'blue', title: '', caption: '' },
   ];
 
   it('filters by folder subtree, stars, flag, keyword, edited and search', () => {
@@ -103,5 +110,59 @@ describe('catalog', () => {
     const pruned = removeEntries(catalog, ['C:\\A\\one.ARW', 'C:\\A\\two.ARW']);
     expect(pruned.entries.map((e) => e.name)).toEqual(['three.ARW']);
     expect(pruned.folders.map((f) => f.path)).toEqual(['C:\\B']);
+  });
+});
+
+describe('collections and smart collections', () => {
+  const entries: CatalogEntry[] = [
+    { path: 'C:\\A\\one.ARW', name: 'one.ARW', folder: 'C:\\A', size: 1, mtimeMs: 3, importedAt: 1, rating: 5, flag: 'pick', keywords: ['sky'], edited: true, thumb: true, label: 'red', title: 'First', caption: 'Sunset' },
+    { path: 'C:\\A\\two.ARW', name: 'two.ARW', folder: 'C:\\A', size: 1, mtimeMs: 1, importedAt: 2, rating: 0, flag: 'none', keywords: [], edited: false, thumb: true, label: 'none', title: '', caption: '' },
+    { path: 'C:\\B\\three.ARW', name: 'three.ARW', folder: 'C:\\B', size: 1, mtimeMs: 2, importedAt: 3, rating: 2, flag: 'reject', keywords: ['sky', 'moon'], edited: false, thumb: false, label: 'blue', title: '', caption: '' },
+  ];
+  const base = { ...emptyCatalog(), entries };
+
+  it('creates, fills and filters user collections', () => {
+    const { catalog, collection } = createCollection(base, '  Portraits  ', ['C:\\A\\one.ARW', 'C:\\A\\ONE.ARW', 'D:\\x\\y.ARW']);
+    expect(collection?.name).toBe('Portraits');
+    expect(collection?.paths).toEqual(['c:\\a\\one.arw', 'd:\\x\\y.arw']);
+    const withTwo = setCollectionMembership(catalog, collection!.id, ['C:\\B\\three.ARW']);
+    expect(withTwo.collections[0]?.paths).toHaveLength(3);
+    const removed = setCollectionMembership(withTwo, collection!.id, ['C:\\a\\one.ARW'], false);
+    expect(removed.collections[0]?.paths).toEqual(['d:\\x\\y.arw', 'c:\\b\\three.arw']);
+    const shown = sourceEntries(removed, { ...FILTERS_DEFAULT, collectionId: collection!.id });
+    expect(shown.map((e) => e.name)).toEqual(['three.ARW']);
+    expect(deleteCollection(removed, collection!.id).collections).toEqual([]);
+  });
+
+  it('saves and resolves smart collection presets', () => {
+    const { catalog, smart } = createSmartCollection(base, 'Five stars', { ...FILTERS_DEFAULT, ratingMin: 5 });
+    expect(smart?.filters.ratingMin).toBe(5);
+    expect(smart?.filters.collectionId).toBeNull();
+    const shown = sourceEntries(catalog, { ...FILTERS_DEFAULT, smartId: smart!.id });
+    expect(shown.map((e) => e.name)).toEqual(['one.ARW']);
+    expect(deleteSmartCollection(catalog, smart!.id).smartCollections).toEqual([]);
+  });
+
+  it('decodes collections defensively and clamps filter values', () => {
+    const decoded = decodeCatalog({
+      collections: [{ id: 'a', name: 'Keep', paths: ['X', 'x', 5] }, { id: 'a', name: 'dup' }, { name: 'no id' }],
+      smartCollections: [{ id: 's', name: 'Smart', filters: { ratingMin: 99, flag: 'weird', label: 'orange', search: 'sky' } }],
+    });
+    expect(decoded.collections).toHaveLength(1);
+    expect(decoded.collections[0]?.paths).toEqual(['x']);
+    expect(decoded.smartCollections[0]?.filters).toMatchObject({ ratingMin: 0, flag: 'all', label: 'all', search: 'sky' });
+    expect(normalizeFilters(null)).toEqual(FILTERS_DEFAULT);
+    expect(normalizeFilters({ ratingMin: 3, smartId: 's' })).toMatchObject({ ratingMin: 3, smartId: 's' });
+  });
+
+  it('removes deleted entries from collections and filters by colour label', () => {
+    const { catalog, collection } = createCollection(base, 'All', entries.map((e) => e.path));
+    const pruned = removeEntries(catalog, ['C:\\A\\one.ARW']);
+    expect(pruned.collections[0]?.paths).toHaveLength(2);
+    expect(filterEntries(entries, { ...FILTERS_DEFAULT, label: 'red' }).map((e) => e.name)).toEqual(['one.ARW']);
+    expect(filterEntries(entries, { ...FILTERS_DEFAULT, label: 'blue' }).map((e) => e.name)).toEqual(['three.ARW']);
+    expect(filterEntries(entries, { ...FILTERS_DEFAULT, search: 'sunset' }).map((e) => e.name)).toEqual(['one.ARW']);
+    expect(sourceEntries(catalog, FILTERS_DEFAULT)).toHaveLength(3);
+    expect(deleteCollection(catalog, collection!.id).collections).toHaveLength(0);
   });
 });

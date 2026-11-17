@@ -5,7 +5,7 @@
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
 the spectral film-and-print simulator — derived from the original project's last
 Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
-version line, currently **v1.2.1**, plus the Windows port fixes, performance work
+version line, currently **v1.3.0**, plus the Windows port fixes, performance work
 and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs
@@ -84,20 +84,22 @@ the short version:
     CAT02 soft proof and takes over the glare tint. Leaving both on the stock
     default is the exact pre-P1-8 rendering.
 
-12. **Library (`v1.1.1`)** — a persistent photo catalog. Open it from the
-    labelled **Library** button in the toolbar or **File → Library…**
-    (`Ctrl+Shift+L`). Importing a folder or photo registers references only
-    (originals are never copied or modified) and photos opened through the
-    normal open path are registered automatically as well. Thumbnails, 0–5 star
-    ratings, pick/reject flags, keywords and edit markers live in
-    `<AppData>\app.spektralab.desktop\Catalog\catalog.json` and
-    `...\Catalog\thumbs\`. The library restores on launch, filters by
-    folder/keyword/rating/flag/search, sorts, remembers the last selection, and
-    double-click opens a frame in the editor. Opening from the library loads
-    the whole visible (filtered/sorted) page into the editor's filmstrip, so
-    other frames can be switched there without going back to the grid; the
-    Library button in the editor reopens the grid with the current frame
-    selected. Edits stay non-destructive per-image sidecars, exactly as before.
+12. **Library and collections (`v1.3.0`)** — a persistent photo catalog with a
+    two-module workspace (Library / Develop). Open it from the labelled
+    **Library** button, **File → Library…** (`Ctrl+Shift+L`). Importing a
+    folder or photo registers references only (originals are never copied or
+    modified); photos opened through the normal open path are registered
+    automatically and thumbnails are filled in the background. Folder,
+    keyword, star, flag, colour-label and search filters run over Collections
+    (manual groups; add or remove the current selection) and Smart Collections
+    (saved filter presets). The catalog lives in
+    `<AppData>\app.spektralab.desktop\Catalog\catalog.json` with thumbnails
+    under `...\Catalog\thumbs\`. The metadata panel edits title/caption/
+    keywords and applies rating/flag/colour labels in bulk; **Sync Settings**
+    copies the anchor photo's develop sidecar to every selected photo. Opening
+    from the library loads the whole visible page into the editor's filmstrip,
+    so frames switch there without going back to the grid. Edits stay
+    non-destructive per-image sidecars, exactly as before.
 
 ## Packaging and releases
 

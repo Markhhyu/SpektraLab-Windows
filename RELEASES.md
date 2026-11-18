@@ -56,6 +56,29 @@ This repository ships Windows installers only. Release notes are written in
 
 ## History
 
+### v1.8.0 — 局部调整 / Local adjustments
+
+**中文**
+- 参数右栏新增「局部调整」：线性渐变与径向蒙版，每层可调曝光、对比度、高光、阴影、
+  饱和度、色温、色调、羽化与反转（每张照片最多 16 层）。
+- 蒙版定位在成片画面（裁剪与旋转之后），由宿主在印片渲染完成后于线性光下施加，
+  叠加在 Layer 2 上；不改动负片/相纸曲线，空蒙版为精确旁路。
+- 蒙版设置写入照片 sidecar，属于可撤销编辑。
+- 安装包：37.55 MiB，sha256 `328a03868d57bcbe1a7c457d8561d7da40227377e522c49874b6a3453c6234f3`。
+- 验证：`ctest` 43/43，前端 511 通过 / 2 跳过，host 探针覆盖蒙版、旁路与非法层。
+
+**English**
+- New Local Adjustments section: linear gradients and radial masks with
+  exposure, contrast, highlights, shadows, saturation, temperature, tint,
+  feather and invert (up to 16 layers per photo).
+- Masks are evaluated in the finished frame and applied by the native host in
+  linear light after the print is rendered, on top of Layer 2; the negative and
+  paper curve are untouched and an empty mask list is an exact bypass.
+- Settings are stored in the sidecar as undoable edits.
+- Installer: 37.55 MiB, sha256 `328a03868d57bcbe1a7c457d8561d7da40227377e522c49874b6a3453c6234f3`.
+- Verified with `ctest` 43/43, 511 frontend tests (2 skipped) and a host probe
+  covering masks, bypass and malformed-layer rejection.
+
 ### v1.7.0 — 历史与预设 / History and presets
 
 **中文**

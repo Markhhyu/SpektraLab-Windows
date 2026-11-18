@@ -1324,3 +1324,25 @@ input {
 .preset-icon { flex: none; width: 22px; height: 22px; border: 0; border-radius: 4px; background: transparent; color: var(--text-dim, #8b8b8b); cursor: pointer; font-size: 12px; }
 .preset-icon:hover { background: var(--rule); color: var(--text); }
 .caption-error { color: var(--danger, #e06c75); }
+
+/* Local adjustments ------------------------------------------------------- */
+.local-add-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.local-add-row .btn { flex: 1; height: 24px; font-size: var(--fs-small); }
+.local-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.local-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  background: var(--field);
+  color: var(--text);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.local-chip.is-active { border-color: var(--accent); background: var(--field-strong, rgba(255, 255, 255, 0.06)); }
+.local-chip-label { white-space: nowrap; }
+.local-chip-remove { padding: 0 3px; opacity: 0.65; border-radius: 50%; }
+.local-chip-remove:hover { opacity: 1; background: var(--rule); }

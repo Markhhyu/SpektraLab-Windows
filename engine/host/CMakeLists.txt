@@ -8,6 +8,7 @@ add_executable(spektralab-host
     image_io.cpp
     input_formats.cpp
     lens_correction.cpp
+    local_adjust.cpp
     output.cpp
     output_codecs.cpp
     platform.cpp

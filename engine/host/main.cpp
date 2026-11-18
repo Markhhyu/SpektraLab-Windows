@@ -43,6 +43,7 @@
 #include "pair_source.hpp"
 #include "white_balance.hpp"
 #include "json.hpp"
+#include "local_adjust.hpp"
 #include "output.hpp"
 #include "platform.hpp"
 #include "spektrafilm/spk_engine.h"
@@ -936,6 +937,87 @@ Json view_timings(const spk::view::Result& v, double total) {
     return t;
 }
 
+// Local adjustments: a masked grade on the finished pixels. The engine's
+// Layer 2 already ran on the GPU inside spk::view::render, so this pass keeps
+// the engine ABI, the parameter schema and the macOS behaviour untouched. An
+// empty or absent list is an exact bypass (no decode/re-encode round trip).
+std::vector<spkhost::LocalLayer> local_layers_or_throw(const Json& params) {
+    std::vector<spkhost::LocalLayer> layers;
+    const Json& adjustments = params.at("adjustments");
+    if (!adjustments.is_object()) return layers;
+    std::string error;
+    if (!spkhost::parse_local_layers(adjustments, layers, error)) throw HostError{"bad_request", error};
+    return layers;
+}
+
+// Render-view frames are RGBA (8- or 16-bit) in the target space.
+void grade_rgba_pixels(const OutputTransform& t, const std::vector<spkhost::LocalLayer>& layers,
+                       uint32_t w, uint32_t h, bool rgba16, std::vector<uint8_t>& payload) {
+    const size_t count = size_t(w) * h;
+    if (layers.empty()) return;
+    std::vector<uint16_t> rgba(count * 4);
+    if (rgba16) {
+        if (payload.size() != count * 8) throw HostError{"internal", "invalid rgba16 frame buffer"};
+        for (size_t i = 0; i < rgba.size(); ++i) rgba[i] = uint16_t(payload[2 * i] | (payload[2 * i + 1] << 8));
+    } else {
+        if (payload.size() != count * 4) throw HostError{"internal", "invalid rgba8 frame buffer"};
+        for (size_t i = 0; i < rgba.size(); ++i) rgba[i] = uint16_t(uint16_t(payload[i]) * 257);
+    }
+    std::vector<float> lin;
+    t.to_linear(rgba.data(), w, h, w, lin);
+    spkhost::apply_local_layers(lin.data(), w, h, layers);
+    if (rgba16) {
+        std::vector<uint16_t> out;
+        t.encode_rgba16(lin, out);
+        payload.resize(out.size() * 2);
+        for (size_t i = 0; i < out.size(); ++i) {
+            payload[2 * i] = uint8_t(out[i]); payload[2 * i + 1] = uint8_t(out[i] >> 8);
+        }
+    } else {
+        std::vector<uint8_t> out;
+        t.encode_rgba8(lin, out);
+        payload = std::move(out);
+    }
+}
+
+// Export frames are RGB (3 or 6 bytes per pixel) in the target space.
+void grade_rgb_pixels(const OutputTransform& t, const std::vector<spkhost::LocalLayer>& layers,
+                      uint32_t w, uint32_t h, bool rgba16, std::vector<uint8_t>& pixels) {
+    if (layers.empty()) return;
+    const size_t count = size_t(w) * h;
+    std::vector<uint16_t> rgba(count * 4);
+    if (rgba16) {
+        if (pixels.size() != count * 6) throw HostError{"internal", "invalid rgba16 export buffer"};
+        for (size_t p = 0; p < count; ++p)
+            for (int c = 0; c < 3; ++c)
+                rgba[p * 4 + c] = uint16_t(pixels[p * 6 + 2 * c] | (pixels[p * 6 + 2 * c + 1] << 8));
+    } else {
+        if (pixels.size() != count * 3) throw HostError{"internal", "invalid rgba8 export buffer"};
+        for (size_t p = 0; p < count; ++p)
+            for (int c = 0; c < 3; ++c) rgba[p * 4 + c] = uint16_t(uint16_t(pixels[p * 3 + c]) * 257);
+    }
+    for (size_t p = 0; p < count; ++p) rgba[p * 4 + 3] = 65535;
+    std::vector<float> lin;
+    t.to_linear(rgba.data(), w, h, w, lin);
+    spkhost::apply_local_layers(lin.data(), w, h, layers);
+    if (rgba16) {
+        std::vector<uint16_t> out;
+        t.encode_rgba16(lin, out);
+        pixels.resize(count * 6);
+        for (size_t p = 0; p < count; ++p)
+            for (int c = 0; c < 3; ++c) {
+                pixels[p * 6 + 2 * c] = uint8_t(out[p * 4 + c]);
+                pixels[p * 6 + 2 * c + 1] = uint8_t(out[p * 4 + c] >> 8);
+            }
+    } else {
+        std::vector<uint8_t> out;
+        t.encode_rgba8(lin, out);
+        pixels.resize(count * 3);
+        for (size_t p = 0; p < count; ++p)
+            for (int c = 0; c < 3; ++c) pixels[p * 3 + c] = out[p * 4 + c];
+    }
+}
+
 spk::view::Request view_request(const Json& p, bool exporting) {
     spk::view::Request r;
     r.tier = exporting ? "full" : optional_string(p, "tier", "live");
@@ -1040,6 +1122,7 @@ Json m_render_view(const Request& q, std::vector<uint8_t>& payload) {
     const std::string format = optional_string(q.params, "format", "rgba8");
     if (format != "rgba8" && format != "rgba16") throw HostError{"bad_request", "view format must be rgba8 or rgba16"};
     req.rgba16 = format == "rgba16";
+    const std::vector<spkhost::LocalLayer> local_layers = local_layers_or_throw(q.params);
     if (req.no_film && (s->pair_source || q.params.has("pair") || q.params.at("params").at("overscan_pair").as_bool()))
         throw HostError{"bad_request", "no_film is unavailable for a half-frame pair"};
     if (s->pair_source) {
@@ -1069,6 +1152,9 @@ Json m_render_view(const Request& q, std::vector<uint8_t>& payload) {
     if (s->pair_source) r.set("pair_info", pair_display_info(*s));
     r.set("timings_ms", view_timings(v, ms_since(started)));
     payload = std::move(v.pixels);
+    if (!local_layers.empty())
+        grade_rgba_pixels(transform(req.target_space, req.target_space), local_layers, v.width, v.height,
+                          req.rgba16, payload);
     return r;
 }
 
@@ -1327,6 +1413,9 @@ Json m_export_frame(const Request& q, std::vector<uint8_t>* proof_payload = null
         throw HostError{"bad_request", "no_film is unavailable for a half-frame pair"};
     req.output_channels = 3;
     req.rgba16 = cineon || format == "tiff16";
+    const std::vector<spkhost::LocalLayer> local_layers = local_layers_or_throw(q.params);
+    if (cineon && !local_layers.empty())
+        throw HostError{"bad_request", "local adjustments are unavailable for a Digital Intermediate export"};
     if (proof_payload) {
         const auto& edge = q.params.at("proof_long_edge");
         if (!edge.is_number() || edge.as_double() < 1 || edge.as_double() > 4096 || edge.as_double() != edge.as_int())
@@ -1473,6 +1562,9 @@ Json m_export_frame(const Request& q, std::vector<uint8_t>* proof_payload = null
         r.set("generation", q.params.at("generation"));
         r.set("timings_ms", view_timings(v, ms_since(started)));
         *proof_payload = std::move(v.pixels);
+        if (!local_layers.empty())
+            grade_rgba_pixels(transform(req.proof_display, req.proof_display), local_layers, v.width, v.height,
+                              false, *proof_payload);
         return r;
     }
     std::vector<uint8_t> icc;
@@ -1482,6 +1574,9 @@ Json m_export_frame(const Request& q, std::vector<uint8_t>* proof_payload = null
     const size_t n = size_t(v.width) * v.height;
     if (v.pixels.size() != n * (req.rgba16 ? 6 : 3))
         throw HostError{"internal", "GPU export returned invalid RGB size"};
+    if (!local_layers.empty())
+        grade_rgb_pixels(transform(req.target_space, req.target_space), local_layers, v.width, v.height,
+                         req.rgba16, v.pixels);
     Json lut_paths = Json::array();
     if (cineon) {
         if (v.preview_rgb.size() != size_t(v.preview_width) * v.preview_height * 3)

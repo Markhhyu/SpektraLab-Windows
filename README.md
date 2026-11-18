@@ -5,7 +5,7 @@
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
 the spectral film-and-print simulator — derived from the original project's last
 Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
-version line, currently **v1.7.0**, plus the Windows port fixes, performance work
+version line, currently **v1.8.0**, plus the Windows port fixes, performance work
 and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs
@@ -127,6 +127,17 @@ the short version:
     to an app-level store and applies them to other photographs as a normal
     undoable edit; presets can be renamed and deleted.
 
+16. **Local adjustments (`v1.8.0`)** — a Local Adjustments section in the
+    parameters rail adds masked grades: linear gradients and radial masks with
+    exposure, contrast, highlights, shadows, saturation, temperature, tint,
+    feather and invert controls (up to 16 layers per photograph). The masks are
+    evaluated in the finished frame (after crop and rotation) and applied by the
+    native host in linear light after the print is rendered, so they compose on
+    top of Layer 2 without touching the negative or the paper curve. Masks and
+    their settings are stored in the photograph's sidecar and are normal
+    undoable edits; malformed layers are rejected as bad requests. The SVG
+    histogram and the latitude plot were also rebuilt with smoothed rendering,
+    clipping indicators, EV ticks and suggested-placement controls.
 
 ## Packaging and releases
 
@@ -151,7 +162,7 @@ the exact configure lines are in [`WINDOWS-PORT.md`](WINDOWS-PORT.md) and
 # host + engine (Vulkan), resources, tests
 cmake -S engine -B build/win-host -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build/win-host -j
-ctest --test-dir build/win-host --output-on-failure     # 41 tests
+ctest --test-dir build/win-host --output-on-failure     # 43 tests
 ```
 
 Desktop app (Tauri + Rust + Node):
@@ -163,18 +174,18 @@ node scripts/package.mjs win      # stages host, builds the frontend and NSIS
 
 ## Tests
 
-- `ctest` — 41 engine/host tests, including the mask kernel oracle, residency
+- `ctest` — 43 engine/host tests, including the mask kernel oracle, residency
   policy, development model and illuminant tests.
 - `engine/tests/parity_upstream.py` — whole-image parity against the public
   upstream Python package (needs a Python venv with numpy/scipy/numba/
   colour-science).
 - `engine/tests/calibration_sweep.py` — DIR/halation/grain monotonicity.
-- `cd desktop && npx vitest run` — 472 frontend tests.
+- `cd desktop && npx vitest run` — 511 frontend tests (2 skipped).
 
 ## Known limits
 
 - This tree is based on upstream **v1.3.4-beta.3**: the macOS app has since added
-  features (newer UI, Local Adjustments, etc.) that are not in this tree.
+  features (newer UI and other macOS-side features) that are not in this tree.
 - P1-8's paper surface/gloss half (paper BRDF, 2°/10° observer) is not
   implemented; only the illuminant half is.
 - Whole-image parity is checked against the public `spektrafilm` package; the

@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：源自原项目最后一个
-Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.7.0**，
+Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.8.0**，
 并包含 Windows 移植修复、性能优化和两个原生扩展（见下）。
 
 胶片过程模型、28 个实测胶片/相纸 profile 与打印 LUT 来自
@@ -91,6 +91,12 @@ Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己
     重做向前重放。参数右栏新增「预设」区，可把当前胶片参数与色彩调整保存为预设（存于
     应用数据），在其他照片上一键应用——应用本身就是一次可撤销的编辑；预设支持重命名与删除。
 
+16. **局部调整（`v1.8.0`）**——参数右栏新增「局部调整」：支持线性渐变与径向蒙版，
+    每层可调曝光、对比度、高光、阴影、饱和度、色温、色调、羽化与反转（最多 16 层）。
+    蒙版定位在成片画面（裁剪与旋转之后），由宿主在印片渲染完成后于线性光下施加，
+    因此叠加在 Layer 2 之上，不改动负片与相纸曲线。蒙版及其设置写入照片 sidecar，
+    属于正常的可撤销编辑；不合法的层会被明确拒绝。另：直方图与宽容度图改为平滑绘制，
+    增加裁剪提示、EV 刻度与「应用建议置位」等控件。
 
 ## 打包与 Releases
 
@@ -110,7 +116,7 @@ OpenEXR/lcms/heif、lensfun + 静态 GLib）与 configure 命令见 [`WINDOWS-PO
 # host + engine（Vulkan）、资源、测试
 cmake -S engine -B build/win-host -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build/win-host -j
-ctest --test-dir build/win-host --output-on-failure     # 41 项测试
+ctest --test-dir build/win-host --output-on-failure     # 43 项测试
 ```
 
 桌面应用（Tauri + Rust + Node）：
@@ -122,15 +128,16 @@ node scripts/package.mjs win      # 暂存 host、构建前端并产出 NSIS 安
 
 ## 测试
 
-- `ctest`——41 项引擎/host 测试，包括 mask kernel oracle、驻留策略、显影模型与光源测试。
+- `ctest`——43 项引擎/host 测试，包括 mask kernel oracle、驻留策略、显影模型与光源测试。
 - `engine/tests/parity_upstream.py`——对公开上游 Python 包的整图 parity
   （需要装好 numpy/scipy/numba/colour-science 的 Python 环境）。
 - `engine/tests/calibration_sweep.py`——DIR/光晕/颗粒单调性。
-- `cd desktop && npx vitest run`——472 项前端测试。
+- `cd desktop && npx vitest run`——511 项前端测试（2 项跳过）。
 
 ## 已知限制
 
-- 本仓库基于上游 **v1.3.4-beta.3**：macOS 应用后续新增的功能（新 UI、局部调整等）不在本仓库中。
+- 本仓库基于上游 **v1.3.4-beta.3**：macOS 应用后续新增的功能（新 UI 等）不在本仓库中；
+  局部调整由本仓库的 Windows 宿主侧实现（面板滑块方式，暂不支持画布拖拽手柄）。
 - P1-8 的相纸表面/光泽部分（纸面 BRDF、2°/10° 观察者）未实现，只做了光源部分。
 - 整图 parity 对公开 `spektrafilm` 包验证；其余 `parity_*.py` 依赖的 macOS 私有 Python 参考在这里不可用，
   因此 fork 专属 stock 只由 `parity_product_stocks.py` 覆盖。

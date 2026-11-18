@@ -12,6 +12,7 @@
 //   → black/white point → saturation → colour balance → curves → vignette
 
 import { clamp } from './params.ts';
+import { decodeLocalAdjustments, type LocalAdjustment } from './localAdjust.ts';
 
 export interface ColorZone {
   hue: number;
@@ -51,6 +52,8 @@ export interface Adjustments {
   curves: CurveSet;
   colorBalance: ColorBalance;
   vignette: Vignette;
+  /** Masked local grades; applied by the native host after Layer 2. */
+  local?: LocalAdjustment[];
 }
 
 const ZONE: ColorZone = { hue: 0, saturation: 0, luminance: 0 };
@@ -82,6 +85,7 @@ export const ADJUSTMENTS_DEFAULT: Adjustments = {
   curves: CURVES_IDENTITY,
   colorBalance: { master: ZONE, shadows: ZONE, midtones: ZONE, highlights: ZONE },
   vignette: { amount: 0, midpoint: 50 },
+  local: [],
 };
 
 export const curveIsIdentity = (c: Curve) =>
@@ -106,7 +110,8 @@ export function isNeutral(a: Adjustments): boolean {
     zoneNeutral(a.colorBalance.shadows) &&
     zoneNeutral(a.colorBalance.midtones) &&
     zoneNeutral(a.colorBalance.highlights) &&
-    a.vignette.amount === 0
+    a.vignette.amount === 0 &&
+    (a.local?.length ?? 0) === 0
   );
 }
 
@@ -457,5 +462,6 @@ export function decodeAdjustments(raw: unknown): Adjustments {
       highlights: decodeZone(cb.highlights),
     },
     vignette: { amount: num(v.amount, 0), midpoint: num(v.midpoint, 50) },
+    local: decodeLocalAdjustments(o.local),
   };
 }

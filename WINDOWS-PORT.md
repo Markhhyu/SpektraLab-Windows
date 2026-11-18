@@ -101,6 +101,26 @@ described below.
     Tests: `desktop/src/shared/catalog.test.ts` (8 cases) plus the full desktop
     suite (472 passed / 2 skipped); typecheck and lint are clean.
 
+### Local adjustments (v1.8.0)
+
+- Per-photo masked grades (linear gradients and radial masks) with exposure,
+  contrast, highlights, shadows, saturation, temperature, tint, feather and
+  invert; up to 16 layers. Geometry is normalised over the finished frame, so a
+  mask follows crop and rotation.
+- The pass lives in the host (`engine/host/local_adjust.{hpp,cpp}`): the engine
+  renders the print through Layer 2 as before, then the host decodes the frame
+  to linear light, evaluates each mask, applies the grade and re-encodes. The
+  engine ABI and parameter schema are unchanged; an empty list is an exact
+  bypass.
+- `adjustments.localAdjustments` rides the existing sidecar/wire JSON. The
+  TypeScript side (`desktop/src/shared/localAdjust.ts`) owns validation, the
+  tolerant sidecar decode and the client-side mask maths used by tests.
+- The RightRail panel adds the layer list, grade sliders and geometry sliders.
+- Verified by a host probe (`film-validation/bench/probe_local.py`): empty
+  bypass is byte-identical, radial mask brightens the centre only, linear mask
+  ramps to its end side, malformed layers return `bad_request`, and an export
+  with a mask differs from one without.
+
 ### Packaging
 
 - Static-runtime host build (`-DSPEKTRALAB_STATIC_RUNTIME=ON`; the static

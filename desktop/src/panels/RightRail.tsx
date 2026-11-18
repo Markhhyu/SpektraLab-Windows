@@ -27,6 +27,7 @@ import {
   aeMethodOf,
 } from '@shared/params';
 import { type ColorZone, type CurveChannel, CURVE_CHANNELS, isNeutral } from '@shared/adjustments';
+import { createLocalAdjustment, localAdjustmentLabel, LOCAL_GRADE_RANGE, type LocalAdjustment } from '@shared/localAdjust';
 import {
   type AsShot,
   TEMPERATURE_RANGE,
@@ -85,6 +86,7 @@ export function RightRail() {
             <CurveSection />
             <ColorBalanceSection />
             <ToneMaskSection />
+            <LocalAdjustmentsSection />
           </>
         )}
       </div>
@@ -871,6 +873,131 @@ function PresetsSection() {
         </ul>
       )}
       {ready && <p className="caption">{tz('Applying a preset is an undoable edit stored in this photograph\'s sidecar.', '应用预设是一次可撤销的编辑，会写进这张照片的 sidecar。')}</p>}
+    </Section>
+  );
+}
+
+// ------------------------------------------------------- Local adjustments
+
+function LocalAdjustmentsSection() {
+  const adjustments = useSession((s) => shownAdjustments(s));
+  const layers = adjustments.local ?? [];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = layers.find((l) => l.id === selectedId) ?? layers[0];
+
+  const update = (patch: Partial<LocalAdjustment>) => {
+    if (!selected) return;
+    setAdjustments((a) => ({
+      ...a,
+      local: (a.local ?? []).map((l) => (l.id === selected.id ? { ...l, ...patch } : l)),
+    }));
+  };
+  const add = (kind: 'linear' | 'radial') => {
+    const layer = createLocalAdjustment(kind);
+    setAdjustments((a) => ({ ...a, local: [...(a.local ?? []), layer] }));
+    setSelectedId(layer.id);
+  };
+  const remove = (id: string) => {
+    setAdjustments((a) => ({ ...a, local: (a.local ?? []).filter((l) => l.id !== id) }));
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+  return (
+    <Section
+      id="local"
+      title={tz('Local Adjustments', '局部调整')}
+      onReset={() => setAdjustments((a) => ({ ...a, local: [] }))}
+      resetHelp={tz('Remove all local adjustments', '移除全部局部调整')}
+      resetEnabled={layers.length > 0}
+    >
+      <div className="local-add-row">
+        <button className="btn" data-testid="local-add-linear" onClick={() => add('linear')}>{tz('+ Linear gradient', '＋线性渐变')}</button>
+        <button className="btn" data-testid="local-add-radial" onClick={() => add('radial')}>{tz('+ Radial', '＋径向')}</button>
+      </div>
+      {layers.length === 0 ? (
+        <p className="caption">
+          {tz(
+            'Local adjustments are masked grades the host applies after the print is rendered. They never change the negative or the paper curve.',
+            '局部调整是带蒙版的调色，由宿主在印片渲染完成后施加；不会改变负片和相纸曲线。',
+          )}
+        </p>
+      ) : (
+        <>
+          <div className="local-list" data-testid="local-list">
+            {layers.map((layer, index) => (
+              <button
+                key={layer.id}
+                className={'local-chip' + (layer.id === selected?.id ? ' is-active' : '')}
+                data-testid={'local-layer-' + index}
+                onClick={() => setSelectedId(layer.id)}
+              >
+                <span className="local-chip-label">{localAdjustmentLabel(layer, index)}</span>
+                <span
+                  className="local-chip-remove"
+                  title={tz('Remove', '移除')}
+                  onClick={(e) => { e.stopPropagation(); remove(layer.id); }}
+                >✕</span>
+              </button>
+            ))}
+          </div>
+          {selected && (
+            <>
+              <p className="caption">
+                {selected.kind === 'linear'
+                  ? tz('Linear gradient: the grade ramps in from one point to another.', '线性渐变：调色沿两点之间的方向渐入。')
+                  : tz('Radial: the grade is strongest at the centre and fades out.', '径向：中心最强，向外淡出。')}
+              </p>
+              <ScrubSlider
+                label={tz('Exposure', '曝光')}
+                value={selected.exposure}
+                range={LOCAL_GRADE_RANGE.exposure}
+                snap={0.05}
+                format={signed(2)}
+                onChange={(v) => update({ exposure: v })}
+                testId="local-exposure"
+              />
+              <ScrubSlider label={tz('Contrast', '对比度')} value={selected.contrast} range={[-100, 100]} snap={5} format={signed(0)} onChange={(v) => update({ contrast: v })} testId="local-contrast" />
+              <ScrubSlider label={tz('Highlights', '高光')} value={selected.highlights} range={[-100, 100]} snap={5} format={signed(0)} onChange={(v) => update({ highlights: v })} testId="local-highlights" />
+              <ScrubSlider label={tz('Shadows', '阴影')} value={selected.shadows} range={[-100, 100]} snap={5} format={signed(0)} onChange={(v) => update({ shadows: v })} testId="local-shadows" />
+              <ScrubSlider label={tz('Saturation', '饱和度')} value={selected.saturation} range={[-100, 100]} snap={5} format={signed(0)} onChange={(v) => update({ saturation: v })} testId="local-saturation" />
+              <ScrubSlider label={tz('Temperature', '色温')} value={selected.temperature} range={[-100, 100]} snap={5} format={signed(0)} gradient="linear-gradient(90deg,#5d7de8,#bbb,#e8c04e)" onChange={(v) => update({ temperature: v })} testId="local-temperature" />
+              <ScrubSlider label={tz('Tint', '色调')} value={selected.tint} range={[-100, 100]} snap={5} format={signed(0)} gradient="linear-gradient(90deg,#62c462,#bbb,#d05bd0)" onChange={(v) => update({ tint: v })} testId="local-tint" />
+              <ScrubSlider
+                label={tz('Feather', '羽化')}
+                value={selected.feather * 100}
+                range={[0, 100]}
+                snap={5}
+                format={(v) => `${Math.round(v)}%`}
+                onChange={(v) => update({ feather: v / 100 })}
+                testId="local-feather"
+              />
+              <ToggleRow label={tz('Invert mask', '反转蒙版')} on={selected.invert} onChange={(v) => update({ invert: v })} testId="local-invert" />
+              {selected.kind === 'linear' ? (
+                <>
+                  <ScrubSlider label={tz('Start X', '起点 X')} value={selected.x0} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ x0: v })} testId="local-x0" />
+                  <ScrubSlider label={tz('Start Y', '起点 Y')} value={selected.y0} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ y0: v })} testId="local-y0" />
+                  <ScrubSlider label={tz('End X', '终点 X')} value={selected.x1} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ x1: v })} testId="local-x1" />
+                  <ScrubSlider label={tz('End Y', '终点 Y')} value={selected.y1} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ y1: v })} testId="local-y1" />
+                </>
+              ) : (
+                <>
+                  <ScrubSlider label={tz('Centre X', '中心 X')} value={selected.cx} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ cx: v })} testId="local-cx" />
+                  <ScrubSlider label={tz('Centre Y', '中心 Y')} value={selected.cy} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ cy: v })} testId="local-cy" />
+                  <ScrubSlider label={tz('Radius', '半径')} value={selected.radius * 100} range={[2, 200]} snap={1} format={(v) => `${Math.round(v)}%`} onChange={(v) => update({ radius: v / 100 })} testId="local-radius" />
+                </>
+              )}
+              <p className="caption">
+                {tz(
+                  'Masks are placed in the finished frame (after crop and rotation). Moving the crop moves the mask with it.',
+                  '蒙版定位在成片画面（裁剪与旋转之后）；改变裁剪会一起移动蒙版。',
+                )}
+              </p>
+            </>
+          )}
+        </>
+      )}
     </Section>
   );
 }

@@ -297,6 +297,28 @@ described below.
 
 
 
+### Film-simulation assessment (tools/film_assessment)
+
+A standalone assessment harness with two independent chains:
+
+* **regress** — renders the same RAW through this build and a reference host
+  (the shipped official binary) and compares pixels: live/preview tiers,
+  effect switches, 16 film/paper pairs, `export_frame` output and the
+  two-stage decode. Any non-zero difference means the film look changed.
+* **physics** — drives synthetic charts (grey ramp, flat field, edge,
+  halation target) through the pipeline and asserts film-model invariants:
+  H&D monotonicity, granularity growth, halation spill/decay, tone mask,
+  push/pull development, scan/viewing illuminants, sharpness, banding,
+  determinism and the 34-stock matrix.
+
+Current baseline: **53/53 checks pass** (34 regression + 19 physics). The
+neutral-ramp check is a locked baseline: the desktop render path has a
+cross-over (max RGB spread ~0.12) and the official binary is bit-identical
+there; the engine API path is near-neutral, so the cross-over is inherited
+from the desktop view chain, not from this port. See
+`engine/tools/film_assessment/README.md` for usage, environment variables and
+CI notes.
+
 ### Batch render pool (v1.9.0)
 
 

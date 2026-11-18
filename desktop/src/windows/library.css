@@ -2,7 +2,7 @@
 
 .library {
   position: fixed;
-  inset: 0;
+  inset: var(--module-bar-h, 38px) 0 0;
   z-index: 40;
   display: flex;
   flex-direction: column;

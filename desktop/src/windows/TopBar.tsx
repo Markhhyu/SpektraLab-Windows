@@ -10,7 +10,8 @@ import { canMakePair, makePair, currentFitZoom, openFolder, pairComplete, reload
 import { forgetRecentFolders, settingsStore, useSettings } from '../state/settings';
 import { openDialog } from './actions';
 import { baseName } from '../platform';
-import { libraryStore, setLibraryOpen, selectOnly as selectLibraryEntry } from '../state/library';
+import { libraryStore, selectOnly as selectLibraryEntry } from '../state/library';
+import { showModule } from './ModuleBar';
 import type { PreviewGamut } from '../canvas/colorSpace';
 import { sourceGeometryFor } from '@shared/filmEdge';
 
@@ -65,7 +66,7 @@ export function TopBar() {
           <button className="pill-menu library-entry" title={tz('Library (Ctrl+Shift+L)', '图库（Ctrl+Shift+L）')} onClick={() => {
             const current = sessionStore.getState().selection;
             if (current && libraryStore.getState().catalog.entries.some((entry) => entry.path === current)) selectLibraryEntry(current);
-            setLibraryOpen(true);
+            showModule('library');
           }} data-testid="library-button">
             <span aria-hidden="true">▦</span>
             <span>{tz('Library', '图库')}</span>

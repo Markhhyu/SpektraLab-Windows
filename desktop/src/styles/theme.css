@@ -112,6 +112,8 @@ input {
 .editor {
   display: grid;
   height: 100%;
+  padding-top: var(--module-bar-h, 38px);
+  box-sizing: border-box;
   grid-template-columns: var(--left-col, var(--left-width)) 1fr var(--right-col, var(--right-width));
   grid-template-rows: 1fr;
 }
@@ -243,6 +245,59 @@ input {
 }
 /* The centre can be much narrower than the window when both rails are wide.
    Wrap whole tool groups; keep the filename on its own line at every scale. */
+:root {
+  --module-bar-h: 38px;
+}
+
+/* The window's three top-level modules: Library | Develop | Export. */
+.module-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--module-bar-h);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 10px;
+  background: var(--card);
+  border-bottom: 1px solid var(--rule);
+  box-sizing: border-box;
+}
+.module-bar-title {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.85;
+  padding-left: 2px;
+}
+.module-bar-tabs {
+  display: flex;
+  gap: 2px;
+}
+.module-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-small);
+  padding: 5px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.module-tab:hover:not(:disabled) {
+  background: var(--field);
+}
+.module-tab.is-active {
+  background: var(--field);
+  color: var(--accent);
+  font-weight: 600;
+}
+.module-tab:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .editor-topbar {
   height: auto;
   display: block;
@@ -1103,7 +1158,7 @@ input {
 
 .export-page {
   position: fixed;
-  inset: 0;
+  inset: var(--module-bar-h, 38px) 0 0;
   z-index: 30;
   background: var(--ground);
   display: flex;

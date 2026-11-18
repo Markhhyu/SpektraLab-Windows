@@ -13,6 +13,7 @@ import { AboutDialog, HostFailure, SettingsDialog, HistoryDialog, ShortcutsDialo
 import { ExportPage } from '../export/ExportPage';
 import { PanelResize } from '../controls/PanelResize';
 import { LibraryView } from './LibraryView';
+import { ModuleBar } from './ModuleBar';
 import { useLibrary } from '../state/library';
 
 export function EditorWindow() {
@@ -23,6 +24,7 @@ export function EditorWindow() {
   const libraryOpen = useLibrary((s) => s.open);
   return (
     <>
+      <ModuleBar />
       <div
         className="editor"
         style={{ ['--left-col' as string]: left ? '0px' : 'var(--left-width)', ['--right-col' as string]: right ? '0px' : 'var(--right-width)', pointerEvents: batch ? 'none' : undefined }}

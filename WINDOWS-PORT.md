@@ -129,6 +129,11 @@ described below.
   moves with it and collections keep tracking the photo. Renaming the frame
   that is open in Develop is refused, and a name clash is reported without
   touching the file.
+- A window-level module bar (Library | Develop | Export) sits above all
+  three views, so the modes share one visible order instead of being an
+  overlay on top of the editor. The active mode is highlighted, Export is
+  disabled until a photograph is selected, and the canvas bar's Library button
+  routes through the same switcher.
 
 ### Local adjustments (v1.8.0)
 

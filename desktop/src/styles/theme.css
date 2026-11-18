@@ -298,6 +298,19 @@ input {
   cursor: default;
 }
 
+
+/* Rail widths follow the window so the canvas keeps a workable area on
+   laptop screens; the rails can still be collapsed from the canvas bar. */
+@media (max-width: 1500px) {
+  :root { --left-width: 232px; --right-width: 264px; }
+}
+@media (max-width: 1320px) {
+  :root { --left-width: 208px; --right-width: 240px; }
+}
+@media (max-width: 1120px) {
+  :root { --left-width: 188px; --right-width: 216px; }
+}
+
 .editor-topbar {
   height: auto;
   display: block;

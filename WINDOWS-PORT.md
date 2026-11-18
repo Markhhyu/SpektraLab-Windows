@@ -134,6 +134,10 @@ described below.
   overlay on top of the editor. The active mode is highlighted, Export is
   disabled until a photograph is selected, and the canvas bar's Library button
   routes through the same switcher.
+- The right-hand parameter rail is titled "Develop" (Chinese "\u4fee\u6539") like the
+  module, so "develop" no longer means both the film development stage and the
+  whole edit page; the solve action is "Solve" / "\u914d\u5149" and the meter-and-balance
+  action is "Meter and balance" / "\u6d4b\u5149\u4e0e\u914d\u5149".
 
 ### Local adjustments (v1.8.0)
 

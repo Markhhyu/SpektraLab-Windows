@@ -1077,3 +1077,66 @@ input {
   justify-content: center;
   font-weight: 600;
 }
+
+/* ------------------------------------------------- right rail module tabs */
+.rail-modules {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 2px;
+}
+.rail-module {
+  flex: 1;
+  height: 22px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dim);
+  font-size: calc(11px * var(--ui-scale));
+  cursor: pointer;
+}
+.rail-module.is-active {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--card);
+}
+.rail-module:hover { color: var(--text); }
+
+/* --------------------------------------------- develop filmstrip filtering */
+.filmstrip-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 6px 0 8px;
+  flex: none;
+}
+.filmstrip-filter select {
+  width: 74px;
+  height: 20px;
+  font-size: calc(10px * var(--ui-scale));
+  border-radius: 3px;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  color: var(--text);
+}
+.thumb-badges {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.thumb-badge-stars { color: #f0c245; font-size: calc(9px * var(--ui-scale)); letter-spacing: -1px; }
+.thumb-badge-flag { font-size: calc(9px * var(--ui-scale)); }
+.thumb-badge-flag.is-pick { color: #9ad46f; }
+.thumb-badge-flag.is-reject { color: #e06a6a; }
+.thumb-badge-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.thumb-badge-dot.is-red { background: #e05a5a; }
+.thumb-badge-dot.is-yellow { background: #e0c95a; }
+.thumb-badge-dot.is-green { background: #6fcf7f; }
+.thumb-badge-dot.is-blue { background: #5b9ee8; }
+.thumb-badge-dot.is-purple { background: #b487e0; }

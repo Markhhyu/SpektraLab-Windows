@@ -6,7 +6,7 @@
 // Click opens (and collapses the picked set); Ctrl/Cmd-click toggles one
 // frame in the set and leaves the canvas where it is.
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ChevronLeft, ChevronRight } from '../controls/icons';
 import { click, moveFrame, removeFrames, saveFrameOrder, selectRelative, sessionStore, useSession } from '../state/session';
 import { installFrameDrag } from './frameDrag';
@@ -15,6 +15,9 @@ import { type Geometry, GEOMETRY_DEFAULT } from '@shared/geometry';
 import { thumbnailGeometryPlan } from '@shared/surfaces';
 import { t, tz } from '../i18n';
 import { platform } from '../platform';
+import { useLibrary } from '../state/library';
+import { FILMSTRIP_FILTER_DEFAULT, type FilmstripFilter, type FrameMark, frameMatchesMark } from '@shared/filmstripFilter';
+import type { ColorLabel, Flag, Rating } from '@shared/catalog';
 
 export function Filmstrip() {
   const frames = useSession((s) => s.frames);
@@ -25,6 +28,17 @@ export function Filmstrip() {
   const batch = useSession((s) => s.batchExporting);
   const strip = useRef<HTMLDivElement>(null);
   const [, visibleChanged] = useState(0);
+  const [filter, setFilter] = useState<FilmstripFilter>(FILMSTRIP_FILTER_DEFAULT);
+  const catalogEntries = useLibrary((s) => s.catalog.entries);
+  const marks = useMemo(() => {
+    const map = new Map<string, FrameMark>();
+    for (const entry of catalogEntries) map.set(entry.path.toLowerCase(), { rating: entry.rating, flag: entry.flag, label: entry.label });
+    return map;
+  }, [catalogEntries]);
+  const shown = useMemo(
+    () => frames.filter((f) => frameMatchesMark(marks.get(f.path.toLowerCase()), filter)),
+    [frames, marks, filter],
+  );
   const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   const menuEl = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -120,12 +134,48 @@ export function Filmstrip() {
   }, [selection]);
   return (
     <div className="filmstrip" data-testid="filmstrip">
+      <div className="filmstrip-filter" data-testid="filmstrip-filter">
+        <select
+          value={filter.ratingMin}
+          onChange={(e) => setFilter({ ...filter, ratingMin: Number(e.target.value) as Rating })}
+          title={tz('Minimum rating', '最低星级')}
+          data-testid="filmstrip-rating-filter"
+        >
+          {([0, 1, 2, 3, 4, 5] as Rating[]).map((r) => <option key={r} value={r}>{r === 0 ? tz('Any', '不限') : `${r}★+`}</option>)}
+        </select>
+        <select
+          value={filter.flag}
+          onChange={(e) => setFilter({ ...filter, flag: e.target.value as Flag | 'all' })}
+          title={tz('Flag', '旗标')}
+          data-testid="filmstrip-flag-filter"
+        >
+          <option value="all">{tz('Any flag', '旗标不限')}</option>
+          <option value="pick">{tz('Pick', '保留')}</option>
+          <option value="reject">{tz('Reject', '废弃')}</option>
+          <option value="none">{tz('Unflagged', '无旗标')}</option>
+        </select>
+        <select
+          value={filter.label}
+          onChange={(e) => setFilter({ ...filter, label: e.target.value as ColorLabel | 'all' })}
+          title={tz('Colour label', '颜色标签')}
+          data-testid="filmstrip-label-filter"
+        >
+          <option value="all">{tz('Any label', '颜色不限')}</option>
+          <option value="red">{tz('Red', '红')}</option>
+          <option value="yellow">{tz('Yellow', '黄')}</option>
+          <option value="green">{tz('Green', '绿')}</option>
+          <option value="blue">{tz('Blue', '蓝')}</option>
+          <option value="purple">{tz('Purple', '紫')}</option>
+          <option value="none">{tz('No label', '无颜色')}</option>
+        </select>
+      </div>
       <button className="strip-chevron" onClick={() => selectRelative(-1)} disabled={batch} aria-label="Previous">
         <ChevronLeft />
       </button>
       <div className="filmstrip-cells" ref={strip}>
         {frames.length === 0 && <span className="caption">{t('statusEmptyFilmstrip').replace('⌘O', 'Ctrl+O')}</span>}
-        {frames.map((f) => (
+        {frames.length > 0 && shown.length === 0 && <span className="caption">{tz('No frames match the filmstrip filter.', '没有符合胶片条筛选的照片。')}</span>}
+        {shown.map((f) => (
           <div
             key={f.path}
             className={'thumb' + (f.path === selection ? ' open' : '') + (picked.includes(f.path) ? ' picked' : '')}
@@ -142,6 +192,7 @@ export function Filmstrip() {
             data-path={f.path}
           >
             <Thumb path={f.path} geometry={f.path === selection ? live : (saved[f.path] ?? GEOMETRY_DEFAULT)} source="filmstrip" />
+            <MarkBadges mark={marks.get(f.path.toLowerCase())} />
             <span className="thumb-name">{f.name}</span>
           </div>
         ))}
@@ -156,6 +207,19 @@ export function Filmstrip() {
         <button role="menuitem" onClick={() => { void platform().reveal(menu.path); setMenu(null); }}>{tz('Show in folder', '在文件夹中显示')}</button>
       </div>}
     </div>
+  );
+}
+
+function MarkBadges({ mark }: { mark?: FrameMark }) {
+  if (!mark) return null;
+  const stars = mark.rating > 0 ? '★'.repeat(mark.rating) : '';
+  if (!stars && mark.flag === 'none' && mark.label === 'none') return null;
+  return (
+    <span className="thumb-badges">
+      {stars && <span className="thumb-badge-stars">{stars}</span>}
+      {mark.flag !== 'none' && <span className={`thumb-badge-flag is-${mark.flag}`}>{mark.flag === 'pick' ? '⚑' : '✕'}</span>}
+      {mark.label !== 'none' && <span className={`thumb-badge-dot is-${mark.label}`} />}
+    </span>
   );
 }
 

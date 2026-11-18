@@ -43,12 +43,17 @@ import { CurveEditor } from './CurveEditor';
 import { unsupportedReason } from './gate';
 import { type LatitudeReply, type PlacementSide, placementMessage } from '@shared/latitude';
 import { edgeEffective, edgeFormat } from '@shared/filmEdge';
+import { setLibraryOpen } from '../state/library';
 
 export function RightRail() {
   const tab = useSettings((s) => s.parametersTab);
   const edited = useSession((s) => shownAdjustments(s).enabled && !isNeutral(shownAdjustments(s)));
   return (
     <aside className="rail right" data-testid="right-rail">
+      <div className="rail-modules" data-testid="rail-modules">
+        <button className="rail-module" onClick={() => setLibraryOpen(true)} data-testid="rail-library">{tz('Library', '图库')}</button>
+        <button className="rail-module is-active" data-testid="rail-develop">{tz('Develop', '修改')}</button>
+      </div>
       <div className="rail-header">{t('railParameters')}</div>
       <SegmentedSwitch
         value={tab}

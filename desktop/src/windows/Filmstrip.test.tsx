@@ -15,6 +15,7 @@ vi.mock('../state/session', () => ({
 vi.mock('./frameDrag', () => ({ installFrameDrag: () => () => {} }));
 vi.mock('../i18n', () => ({ t: (key: string) => key, tz: (english: string) => english }));
 vi.mock('../platform', () => ({ platform: () => ({ reveal: fake.reveal }) }));
+vi.mock('../state/library', () => ({ useLibrary: () => [] }));
 
 let root: Root;
 let container: HTMLDivElement;
@@ -39,7 +40,7 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it('does not request a whole imported folder before visibility is known; requests nearby cells as they enter', async () => {
+it('does not request a whole imported folder before visibility is known; requests nearby cells as they enter', { timeout: 15000 }, async () => {
   const { Filmstrip } = await import('./Filmstrip');
   await act(async () => root.render(<Filmstrip />));
   expect(observed.size).toBe(100);

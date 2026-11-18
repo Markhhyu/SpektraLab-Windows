@@ -135,6 +135,12 @@ async fn write_frame<W: AsyncWrite + Unpin>(writer: &mut W, frame: &[u8], deadli
 
 pub struct HostManager {
     app: AppHandle<Wry>,
+    /// Distinguishes the interactive host from a render-pool worker in logs
+    /// and diagnostics; it never reaches the engine protocol.
+    label: String,
+    /// Pool workers are background processes: their state must not drive the
+    /// window's host-status UI, so they skip the `host-state` event.
+    quiet: bool,
     conn: tokio::sync::Mutex<Option<Conn>>,
     pending: Mutex<Requests>,
     transition: tokio::sync::Mutex<()>,
@@ -150,9 +156,18 @@ pub struct HostManager {
 
 impl HostManager {
     pub fn new(app: AppHandle<Wry>) -> Arc<Self> {
+        Self::new_named(app, "host", false)
+    }
+
+    /// A second host process for the render pool. It shares resolution and
+    /// restart policies with the interactive host but stays out of the UI's
+    /// state stream.
+    pub fn new_named(app: AppHandle<Wry>, label: &str, quiet: bool) -> Arc<Self> {
         let (state_tx, _) = watch::channel(json!({"phase": "starting"}));
         Arc::new(Self {
             app,
+            label: label.to_string(),
+            quiet,
             conn: tokio::sync::Mutex::new(None),
             pending: Mutex::new(Requests::default()),
             transition: tokio::sync::Mutex::new(()),
@@ -173,14 +188,18 @@ impl HostManager {
     pub fn is_busy(&self) -> bool { !self.pending.lock().unwrap().0.is_empty() }
 
     fn set_state(&self, v: Value) {
-        log::info!(target: "host", "state -> {}", v["phase"]);
+        log::info!(target: "host", "{} state -> {}", self.label, v["phase"]);
         self.state_tx.send_replace(v.clone());
-        let _ = self.app.emit("host-state", v);
+        if !self.quiet {
+            let _ = self.app.emit("host-state", v);
+        }
     }
 
     pub fn diagnostics(&self) -> Value {
         let launch = self.launch.lock().unwrap().clone();
         json!({
+            "label": self.label,
+            "pool_worker": self.quiet,
             "state": self.state(),
             "launch": launch.map(|l| json!({
                 "program": l.program.display().to_string(),

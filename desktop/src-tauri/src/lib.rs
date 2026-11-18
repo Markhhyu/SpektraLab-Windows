@@ -7,6 +7,7 @@ pub mod files;
 pub mod framing;
 pub mod host;
 pub mod pairs;
+pub mod pool;
 pub mod frame_cache;
 pub mod agent_files;
 pub mod workspace;
@@ -24,6 +25,8 @@ use host::HostManager;
 
 struct AppState {
     host: Arc<HostManager>,
+    /// Background hosts for pooled batch rendering (no interactive sessions).
+    pool: Arc<pool::HostPool>,
     sidecars: files::SidecarStore,
     /// Paths from the command line (open-with) not yet taken by the webview.
     launch_paths: Mutex<Vec<String>>,
@@ -280,6 +283,53 @@ fn app_paths(app: AppHandle, state: State<'_, AppState>) -> Value {
     })
 }
 
+/// Make sure the render pool has `count` ready background hosts. Called at the
+/// start of a batch, not on app launch: the extra GPU memory is held only
+/// while the batch runs.
+#[tauri::command]
+async fn pool_ensure(app: AppHandle, state: State<'_, AppState>, count: usize) -> Result<Value, String> {
+    state.pool.ensure(&app, count).await
+}
+
+#[tauri::command]
+fn pool_state(state: State<'_, AppState>) -> Value {
+    state.pool.states()
+}
+
+#[tauri::command]
+async fn pool_restart(state: State<'_, AppState>, worker: usize) -> Result<(), String> {
+    state.pool.restart(worker).await
+}
+
+/// One request to a specific pool worker. The reply is the protocol's framing,
+/// exactly like `host_request`, so the webview reuses one decoder.
+#[tauri::command]
+async fn pool_request(
+    state: State<'_, AppState>,
+    worker: usize,
+    method: String,
+    params: Value,
+    timeout_ms: Option<u64>,
+) -> Result<Response, String> {
+    let lease = if matches!(method.as_str(), "cancel" | "ping" | "shutdown") {
+        None
+    } else {
+        Some(state.workspace.enter()?)
+    };
+    let manager = state
+        .pool
+        .worker(worker)
+        .ok_or_else(|| format!("no render-pool worker {worker} (the pool is stopped)"))?;
+    let reply = manager.request(&method, params, Vec::new(), timeout_of(timeout_ms), lease).await;
+    Ok(reply_bytes(reply))
+}
+
+#[tauri::command]
+async fn pool_shutdown(state: State<'_, AppState>) -> Result<(), String> {
+    state.pool.shutdown().await;
+    Ok(())
+}
+
 fn file_args(argv: &[String]) -> Vec<String> {
     argv.iter()
         .skip(1)
@@ -320,6 +370,7 @@ pub fn run() {
             let argv: Vec<String> = std::env::args().collect();
             app.manage(AppState {
                 host: Arc::clone(&host),
+                pool: pool::HostPool::new(),
                 sidecars: files::SidecarStore { dir: sidecar_dir },
                 launch_paths: Mutex::new(file_args(&argv)),
                 frames: Arc::new(frame_cache::FrameCache::new(
@@ -336,8 +387,13 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 if window.label() == "main" {
-                    let host = Arc::clone(&window.state::<AppState>().host);
-                    tauri::async_runtime::block_on(async move { host.shutdown().await });
+                    let state = window.state::<AppState>();
+                    let host = Arc::clone(&state.host);
+                    let pool = Arc::clone(&state.pool);
+                    tauri::async_runtime::block_on(async move {
+                        pool.shutdown().await;
+                        host.shutdown().await;
+                    });
                     diagnostics::clean_exit(window.app_handle());
                 }
             }
@@ -348,6 +404,11 @@ pub fn run() {
             host_state,
             host_diagnostics,
             host_restart,
+            pool_ensure,
+            pool_state,
+            pool_restart,
+            pool_request,
+            pool_shutdown,
             diagnostics::diagnostics_get,
             diagnostics::diagnostics_set,
             diagnostics::diagnostics_clear_logs,

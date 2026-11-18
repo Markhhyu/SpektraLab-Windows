@@ -14,6 +14,7 @@ import { NEW_PHOTO_DEFAULTS, newPhotoSidecar, type NewPhotoDefaults } from '@sha
 import { latitudeRequest } from '@shared/latitude';
 import { tz } from '../i18n';
 import { host } from '../host/client';
+import type { Transport } from '../host/transport';
 import { baseName, dirName, joinPath, platform } from '../platform';
 import { type ExportRecipe, extensionOf, hostFormat, resolveTarget, stem, stockToken } from './recipes';
 
@@ -224,6 +225,9 @@ export interface ExportControl {
   frameOptions?: readonly string[];
   cancelled?: () => boolean;
   active?: (job: ExportJob | null) => void;
+  /** Where to send the job. A batch lane passes one of its pool workers;
+   * ordinary exports use the interactive host. */
+  transport?: Pick<Transport, 'request'>;
 }
 let exportSerial = 0;
 
@@ -279,7 +283,8 @@ export async function exportFrame(
     const decode = decodeWire(f.decode, isRawPath(f.path));
     const job = { session: f.session ?? '', progressId: `export-${Date.now()}-${++exportSerial}` };
     control.active?.(job);
-    const res = await host().transport.request(r.format === 'di' ? 'export_cineon' : 'export_frame', {
+    const transport = control.transport ?? host().transport;
+    const res = await transport.request(r.format === 'di' ? 'export_cineon' : 'export_frame', {
       session: f.session, source_path: f.path, params, decode: decode ?? undefined,
       adjustments: f.adjustments, ...view,
       pair: f.pair,

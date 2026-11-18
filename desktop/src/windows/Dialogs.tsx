@@ -130,6 +130,22 @@ export function SettingsDialog() {
               </div>
             </div>
             <div className="settings-group">
+              <h3>{tz('Batch rendering', '批量渲染')}</h3>
+              <PillMenu
+                label={tz('Render hosts', '渲染进程')}
+                value={st.renderPoolWorkers}
+                options={[1, 2, 3, 4].map((n) => ({ value: n, label: String(n) }))}
+                onChange={(v) => set('renderPoolWorkers', v)}
+                testId="render-pool-workers"
+              />
+              <div className="caption">
+                {tz(
+                  'Extra host processes a batch may render in parallel. They start when an export begins and stop when it ends; each one holds a full engine allocation (roughly 0.5–1 GB of graphics memory), so lower this on a small GPU. A single image, editing and the interactive preview always use the main host.',
+                  '批量导出时可并行使用的额外宿主进程数。导出开始时启动、结束时关闭；每个进程都有完整的引擎分配（约 0.5–1 GB 显存），显卡内存较小时请调低。单张编辑与交互预览始终使用主宿主。',
+                )}
+              </div>
+            </div>
+            <div className="settings-group">
               <h3>{tz('Film effects', '胶片效果')}</h3>
               <ToggleRow
                 label={tz('Crop re-maps the frame', '裁剪重新映射画幅')}

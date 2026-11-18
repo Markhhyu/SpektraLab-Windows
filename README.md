@@ -147,9 +147,10 @@ the short version:
 - Release notes are written in **both Chinese and English**, and list what
   changed in that build. See [`RELEASES.md`](RELEASES.md) for the release
   process and the history.
-- Every code update gets a rebuilt installer and a new release entry; tags
-  follow this repository's own semantic versioning, `v<major>.<minor>.<patch>`
-  (the first release is `v1.0.0`).
+- Small changes land as **commits on `main`**; an installer and a Release are
+  produced when a batch of work is worth shipping. Tags follow this
+  repository's own semantic versioning, `v<major>.<minor>.<patch>` (the first
+  release is `v1.0.0`). [`RELEASES.md`](RELEASES.md) has the checklist.
 
 ## Build from source
 

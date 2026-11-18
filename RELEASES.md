@@ -3,6 +3,10 @@
 This repository ships Windows installers only. Release notes are written in
 **both Chinese and English** and list what changed in that build.
 
+**Cadence.** Small changes land as commits on `main`; do not cut a Release for
+each one. Build the installer and publish a Release when a batch of work is
+worth shipping, keeping the version bump and the asset name in step.
+
 - Tag scheme: `v<major>.<minor>.<patch>` on this repository's own semantic
   version line (the first release is `v1.0.0`). Builds published before the
   switch used `v<upstream version>-win.<n>` (`v1.3.4-beta.3-win.1`, `-win.2`);

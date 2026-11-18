@@ -41,6 +41,9 @@ export interface Settings extends NewPhotoDefaults {
   filmstripCollapsed: boolean;
   leftWidth: number;
   rightWidth: number;
+  /** Background host processes a batch may use. 0/1 keeps the interactive
+   * host only, which is what a machine with little free VRAM wants. */
+  renderPoolWorkers: number;
   filmEdgeBodySeed: number;
   collapsedSections: Record<string, boolean>;
   lastFolder: string | null;
@@ -64,6 +67,7 @@ export const SETTINGS_DEFAULT: Settings = {
   filmstripCollapsed: false,
   leftWidth: 254,
   rightWidth: 288,
+  renderPoolWorkers: 2,
   filmEdgeBodySeed: 0,
   collapsedSections: {},
   lastFolder: null,
@@ -91,6 +95,7 @@ export function loadSettings(storage: Pick<Storage, 'getItem'> | null): Settings
     s.leftWidth = boundedPanelWidth('leftWidth', s.leftWidth);
     s.rightWidth = boundedPanelWidth('rightWidth', s.rightWidth);
     if (!Number.isInteger(s.filmEdgeBodySeed) || s.filmEdgeBodySeed < 0 || s.filmEdgeBodySeed > 2147483647) s.filmEdgeBodySeed = 0;
+    if (!Number.isInteger(s.renderPoolWorkers) || s.renderPoolWorkers < 0 || s.renderPoolWorkers > 4) s.renderPoolWorkers = SETTINGS_DEFAULT.renderPoolWorkers;
     if (!['general', 'rendering', 'memory', 'diagnostics', 'agents'].includes(s.settingsPage)) s.settingsPage = 'general';
     s.recentFolders = (Array.isArray(s.recentFolders) ? s.recentFolders : [])
       .filter((p): p is string => typeof p === 'string' && p.length > 0).slice(0, RECENT_FOLDERS_MAX);

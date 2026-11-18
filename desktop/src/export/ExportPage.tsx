@@ -20,6 +20,8 @@ import { isPairPath } from '@shared/pair';
 import { paintOutput } from '../canvas/colorSpace';
 import { type ExportRecipe, editRecipe, recipeSummary, DEFAULT_RECIPES, NAME_TOKENS, EXPORT_SPACES, type NameToken, decodeRecipes, extensionOf } from './recipes';
 import { captureExportFrames, exportCube, exportFrame, renderProof, hostWrites, outputFor, targetFor, type ExportJob, type ExportOutcome } from './exporter';
+import { runPooled } from './poolBatch';
+import { POOL_MAX_WORKERS, poolAvailable, poolEnsure, poolShutdown, poolTransport } from '../host/pool';
 
 const TOKEN_LABEL: Record<NameToken, () => string> = {
   originalName: () => tz('Org. Name', '原文件名'),
@@ -132,6 +134,10 @@ export function ExportPage() {
   const [sample, setSample] = useState('');
   const stop = useRef(false);
   const active = useRef<ExportJob | null>(null);
+  /** One job per pool lane so Stop reaches every worker, not only the
+   * interactive host's current job. */
+  const laneJobs = useRef(new Map<number, ExportJob>());
+  const laneCount = useRef(0);
   const proof = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -290,14 +296,46 @@ export function ExportPage() {
       lease = await platform().workspaceBegin();
       const prepared = await captureExportFrames(paths, selected, state.catalog, state.gate,
         settingsStore.getState().recalculateEffectsAfterCrop, () => stop.current, settingsStore.getState());
-      for (const item of prepared) {
-        if (stop.current) break;
-        const outcome: ExportOutcome = 'error' in item ? { kind: 'failed', message: item.error }
-          : await exportFrame(recipe, item.frame, state.catalog, methods, {
-            tiffOptions: state.hello?.tiff_options,
-            frameOptions: state.hello?.frame_options,
-            cancelled: () => stop.current, active: (job) => { active.current = job; },
-          });
+      // Batch parallelism: one background host per lane. A pool that cannot
+      // start is not a failed export — the interactive host still works.
+      laneCount.current = 0;
+      laneJobs.current.clear();
+      const wanted = Math.min(POOL_MAX_WORKERS,
+        Math.max(1, Math.floor(settingsStore.getState().renderPoolWorkers || 1)));
+      let workers = 1;
+      if (wanted > 1 && prepared.length > 1 && poolAvailable()) {
+        try {
+          const summary = await poolEnsure(wanted);
+          workers = Math.max(1, summary.workers);
+          laneCount.current = workers;
+          platform().log('info', `render pool: ${workers} worker(s) for ${prepared.length} frame(s)`);
+        } catch (e) {
+          platform().log('warn', `render pool unavailable, exporting on the interactive host: ${String(e)}`);
+        }
+      }
+      const results = await runPooled(prepared, workers, async (item, _index, lane) => {
+        if (stop.current) return null;
+        if ('error' in item) return { kind: 'failed', message: item.error } as ExportOutcome;
+        const transport = workers > 1 ? poolTransport(lane % workers) : undefined;
+        return await exportFrame(recipe, item.frame, state.catalog, methods, {
+          tiffOptions: state.hello?.tiff_options,
+          frameOptions: state.hello?.frame_options,
+          cancelled: () => stop.current,
+          active: (job) => {
+            if (transport) {
+              if (job) laneJobs.current.set(lane, job);
+              else laneJobs.current.delete(lane);
+            } else {
+              active.current = job;
+            }
+          },
+          transport,
+        });
+      });
+      for (let index = 0; index < prepared.length; index++) {
+        const item = prepared[index]!;
+        const outcome = results[index] ?? null;
+        if (!outcome) continue;
         platform().log(outcome.kind === 'failed' ? 'error' : 'info', `export ${baseName(item.path)}: ${JSON.stringify(outcome)}`);
         setLog((l) => [...l, { name: baseName(item.path), outcome }]);
         outcomes.push(outcome);
@@ -312,6 +350,13 @@ export function ExportPage() {
     } finally {
       unsubscribe();
       active.current = null;
+      laneJobs.current.clear();
+      // The pool exists for this batch only: its hosts hold full engine
+      // allocations, and the editor needs that memory back.
+      if (laneCount.current > 1) {
+        await poolShutdown().catch((e) => platform().log('error', `render pool shutdown: ${String(e)}`));
+      }
+      laneCount.current = 0;
       if (lease !== null) await platform().workspaceEnd(lease).catch((e) => platform().log('error', `export lease: ${String(e)}`));
       sessionStore.setState({ batchExporting: false });
       // No stage outlives the batch, whether it finished, failed or was
@@ -325,6 +370,12 @@ export function ExportPage() {
     stop.current = true;
     const job = active.current;
     if (job) void host().cancel(job.session, job.progressId).catch((e) => platform().log('error', `export cancel: ${String(e)}`));
+    // Each pool worker owns its own private frame; the interactive cancel
+    // above cannot see them.
+    for (const [lane, laneJob] of laneJobs.current) {
+      void poolTransport(lane).request('cancel', { session: laneJob.session, progress_id: laneJob.progressId })
+        .catch((e) => platform().log('error', `export cancel (pool ${lane}): ${String(e)}`));
+    }
   };
 
   return (

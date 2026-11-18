@@ -121,6 +121,27 @@ described below.
   ramps to its end side, malformed layers return `bad_request`, and an export
   with a mask differs from one without.
 
+### Batch render pool (unreleased)
+
+- Batch exports can run on up to four **background host processes** instead of
+  the interactive one (`desktop/src-tauri/src/pool.rs`, `HostPool`). Each worker
+  is a normal `spektralab-host` started with `HostManager::new_named(..., quiet)`
+  so its state changes never reach the editor; the pool starts on demand and is
+  shut down when the batch ends, returning the GPU memory.
+- A worker needs no session: `export_frame` accepts `source_path` + `decode`,
+  opens a private frame internally and releases it (`engine/host/main.cpp`).
+  That is what lets four photographs render at once.
+- Tauri commands: `pool_ensure`, `pool_state`, `pool_request`, `pool_restart`,
+  `pool_shutdown` (`src/lib.rs`). `pool_request` takes the same workspace lease
+  as `host_request` for anything except `cancel`/`ping`/`shutdown`.
+- The batch page (`desktop/src/export/ExportPage.tsx`) schedules frozen frames
+  with `runPooled` (`src/export/poolBatch.ts`), one lane per worker, cancels
+  every lane on Stop, and falls back to the interactive host when the pool
+  cannot start. Settings → Rendering → Batch rendering picks 1–4 workers.
+- Verified at the protocol level (`film-validation/bench/probe_pool.py`):
+  three RAW frames sequentially on one host 18.1 s vs concurrently on three
+  hosts 5.8 s (3.1×), VRAM 1.95 → 2.42 GB; frontend 521 tests pass.
+
 ### Packaging
 
 - Static-runtime host build (`-DSPEKTRALAB_STATIC_RUNTIME=ON`; the static

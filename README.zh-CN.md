@@ -103,8 +103,9 @@ Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己
 - 发布用的 host 为**静态链接**（`-DSPEKTRALAB_STATIC_RUNTIME=ON`），只依赖系统 DLL
   （ADVAPI32、KERNEL32、SHELL32、USER32、WS2_32、ole32、UCRT），与原 Windows 测试版一致。
 - Release 说明**中英文各写一份**，列出本次构建的改动。发布流程与历史见 [`RELEASES.md`](RELEASES.md)。
-- 每次代码更新都会重新构建安装包并发布新的 Release；tag 使用本仓库自己的语义化版本
-  `v<主>.<次>.<修订>`（首个版本为 `v1.0.0`），安装包文件名与应用/安装器属性版本保持一致。
+- 小改动以**提交**形式进入 `main`；攒成一批值得发布的改动后，才重新构建安装包并发 Release。
+  tag 使用本仓库自己的语义化版本 `v<主>.<次>.<修订>`（首个版本为 `v1.0.0`），安装包文件名与
+  应用/安装器属性版本保持一致。发布检查单见 [`RELEASES.md`](RELEASES.md)。
 
 ## 从源码构建
 

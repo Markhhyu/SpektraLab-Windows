@@ -31,6 +31,8 @@ export function TopBar() {
   const exportReady = useSession((s) => pairComplete(s));
   const pairReady = useSession(() => canMakePair());
   const status = useSession((s) => s.status);
+  const savingEdits = useSession((s) => s.savingEdits);
+  const lastSavedAt = useSession((s) => s.lastSavedAt);
   const externalConflict = useSession((s) => s.externalEditConflict);
   const view = useSession((s) => s.view);
   const native = useSession((s) => s.nativeSize);
@@ -45,6 +47,8 @@ export function TopBar() {
     'Preview gamut only. Internal working space: ProPhoto RGB. Export uses its own recipe. Display P3 requires browser support; visible colours depend on the display. Unsupported previews use sRGB.',
     '仅切换窗口预览色域。内部工作空间：ProPhoto RGB。导出色域由导出预设决定。Display P3 需要浏览器支持，可见色域取决于显示器；不支持时回退为 sRGB。',
   );
+  const saveLabel = savingEdits ? tz('Saving…', '保存中…')
+    : lastSavedAt ? tz('Saved', '已保存') : tz('Not saved yet', '尚未保存');
   const info = selection
     ? [baseName(selection), native ? `${native.width}×${native.height}` : '', hello?.mock ? 'mock host' : displayLabel].filter(Boolean).join(' · ')
     : '';
@@ -179,6 +183,14 @@ export function TopBar() {
         </div>
       </div>
       <div className="topbar-info">
+        {selection && (
+          <span
+            className={'save-dot' + (savingEdits ? ' is-saving' : lastSavedAt ? ' is-saved' : '')}
+            data-testid="save-state"
+            title={saveLabel}
+            aria-label={saveLabel}
+          />
+        )}
         <span className="bar-status" data-testid="status" title={status || info}>
           {developing ? '⏳ ' : ''}
           {status || info}

@@ -1427,3 +1427,18 @@ input {
   cursor: pointer;
 }
 .histogram-toggle:hover { color: var(--text); }
+
+/* Sidecar save state (UX review D2). */
+.save-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.35;
+  flex: none;
+}
+.save-dot.is-saving { background: var(--accent); opacity: 0.9; animation: save-pulse 1s ease-in-out infinite; }
+.save-dot.is-saved { background: #5cb85c; opacity: 0.9; }
+@keyframes save-pulse {
+  50% { opacity: 0.35; }
+}

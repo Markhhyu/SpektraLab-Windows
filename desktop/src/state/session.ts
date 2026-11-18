@@ -119,6 +119,10 @@ export interface SessionState {
   developing: boolean;
   status: string;
   lastError: string | null;
+  /** A sidecar write is in flight (the status bar dot shows it). */
+  savingEdits: boolean;
+  /** When the current photo's edits were last written to disk. */
+  lastSavedAt: number | null;
   /** Disk edits never silently replace unsaved edits in the current editor. */
   externalEditConflict: boolean;
   latitude: LatitudeState;
@@ -178,6 +182,8 @@ const INITIAL: SessionState = {
   developing: false,
   status: '',
   lastError: null,
+  savingEdits: false,
+  lastSavedAt: null,
   externalEditConflict: false,
   latitude: EMPTY_LATITUDE,
   exposureReadings: [],
@@ -628,6 +634,9 @@ async function refreshThumb() {
 
 // -------------------------------------------------------------- persistence
 
+/** Sidecar writes in flight; the status dot stays "saving" until it hits zero. */
+let savesInFlight = 0;
+
 function scheduleSave() {
   savePending = true;
   saveRevision++;
@@ -648,8 +657,12 @@ export async function flushSave(): Promise<void> {
   if (!s.selection) return;
   const path = s.selection;
   const revision = saveRevision;
+  let wrote = false;
+  savesInFlight += 1;
+  set({ savingEdits: true });
   saveTask = (async () => { try {
     await platform().sidecarSave(path, encodeSidecar(s.sidecar));
+    wrote = true;
     if (get().selection === path) savedDocument = { path, content: sidecarContent(encodeSidecar(s.sidecar)) };
     if (s.pair) {
       const pair = encodePair(s.pair), value = JSON.stringify(pair);
@@ -664,7 +677,11 @@ export async function flushSave(): Promise<void> {
     if (get().selection === s.selection && String(e).includes('EXTERNAL_EDIT_CONFLICT')) markExternalConflict();
     else noteError(tz('Saving settings', '保存设置'), e);
   } })();
-  try { await saveTask; } finally { saveTask = null; }
+  try { await saveTask; } finally {
+    saveTask = null;
+    savesInFlight = Math.max(0, savesInFlight - 1);
+    if (savesInFlight === 0) set({ savingEdits: false, ...(wrote ? { lastSavedAt: Date.now() } : {}) });
+  }
 }
 
 function markExternalConflict() {
@@ -1917,6 +1934,7 @@ export async function select(path: string, options: { externalReload?: boolean; 
     picked: get().picked.includes(path) ? get().picked : [path],
     sidecar,
     externalEditConflict: false, lastError: null,
+    lastSavedAt: null, savingEdits: savesInFlight > 0,
     pair, pairInfo: null, pairLayer: 'film', pairPlacing: false,
     nativeSize: null,
     metadata: null,

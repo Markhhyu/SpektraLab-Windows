@@ -168,6 +168,15 @@ export function TopBar() {
             <SidebarRight />
           </button>
         </div>
+        <div className="topbar-group">
+          <button
+            className="icon-btn topbar-help"
+            title={tz('Keyboard shortcuts (?)', '键盘快捷键（?）')}
+            aria-label={tz('Keyboard shortcuts', '键盘快捷键')}
+            onClick={() => setPages({ shortcutsOpen: true })}
+            data-testid="topbar-help"
+          >?</button>
+        </div>
       </div>
       <div className="topbar-info">
         <span className="bar-status" data-testid="status" title={status || info}>

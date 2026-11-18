@@ -430,7 +430,7 @@ export interface FeatureGate {
   dateImprint: boolean;
   /** Settings ▸ Rendering: RFC-028 §10 blue compensation. */
   diBlueCompensation: boolean;
-  /** FeatureFlags.toneMask on macOS: withdrawn, so never on the wire. */
+  /** The Tone Mask rides on the same host capability as contrast_mask. */
   toneMask: boolean;
 }
 export const ALL_FEATURES: FeatureGate = {
@@ -441,7 +441,7 @@ export const ALL_FEATURES: FeatureGate = {
   overscan: true,
   dateImprint: true,
   diBlueCompensation: false,
-  toneMask: false,
+  toneMask: true,
 };
 
 export function featureGate(unsupported: readonly string[] | undefined, diBlue = false, noFilm = false): FeatureGate {
@@ -454,7 +454,9 @@ export function featureGate(unsupported: readonly string[] | undefined, diBlue =
     overscan: !u.has('overscan'),
     dateImprint: !u.has('date_imprint'),
     diBlueCompensation: diBlue,
-    toneMask: false,
+    // The Tone Mask is the contrast mask node: gate it on the same capability
+    // the host advertises (it is implemented on Windows Vulkan now).
+    toneMask: !u.has('contrast_mask'),
   };
 }
 

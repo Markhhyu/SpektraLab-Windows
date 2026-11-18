@@ -8,6 +8,7 @@ import { ALL_FEATURES } from '@shared/params';
 import { encodeSidecar, newSidecar } from '@shared/sidecar';
 import { EMPTY_CATALOG } from '@shared/stocks';
 
+const libState = vi.hoisted(() => ({ entries: [] as unknown[], open: false }));
 const fake = vi.hoisted(() => ({
   select: vi.fn(), request: vi.fn(), renderProof: vi.fn(), cancel: vi.fn(), probe: vi.fn(), sidecarLoad: vi.fn(),
   ensureDir: vi.fn(), pathExists: vi.fn(), log: vi.fn(), storeRead: vi.fn(), storeWrite: vi.fn(), pickFolder: vi.fn(), paint: vi.fn(),
@@ -27,6 +28,13 @@ vi.mock('../host/client', () => ({ host: () => ({ transport: { request: fake.req
 vi.mock('../platform', async (original) => ({ ...await original<typeof PlatformModule>(), platform: () => fake }));
 vi.mock('../canvas/output', () => ({ useOutput: () => fake.output }));
 vi.mock('../canvas/colorSpace', () => ({ paintOutput: fake.paint }));
+vi.mock('../state/library', () => {
+  const lib = libState;
+  return {
+    libraryStore: { getState: () => ({ catalog: { entries: lib.entries } }) },
+    setLibraryOpen: (v: boolean) => { lib.open = v; },
+  };
+});
 vi.mock('../windows/Filmstrip', () => ({ Thumb: () => null }));
 vi.mock('../controls/controls', () => ({
   Section: ({ children }: { children: ReactNode }) => <section>{children}</section>,
@@ -81,6 +89,8 @@ beforeEach(() => {
   fake.message.mockResolvedValue(undefined);
   fake.confirm.mockResolvedValue(false);
   fake.reveal.mockResolvedValue(undefined);
+  libState.entries = [];
+  libState.open = false;
   sessionStore.setState({ exportOpen: true, picked: ['D:/photos/b.NEF', 'D:/photos/a.NEF'],
     selection: 'D:/photos/a.NEF', engineSession: 'editor', batchExporting: false, developing: false, redecoding: false,
     nativeSize: { width: 6000, height: 4000 }, metadata: {}, gate: structuredClone(ALL_FEATURES),
@@ -269,6 +279,16 @@ describe('export progress and completion', () => {
     expect(text).toContain('Folder: D:/out');
     expect(fake.reveal).toHaveBeenCalledExactlyOnceWith('D:/out/image.jpg');
     expect(fake.message).not.toHaveBeenCalled();
+  });
+  it('offers the Library after a finished batch when the catalogue has photographs', async () => {
+    libState.entries = [{}];
+    fake.confirm.mockResolvedValue(true);
+    await mount(); await click(run()); await settle();
+    expect(fake.confirm).toHaveBeenCalledTimes(2);
+    expect(fake.confirm.mock.calls[1]![0]).toBe('Back to the Library?');
+    expect(libState.open).toBe(true);
+    const { setPages } = await import('../state/session');
+    expect(setPages).toHaveBeenCalledWith({ exportOpen: false });
   });
   it('warns about a failed frame, and only informs when nothing was written', async () => {
     fake.request.mockRejectedValueOnce(new Error('disk full')).mockResolvedValueOnce(reply());

@@ -228,7 +228,7 @@ function FilmSection() {
         },
       ]}
     >
-      <StockList rows={rows} selected={film} onSelect={selectFilmStock} testId="film-list" />
+      <StockList rows={rows} selected={film} onSelect={selectFilmStock} testId="film-list" searchPlaceholder={tz('Search films…', '搜索胶片…')} />
       {noFilm && <p className="caption" data-testid="no-film-state">{supportsBypass
         ? tz('Film simulation is off. Post-processing and crop still apply.', '已关闭胶片模拟，后期调整与裁剪仍然生效。')
         : tz('This engine cannot show this saved source view. Choose a film to restore simulation.', '当前引擎无法显示保存的无胶片视图，请选择胶片以恢复模拟。')}</p>}
@@ -366,6 +366,7 @@ function PrintSection() {
         rows={rows}
         selected={selected}
         testId="paper-list"
+        searchPlaceholder={tz('Search papers…', '搜索相纸…')}
         onSelect={(id) => {
           if (id === POSITIVE_ID) setParams((q) => ({ ...q, scanFilm: true, digitalIntermediate: false }));
           else if (id === DIGITAL_ID) setParams((q) => ({ ...q, scanFilm: false, digitalIntermediate: true }));

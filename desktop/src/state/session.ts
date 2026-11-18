@@ -144,6 +144,8 @@ export interface SessionState {
   exportOpen: boolean;
   settingsOpen: boolean;
   aboutOpen: boolean;
+  /** The `?` shortcut reference page. */
+  shortcutsOpen: boolean;
   batchExporting: boolean;
 }
 
@@ -193,6 +195,7 @@ const INITIAL: SessionState = {
   exportOpen: false,
   settingsOpen: false,
   aboutOpen: false,
+  shortcutsOpen: false,
   batchExporting: false,
 };
 
@@ -2313,7 +2316,7 @@ export function setComparePosition(p: number) {
   if (v !== get().comparePosition) set({ comparePosition: v });
 }
 
-export function setPages(p: Partial<Pick<SessionState, 'exportOpen' | 'settingsOpen' | 'aboutOpen' | 'batchExporting' | 'clipboardGroups'>>) {
+export function setPages(p: Partial<Pick<SessionState, 'exportOpen' | 'settingsOpen' | 'aboutOpen' | 'shortcutsOpen' | 'batchExporting' | 'clipboardGroups'>>) {
   if (p.exportOpen && !pairComplete()) { set({ status: tz('Fill both frames before exporting this pair.', '请先在两格中都放入照片，再导出拼接。') }); return; }
   set(p);
   if (get().batchExporting || get().exportOpen) foregroundWork(); else resumePreviewsWhenIdle();

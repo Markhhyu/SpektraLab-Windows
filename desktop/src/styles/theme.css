@@ -264,8 +264,16 @@ input {
   flex: none;
   white-space: nowrap;
 }
+.topbar-group + .topbar-group {
+  padding-left: 10px;
+  border-left: 1px solid var(--rule);
+}
 .topbar-process-group { gap: 10px; }
 .topbar-display-group { margin-left: auto; }
+.topbar-help {
+  width: 24px;
+  font-weight: 600;
+}
 .topbar-info {
   display: flex;
   align-items: center;
@@ -747,6 +755,59 @@ input {
 }
 
 /* stock lists */
+.stock-picker {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--ui-scale));
+  min-width: 0;
+}
+.stock-search {
+  height: 20px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-small);
+}
+.stock-search:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.stock-recent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.stock-recent-label {
+  color: var(--dim);
+  font-size: var(--fs-small);
+}
+.stock-chip {
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.stock-chip:hover {
+  border-color: var(--dim);
+}
+.stock-chip.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.stock-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .stock-list {
   display: flex;
   flex-direction: column;
@@ -1204,3 +1265,40 @@ input {
 .thumb-badge-dot.is-green { background: #6fcf7f; }
 .thumb-badge-dot.is-blue { background: #5b9ee8; }
 .thumb-badge-dot.is-purple { background: #b487e0; }
+
+/* the ? shortcut reference */
+.shortcut-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 22px;
+  overflow: auto;
+  padding: 2px 2px 6px;
+}
+.shortcut-group h3 {
+  margin: 4px 0 6px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.shortcut-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 0;
+  font-size: var(--fs-small);
+  color: var(--dim);
+}
+.shortcut-row kbd {
+  flex: 0 0 116px;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs-small) - 1px);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-align: center;
+  white-space: nowrap;
+}

@@ -10,6 +10,7 @@ import { Checkbox, NumberField, PillMenu, ScrubSlider, Section } from '../contro
 import { t, tz } from '../i18n';
 import { platform, baseName, dirName } from '../platform';
 import { sessionStore, setPages, useSession } from '../state/session';
+import { libraryStore, setLibraryOpen } from '../state/library';
 import { settingsStore } from '../state/settings';
 import { host, type ProofReply } from '../host/client';
 import { hostMessage } from '../host/messages';
@@ -79,6 +80,18 @@ export async function reportFinished(outcomes: readonly ExportOutcome[]): Promis
     `${lines.join('\n')}\n\n${tz('Show the files in their folder?', '是否在文件夹中显示这些文件？')}`,
     failed.length ? 'warning' : 'info');
   if (show) await platform().reveal(written[0].path);
+  // Close the loop on the workflow: after a batch, the person usually either
+  // goes back to the Library to pick the next frame or stays on this one.
+  if (libraryStore.getState().catalog.entries.length > 0) {
+    const back = await platform().confirm(tz('Back to the Library?', '回到图库？'), tz(
+      'Yes opens the Library with the current selection. No keeps editing this photograph.',
+      '是：回到图库并保留当前选中。否：留在修改页继续编辑这张照片。',
+    ), 'info');
+    if (back) {
+      setPages({ exportOpen: false });
+      setLibraryOpen(true);
+    }
+  }
 }
 
 async function loadRecipes(): Promise<ExportRecipe[]> {

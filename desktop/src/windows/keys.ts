@@ -77,6 +77,8 @@ export function shortcutTable(): Record<string, Action> {
     'ctrl+alt+]': geo((g) => turned(g, 1)),
     'ctrl+alt+r': () => void restartHost(),
     'ctrl+,': () => setPages({ settingsOpen: true }),
+    '?': () => setPages({ shortcutsOpen: !sessionStore.getState().shortcutsOpen }),
+    'ctrl+/': () => setPages({ shortcutsOpen: !sessionStore.getState().shortcutsOpen }),
     f11: () => void platform().toggleFullscreen(),
     // Capture One's single keys.
     v: () => setTool('select'),
@@ -95,6 +97,7 @@ export function shortcutTable(): Record<string, Action> {
       if (s.exportOpen && !s.batchExporting) setPages({ exportOpen: false });
       else if (s.settingsOpen) setPages({ settingsOpen: false });
       else if (s.aboutOpen) setPages({ aboutOpen: false });
+      else if (s.shortcutsOpen) setPages({ shortcutsOpen: false });
       else if (s.tool === 'crop' || s.tool === 'neutral' || s.pairPlacing) setTool('select');
       else setOriginal(false);
     },
@@ -120,7 +123,7 @@ export function installKeys(menuOwns: Set<string> = new Set()): () => void {
     // Pages over the editor take only their own keys (and Escape).
     const s = sessionStore.getState();
     const c = chord(e);
-    if ((s.exportOpen || s.settingsOpen || s.aboutOpen) && c !== 'escape' && !c.startsWith('ctrl+')) return;
+    if ((s.exportOpen || s.settingsOpen || s.aboutOpen || s.shortcutsOpen) && c !== 'escape' && c !== '?' && c !== 'ctrl+/' && !c.startsWith('ctrl+')) return;
     if (s.batchExporting && c !== 'f11') return;
     // A held Delete must not empty the roll one frame per repeat.
     if (e.repeat && c === 'delete') { e.preventDefault(); return; }

@@ -13,6 +13,7 @@ import { recomputeFilmFormat, requestPrint, setPages, useSession, sessionStore }
 import { INTERFACE_SCALES, PREVIEW_EDGES, settingsStore, useSettings, SETTINGS_DEFAULT } from '../state/settings';
 import { featureGate } from '@shared/params';
 import { AgentsSettings, MemorySettings, UpdateSettings } from './SettingsPages';
+import { SHORTCUT_GROUPS } from './shortcuts';
 import { diagnosticReport } from './diagnosticReport';
 import { DiagnosticSettings } from './DiagnosticSettings';
 import { NewPhotoDefaultsSettings } from './NewPhotoDefaultsSettings';
@@ -249,7 +250,7 @@ export function AboutDialog() {
     <Frame open={open} onClose={() => setPages({ aboutOpen: false })} title="SpektraLab" testId="about">
       <div className="dialog-body">
         <p>
-          {tz('Version', '版本')} {paths?.version ?? '1.5.0'} — {tz('film and print emulation built on the spektrafilm engine.', '基于 spektrafilm 引擎的胶片与相纸模拟。')}
+          {tz('Version', '版本')} {paths?.version ?? '1.6.0'} — {tz('film and print emulation built on the spektrafilm engine.', '基于 spektrafilm 引擎的胶片与相纸模拟。')}
         </p>
         <p className="caption">
           {tz(
@@ -331,5 +332,31 @@ export function HostFailure() {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+// ------------------------------------------------------- keyboard reference
+
+/** The `?` page: every shortcut the table in keys.ts honours, grouped like the
+ *  menus. Pure reference — changing behaviour means changing keys.ts too. */
+export function ShortcutsDialog() {
+  const open = useSession((s) => s.shortcutsOpen);
+  return (
+    <Frame open={open} onClose={() => setPages({ shortcutsOpen: false })} title={tz('Keyboard shortcuts', '键盘快捷键')} testId="shortcuts">
+      <div className="shortcut-groups">
+        {SHORTCUT_GROUPS.map((g) => (
+          <section key={g.en} className="shortcut-group">
+            <h3>{tz(g.en, g.zh)}</h3>
+            {g.items.map((it) => (
+              <div key={it.keys} className="shortcut-row">
+                <kbd>{it.keys}</kbd>
+                <span>{tz(it.en, it.zh)}</span>
+              </div>
+            ))}
+          </section>
+        ))}
+      </div>
+      <p className="caption">{tz('Shortcuts for the photo editor. Library and Develop pages keep their own keys while focused.', '照片编辑器的快捷键；图库页与修改页在聚焦时使用各自的按键。')}</p>
+    </Frame>
   );
 }

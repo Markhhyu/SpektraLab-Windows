@@ -10,6 +10,8 @@ import { cameraParams, cameraExposureBaseline, cameraExposureTotal, setCameraMet
 import { settingsStore, useSettings } from '../state/settings';
 import {
   type AEMethod,
+  CONTRAST_MASK_DEFAULT,
+  CONTRAST_MASK_SCALE,
   DEVELOPMENT_DEFAULT,
   DEVELOPMENT_PUSH_RANGE,
   DEVELOPMENT_TEMPERATURE_RANGE,
@@ -80,6 +82,7 @@ export function RightRail() {
             <ExposureSection />
             <CurveSection />
             <ColorBalanceSection />
+            <ToneMaskSection />
           </>
         )}
       </div>
@@ -715,3 +718,88 @@ function HueWheel({ zone, onChange }: { zone: ColorZone; onChange: (z: Partial<C
     </div>
   );
 }
+
+// -------------------------------------------------------------- Tone Mask
+
+/** P0-1: the Tone Mask is a print-side local contrast node. It is enabled by
+ *  the host's `contrast_mask` capability; the engine ignores it unless print
+ *  effects are on, so the toggle explains that rather than silently refusing. */
+function ToneMaskSection() {
+  const p = useSession((s) => s.sidecar.params);
+  const gate = useSession((s) => s.gate);
+  const reason = unsupportedReason('contrast_mask', gate.contrastMask);
+  const m = p.contrastMask;
+  const setM = (patch: Partial<typeof m>) => setParams((q) => ({ ...q, contrastMask: { ...q.contrastMask, ...patch } }));
+  const printOff = !p.printEffects;
+  const disabled = !!reason || printOff;
+  const why = printOff ? t('reasonPrintEffectsOff') : (reason ?? undefined);
+  const radiusPercent = m.scale * 100;
+  return (
+    <Section
+      id="toneMask"
+      title={t('sectionToneMask')}
+      onReset={() => setM(CONTRAST_MASK_DEFAULT)}
+      resetHelp={t('helpResetToneMask')}
+      unsupported={reason}
+    >
+      <ToggleRow
+        label={t('maskEnable')}
+        on={m.active}
+        disabled={disabled}
+        reason={why}
+        onChange={(v) => setM({ active: v })}
+        testId="mask-toggle"
+      />
+      <p className="caption">{t('maskCurveCaption')}</p>
+      <ScrubSlider
+        label={t('maskHighlights')}
+        value={m.highlights}
+        range={[0, 3]}
+        zero={0}
+        snap={0.1}
+        format={(v) => v.toFixed(2)}
+        disabled={!m.active || disabled}
+        reason={why}
+        onChange={(v) => setM({ highlights: v })}
+        testId="mask-highlights"
+      />
+      <ScrubSlider
+        label={t('maskShadows')}
+        value={m.shadows}
+        range={[0, 3]}
+        zero={0}
+        snap={0.1}
+        format={(v) => v.toFixed(2)}
+        disabled={!m.active || disabled}
+        reason={why}
+        onChange={(v) => setM({ shadows: v })}
+        testId="mask-shadows"
+      />
+      <ScrubSlider
+        label={t('maskCore')}
+        value={m.core}
+        range={[0, 3]}
+        zero={1}
+        snap={0.1}
+        format={(v) => v.toFixed(2)}
+        disabled={!m.active || disabled}
+        reason={why}
+        onChange={(v) => setM({ core: v })}
+        testId="mask-core"
+      />
+      <ScrubSlider
+        label={t('maskRadius')}
+        value={radiusPercent}
+        range={[CONTRAST_MASK_SCALE[0] * 100, CONTRAST_MASK_SCALE[1] * 100]}
+        zero={3}
+        snap={0.1}
+        format={(v) => v.toFixed(1) + ' %'}
+        disabled={!m.active || disabled}
+        reason={why}
+        onChange={(v) => setM({ scale: v / 100 })}
+        testId="mask-radius"
+      />
+    </Section>
+  );
+}
+

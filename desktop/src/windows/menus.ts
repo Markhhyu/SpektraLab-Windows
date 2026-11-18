@@ -227,6 +227,7 @@ async function rebuild(): Promise<void> {
     await item(tz('Crop  (C)', '裁剪  (C)'), () => setTool('crop')),
   ]);
   const help = await submenu(tz('&Help', '帮助(&H)'), [
+    await item(tz('Keyboard Shortcuts…', '键盘快捷键…'), () => setPages({ shortcutsOpen: true }), 'CmdOrCtrl+/'),
     await item(tz('About SpektraLab', '关于 SpektraLab'), () => setPages({ aboutOpen: true })),
     await item(tz('Show Logs', '显示日志'), () => void platform().appPaths().then((p) => platform().reveal(p.logs))),
   ]);

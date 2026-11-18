@@ -35,6 +35,11 @@ export function browserPlatform(): Platform {
     listImages: async (dir) => entries(dir),
     expandPaths: async (paths) =>
       paths.flatMap((p) => (/\.[a-z0-9]+$/i.test(p) ? [{ path: p, name: p.split('/').pop()!, size: 1, mtime_ms: 0 }] : entries(p))),
+    async renameImage(from, to) {
+      // The browser mock roll is fixed; renaming only has to be observable.
+      if (!from || !to) throw new Error('renameImage needs two paths');
+      if (from === to) return;
+    },
     async sidecarLoad(image) {
       const v = ls()?.getItem('sidecar:' + image);
       return v ? JSON.parse(v) : null;

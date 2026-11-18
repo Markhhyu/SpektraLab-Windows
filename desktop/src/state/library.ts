@@ -30,6 +30,7 @@ import {
   filterEntries,
   folderContains,
   removeEntries,
+  renameEntry,
   renameCollection,
   renameSmartCollection,
   setCollectionMembership,
@@ -37,7 +38,7 @@ import {
   sourceEntries,
   updateEntries,
 } from '@shared/catalog';
-import { type FileEntry, baseName, platform } from '../platform';
+import { type FileEntry, baseName, joinPath, platform } from '../platform';
 import { displayImage, host } from '../host/client';
 import type { RgbaImage } from '../host/client';
 import type { ImageInfo, ProbeResult } from '@shared/protocol';
@@ -330,6 +331,58 @@ export async function removeFromCatalog(paths: string[] = store().selection): Pr
   const thumbs = { ...store().thumbs };
   for (const path of paths) delete thumbs[path];
   set({ catalog: removeEntries(store().catalog, paths), thumbs, selection: [], anchor: null });
+  await persist();
+}
+
+
+/** Rename one photograph on disk; the catalog, sidecar and preview follow it. */
+export async function renameEntryFile(path: string, newName: string): Promise<void> {
+  const name = newName.trim();
+  if (!name) return;
+  if (/[\\/:*?"<>|]/.test(name)) {
+    set({ error: 'File names cannot contain \\ / : * ? " < > |.' });
+    return;
+  }
+  const entry = store().catalog.entries.find((e) => e.path === path);
+  if (!entry) {
+    set({ error: 'This photograph is not in the catalog.' });
+    return;
+  }
+  // Renaming the open frame would leave the editor writing to the old path.
+  const session = await import('./session');
+  if (session.sessionStore.getState().selection === path) {
+    set({ error: 'Close the photograph in Develop before renaming it.' });
+    return;
+  }
+  const extension = entry.name.match(/\.[^.]+$/)?.[0] ?? '';
+  let target = joinPath(entry.folder, name);
+  if (extension && !target.toLowerCase().endsWith(extension.toLowerCase())) target += extension;
+  if (target.toLowerCase() === path.toLowerCase()) return;
+  set({ error: null });
+  try {
+    await platform().renameImage(path, target);
+  } catch (e) {
+    set({ error: `Could not rename: ${String(e)}` });
+    return;
+  }
+  // The preview store is keyed by path, so move it with the file.
+  const dataUrl = store().thumbs[path];
+  if (dataUrl) {
+    try {
+      const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      await platform().catalogThumbSave(target, bytes);
+      await platform().catalogThumbRemove(path).catch(() => undefined);
+    } catch {
+      // A missing preview is recoverable: hydration regenerates it.
+    }
+  }
+  const thumbs = { ...store().thumbs };
+  delete thumbs[path];
+  if (dataUrl) thumbs[target] = dataUrl;
+  const selection = store().selection.map((p) => (p === path ? target : p));
+  const anchor = store().anchor === path ? target : store().anchor;
+  set({ catalog: renameEntry(store().catalog, path, target), thumbs, selection, anchor });
   await persist();
 }
 

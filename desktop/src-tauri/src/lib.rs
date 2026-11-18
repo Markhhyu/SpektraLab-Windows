@@ -102,6 +102,21 @@ async fn host_restart(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+
+/// Rename one photograph on disk. The sidecar store follows a moved file by
+/// its fingerprint, so the edit history and the catalog entry are migrated by
+/// the caller (sidecar_load on the new path); thumbs are keyed by path and are
+/// migrated by the front end.
+#[tauri::command]
+fn rename_image(from: String, to: String) -> Result<(), String> {
+    let source = PathBuf::from(&from);
+    let target = PathBuf::from(&to);
+    if !source.exists() { return Err(format!("unknown_path: {from}")); }
+    if target.exists() { return Err(format!("already_exists: {to}")); }
+    std::fs::rename(&source, &target).map_err(|e| format!("io_error: {e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 fn list_images(dir: String) -> Result<Vec<files::Entry>, String> {
     files::list_images(&PathBuf::from(dir))
@@ -415,6 +430,7 @@ pub fn run() {
             diagnostics::diagnostics_save_bundle,
             list_images,
             expand_paths,
+            rename_image,
             sidecar_load,
             sidecar_save,
             sidecar_path,

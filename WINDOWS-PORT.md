@@ -124,6 +124,11 @@ described below.
   threads; strips are independent and writes stay in order). The 32.95 MP
   tiff16 export dropped from ~2.9 s to ~0.96 s on the reference machine, with
   byte-identical pixels on decode.
+- The Library can rename a photograph in place from the metadata panel: the
+  original file moves, its sidecar edits follow the fingerprint, the preview
+  moves with it and collections keep tracking the photo. Renaming the frame
+  that is open in Develop is refused, and a name clash is reported without
+  touching the file.
 
 ### Local adjustments (v1.8.0)
 

@@ -13,6 +13,7 @@ export function tauriPlatform(): Platform {
     kind: 'tauri',
     listImages: (dir) => invoke<FileEntry[]>('list_images', { dir }),
     expandPaths: (paths) => invoke<FileEntry[]>('expand_paths', { paths }),
+    renameImage: (from, to) => invoke<void>('rename_image', { from, to }),
     sidecarLoad: (image) => invoke<unknown | null>('sidecar_load', { image }),
     sidecarSave: (image, sidecar) => invoke<string>('sidecar_save', { image, sidecar }),
     sidecarPath: (image) => invoke<string>('sidecar_path', { image }),

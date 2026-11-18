@@ -417,6 +417,20 @@ export function updateEntries(
   };
 }
 
+/** Follow a rename of the original on disk through the catalog and collections. */
+export function renameEntry(catalog: Catalog, fromPath: string, toPath: string): Catalog {
+  const from = fromPath.toLowerCase();
+  return {
+    ...catalog,
+    entries: catalog.entries.map((e) => (e.path.toLowerCase() === from
+      ? { ...e, path: toPath, name: baseNameOf(toPath) }
+      : e)),
+    collections: catalog.collections.map((c) => (c.paths.includes(from)
+      ? { ...c, paths: [...new Set(c.paths.map((p) => (p === from ? toPath.toLowerCase() : p)))] }
+      : c)),
+  };
+}
+
 /** Remove entries (never the originals), their collection memberships and empty folder rows. */
 export function removeEntries(catalog: Catalog, paths: readonly string[]): Catalog {
   const targets = new Set(paths.map((p) => p.toLowerCase()));

@@ -15,6 +15,7 @@ import {
   folderContains,
   keywordGroups,
   removeEntries,
+  renameEntry,
   sortEntries,
   updateEntries,
   FILTERS_DEFAULT,
@@ -107,6 +108,14 @@ describe('catalog', () => {
     });
     expect(sortEntries(marked, { key: 'captured', descending: true }).map((e) => e.name)).toEqual(['one.ARW', 'three.ARW', 'two.ARW']);
     expect(sortEntries(marked, { key: 'captured', descending: false }).map((e) => e.name)).toEqual(['two.ARW', 'three.ARW', 'one.ARW']);
+  });
+
+  it('follows a rename through the entries and collections', () => {
+    const base = addImportedFiles(emptyCatalog(), 'C:\\A', [file('C:\\A\\one.ARW'), file('C:\\A\\two.ARW')], 1).catalog;
+    const kept = createCollection(base, 'Keep', [base.entries[0]!.path.toLowerCase()], 2).catalog;
+    const renamed = renameEntry(kept, 'C:\\A\\one.ARW', 'C:\\A\\renamed.ARW');
+    expect(renamed.entries.map((e) => e.name)).toContain('renamed.ARW');
+    expect(renamed.collections[0]?.paths).toEqual(['c:\\a\\renamed.arw']);
   });
 
   it('groups folders and keywords for the sidebar', () => {

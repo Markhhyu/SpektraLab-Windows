@@ -25,6 +25,7 @@ import {
   refreshEditedBadges,
   removeFromCatalog,
   removeSelectionFromCollection,
+  renameEntryFile,
   renameCollectionById,
   renameSmartCollectionById,
   selectAll,
@@ -108,6 +109,8 @@ function MetadataPanel({ entries, selection }: { entries: CatalogEntry[]; select
   const [title, setTitle] = useState('');
   const [caption, setCaption] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [renameName, setRenameName] = useState('');
 
   useEffect(() => {
     setTitle(single?.title ?? '');
@@ -195,6 +198,10 @@ function MetadataPanel({ entries, selection }: { entries: CatalogEntry[]; select
         <div><span>{tz('Modified', '修改时间')}</span><b>{formatDate(single.mtimeMs)}</b></div>
         <div><span>{tz('Imported', '导入时间')}</span><b>{formatDate(single.importedAt)}</b></div>
       </div>
+      <button className="library-btn library-meta-wide" data-testid="library-rename" onClick={() => { setRenameName(single.name); setRenaming(true); }}>
+        {tz('Rename on disk…', '重命名文件…')}
+      </button>
+      <div className="library-meta-hint">{tz('Renames the original file in place; sidecar edits and the preview follow it.', '就地重命名原文件；修改记录与预览会随文件迁移。')}</div>
       <label className="library-meta-field">
         {tz('Title', '标题')}
         <input value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); }} data-testid="library-meta-title" />
@@ -252,6 +259,30 @@ function MetadataPanel({ entries, selection }: { entries: CatalogEntry[]; select
       <button className="library-btn library-meta-wide" disabled={selection.length < 2} onClick={() => void syncDevelopSettings()} data-testid="library-sync">
         {tz('Sync Settings', '同步修改设置')}
       </button>
+      {renaming && (
+        <div className="library-modal-backdrop" data-testid="library-rename-dialog" onClick={() => setRenaming(false)}>
+          <div className="library-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="library-modal-title">{tz('Rename photograph', '重命名照片')}</div>
+            <div className="library-modal-body">
+              <input
+                className="library-rename-input"
+                value={renameName}
+                autoFocus
+                onChange={(e) => setRenameName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { void renameEntryFile(single.path, renameName); setRenaming(false); } }}
+                data-testid="library-rename-input"
+              />
+              <div className="library-meta-hint">{tz('The extension is kept when you leave it out.', '不写扩展名时沿用原扩展名。')}</div>
+            </div>
+            <div className="library-modal-actions">
+              <button className="library-btn" onClick={() => setRenaming(false)}>{tz('Cancel', '取消')}</button>
+              <button className="library-btn is-primary" data-testid="library-rename-confirm" onClick={() => { void renameEntryFile(single.path, renameName); setRenaming(false); }}>
+                {tz('Rename', '重命名')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

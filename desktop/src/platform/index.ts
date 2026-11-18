@@ -27,6 +27,8 @@ export interface Platform {
   readonly kind: 'tauri' | 'browser';
   listImages(dir: string): Promise<FileEntry[]>;
   expandPaths(paths: string[]): Promise<FileEntry[]>;
+  /** Rename a photograph on disk. The caller migrates the catalog and thumbs. */
+  renameImage(from: string, to: string): Promise<void>;
   sidecarLoad(image: string): Promise<unknown | null>;
   sidecarSave(image: string, sidecar: unknown): Promise<string>;
   sidecarPath(image: string): Promise<string>;

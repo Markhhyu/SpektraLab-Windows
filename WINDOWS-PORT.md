@@ -138,6 +138,9 @@ described below.
   module, so "develop" no longer means both the film development stage and the
   whole edit page; the solve action is "Solve" / "配光" and the meter-and-balance
   action is "Meter and balance" / "测光与配光".
+- The side rails narrow on smaller windows (254/288 px at 1500+ px wide,
+  stepping down to 188/216 px under 1120 px, so the canvas keeps a usable
+  width on laptop displays; both rails still collapse from the canvas bar.
 
 ### Local adjustments (v1.8.0)
 

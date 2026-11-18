@@ -137,7 +137,7 @@ try {
     # compiler's runtime next to the engine, including libstdc++'s pthread DLL.
     $runtimeManifest = @()
     $runtimeNames = @('libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll')
-    if ($NativeRaw) { $runtimeNames += 'libgomp-1.dll' }
+    if ($NativeRaw -and $env:SPEKTRALAB_CI_NO_OPENMP -ne '1') { $runtimeNames += 'libgomp-1.dll' }
     # libgomp on this toolchain imports libdl; without it the RAW tests exit
     # with STATUS_DLL_NOT_FOUND unless the compiler bin directory is on PATH.
     if (Test-Path -LiteralPath (Join-Path $compilerDirectory 'libdl.dll') -PathType Leaf) {

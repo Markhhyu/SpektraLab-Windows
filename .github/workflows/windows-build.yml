@@ -54,17 +54,58 @@ jobs:
         shell: pwsh
         run: engine/setup-libraw.ps1 -DependencyDirectory ..\deps
 
+      - name: Locate the MSYS2 toolchain
+        shell: pwsh
+        run: |
+          # setup-msys2 with cache: true extracts the cached image into the
+          # checkout as msys64\, so the prefix is workspace-relative on the
+          # hosted runner even though a local install would live in C:\msys64.
+          $roots = @((Join-Path $env:GITHUB_WORKSPACE 'msys64'), 'C:\msys64')
+          $root = $roots | Where-Object {
+            Test-Path -LiteralPath (Join-Path $_ 'mingw64\include\vulkan\vulkan.h')
+          } | Select-Object -First 1
+          if (-not $root) {
+            foreach ($candidate in $roots) {
+              Write-Host "candidate: $candidate exists=$(Test-Path -LiteralPath $candidate)"
+              if (Test-Path -LiteralPath $candidate) {
+                Get-ChildItem -LiteralPath $candidate -Force |
+                  Select-Object -First 6 | ForEach-Object { Write-Host "  $($_.Name)" }
+              }
+            }
+            throw 'MSYS2 mingw64 prefix with Vulkan headers was not found.'
+          }
+          $mingw = Join-Path $root 'mingw64'
+          $vulkan = @(
+            (Join-Path $mingw 'bin\vulkan-1.dll'),
+            (Join-Path $mingw 'bin\libvulkan-1.dll'),
+            (Join-Path $env:WINDIR 'System32\vulkan-1.dll')
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $vulkan) { throw 'Vulkan loader DLL was not found.' }
+          $glslang = @(
+            (Join-Path $mingw 'bin\glslangValidator.exe'),
+            (Join-Path $mingw 'bin\glslang.exe')
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $glslang) { throw 'glslangValidator was not found.' }
+          Add-Content -Path $env:GITHUB_ENV -Value "MSYS_ROOT=$root"
+          Add-Content -Path $env:GITHUB_ENV -Value "VULKAN_INCLUDE=$(Join-Path $mingw 'include')"
+          Add-Content -Path $env:GITHUB_ENV -Value "VULKAN_LOADER=$vulkan"
+          Add-Content -Path $env:GITHUB_ENV -Value "GLSLANG_EXE=$glslang"
+          Write-Host "MSYS_ROOT=$root"
+          Write-Host "VULKAN_LOADER=$vulkan"
+          Write-Host "GLSLANG_EXE=$glslang"
+
       - name: Configure and build the engine
         shell: pwsh
         run: |
-          $env:PATH = "C:\msys64\mingw64\bin;$env:PATH"
+          $mingw = Join-Path $env:MSYS_ROOT 'mingw64'
+          $env:PATH = "$mingw\bin;$env:PATH"
           engine/build-windows.ps1 `
             -BuildDirectory build/windows `
             -Fresh -SkipTests -Jobs 4 -Desktop:$false `
             -LibRawSourceDirectory ..\deps\LibRaw-0.22.2 `
-            -VulkanIncludeDirectory C:\msys64\mingw64\include `
-            -VulkanLibrary C:\msys64\mingw64\bin\vulkan-1.dll `
-            -GlslangExecutable C:\msys64\mingw64\bin\glslangValidator.exe
+            -VulkanIncludeDirectory $env:VULKAN_INCLUDE `
+            -VulkanLibrary $env:VULKAN_LOADER `
+            -GlslangExecutable $env:GLSLANG_EXE
 
       - name: Upload the build manifest
         uses: actions/upload-artifact@v4

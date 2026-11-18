@@ -18,7 +18,10 @@ param(
     [switch]$Fresh,
     # Clean-checkout compile gate only (hosted CI has no Vulkan device).
     [switch]$SkipTests,
-    [ValidateRange(1, 64)][int]$Jobs = 4
+    [ValidateRange(1, 64)][int]$Jobs = 4,
+    # Extra -D... arguments forwarded to CMake configure (CI uses this to
+    # disable OpenMP where a hosted runner's compiler cannot detect it).
+    [string[]]$ExtraConfigureArguments = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -98,6 +101,7 @@ try {
         "-DSPEKTRALAB_VULKAN_INCLUDE_DIR=$($VulkanIncludeDirectory.Replace('\', '/'))",
         "-DSPEKTRALAB_VULKAN_LIBRARY=$($VulkanLibrary.Replace('\', '/'))", "-DSPEKTRALAB_GLSLANG=$($GlslangExecutable.Replace('\', '/'))")
     if ($Fresh) { $configureArguments = @('--fresh') + $configureArguments }
+    if ($ExtraConfigureArguments.Count -gt 0) { $configureArguments += $ExtraConfigureArguments }
     $configureArguments += "-DSPEKTRALAB_BUILD_DESKTOP=$(if ($Desktop -and $NativeRaw) { 'ON' } else { 'OFF' })"
     $configureArguments += "-DSPEKTRALAB_BUILD_HOST=$(if ($HostBuild) { 'ON' } else { 'OFF' })"
     if ($HostBuild) {

@@ -102,6 +102,10 @@ try {
         "-DSPEKTRALAB_VULKAN_LIBRARY=$($VulkanLibrary.Replace('\', '/'))", "-DSPEKTRALAB_GLSLANG=$($GlslangExecutable.Replace('\', '/'))")
     if ($Fresh) { $configureArguments = @('--fresh') + $configureArguments }
     if ($ExtraConfigureArguments.Count -gt 0) { $configureArguments += $ExtraConfigureArguments }
+    # Hosted CI cannot always detect OpenMP with a fresh MSYS2 toolchain;
+    # the compile gate only needs the engine, so allow disabling it.
+    if ($env:SPEKTRALAB_CI_NO_OPENMP -eq '1') { $configureArguments += '-DSPEKTRALAB_LIBRAW_OPENMP=OFF' }
+    Write-Host "cmake arguments: $($configureArguments -join ' ')"
     $configureArguments += "-DSPEKTRALAB_BUILD_DESKTOP=$(if ($Desktop -and $NativeRaw) { 'ON' } else { 'OFF' })"
     $configureArguments += "-DSPEKTRALAB_BUILD_HOST=$(if ($HostBuild) { 'ON' } else { 'OFF' })"
     if ($HostBuild) {

@@ -55,6 +55,8 @@ jobs:
         run: engine/setup-libraw.ps1 -DependencyDirectory ..\deps
 
       - name: Configure and build the engine
+        env:
+          SPEKTRALAB_CI_NO_OPENMP: '1'
         # The build script is PowerShell, but the MinGW prefix is only on PATH
         # inside an msys2 shell step. Resolve Windows paths there and hand them
         # to pwsh explicitly (cygpath -m keeps forward slashes, which

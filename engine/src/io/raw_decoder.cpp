@@ -102,9 +102,9 @@ bool supported_compression(LibRaw& raw, std::string& error) {
     return true;
 }
 
-void configure_compatible(libraw_output_params_t& params) {
+void configure_compatible(libraw_output_params_t& params, bool half_size = false) {
     params.user_qual = 3;  // AHD (LibRaw still selects its native X-Trans path).
-    params.half_size = 0;
+    params.half_size = half_size ? 1 : 0;
     params.four_color_rgb = 0;
     params.output_color = 4;
     params.output_bps = 16;
@@ -289,12 +289,12 @@ protected:
 }  // namespace
 
 bool decode_raw_compatible(const std::filesystem::path& source,
-                           DecodedRaw& out, std::string& error) {
-    return decode_raw_compatible(source, nullptr, out, error);
+                           DecodedRaw& out, std::string& error, bool half_size) {
+    return decode_raw_compatible(source, nullptr, out, error, half_size);
 }
 
 bool decode_raw_compatible(const std::filesystem::path& source, const std::array<float, 4>* user_mul,
-                           DecodedRaw& out, std::string& error) {
+                           DecodedRaw& out, std::string& error, bool half_size) {
     error.clear();
     const auto total_start = Clock::now();
     try {
@@ -305,7 +305,7 @@ bool decode_raw_compatible(const std::filesystem::path& source, const std::array
         }
         // LibRaw carries substantial metadata; keep it off the Windows stack.
         auto raw = std::make_unique<CompatibleLibRaw>();
-        configure_compatible(raw->imgdata.params);
+        configure_compatible(raw->imgdata.params, half_size);
         if (user_mul) {
             // A caller-chosen white balance (the host's Temperature/Tint):
             // LibRaw's own user multipliers replace the as-shot ones, through
@@ -447,12 +447,12 @@ bool decode_raw_compatible(const std::filesystem::path& source, const std::array
 }
 
 bool decode_raw_headroom(const std::filesystem::path& source,
-                         DecodedRaw& out, std::string& error) {
-    return decode_raw_headroom(source, nullptr, out, error);
+                         DecodedRaw& out, std::string& error, bool half_size) {
+    return decode_raw_headroom(source, nullptr, out, error, half_size);
 }
 
 bool decode_raw_headroom(const std::filesystem::path& source, const std::array<float, 4>* user_mul,
-                         DecodedRaw& out, std::string& error) {
+                         DecodedRaw& out, std::string& error, bool half_size) {
     error.clear();
     const auto total_start = Clock::now();
     try {
@@ -462,7 +462,7 @@ bool decode_raw_headroom(const std::filesystem::path& source, const std::array<f
             return false;
         }
         auto raw = std::make_unique<HeadroomLibRaw>();
-        configure_compatible(raw->imgdata.params);
+        configure_compatible(raw->imgdata.params, half_size);
         if (user_mul) {
             for (unsigned c = 0; c < 4; ++c) {
                 if (!std::isfinite((*user_mul)[c]) || (*user_mul)[c] <= 0.0f) {

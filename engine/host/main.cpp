@@ -629,7 +629,10 @@ DecodeOptions decode_options(const Json& decode) {
         throw HostError{"bad_request", "decode.raw_mode must be compatible16 or headroom"};
     for (const auto& kv : decode.fields()) {
         if (kv.first == "raw_mode") continue;
-        if (kv.first == "white_balance") {
+        if (kv.first == "half_size") {
+            if (!kv.second.is_bool()) throw HostError{"bad_request", "half_size must be boolean"};
+            options.half_size = kv.second.as_bool(false);
+        } else if (kv.first == "white_balance") {
             const Json& wb = kv.second;
             const std::string mode = optional_string(wb, "mode", "as_shot");
             if (mode == "as_shot") continue;

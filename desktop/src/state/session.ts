@@ -550,6 +550,10 @@ export async function requestPrint(): Promise<void> {
         frameImages.print = r;
         set({ imageVersion: get().imageVersion + 1, badge: 'preview', status: '' });
         noteFirstViewCommitted(sid, r.width, r.height, r.ms);
+        if (pendingFullDecode === sid) {
+          pendingFullDecode = null;
+          setTimeout(() => { void redecodeNow('full-resolution'); }, 0);
+        }
         if (s.pair) notePairExposure(get());
         else await refreshExposureReading(gen);
       }
@@ -976,6 +980,11 @@ export function hostRedecodes(methods: readonly string[] | undefined): boolean {
 let decodeTimer: ReturnType<typeof setTimeout> | null = null;
 /** The wire decode the engine session was last decoded with. */
 let sentDecode: string | null = null;
+/**
+ * When the open used a half-resolution first look, this holds the session that
+ * still needs its full-resolution re-decode once the first live frame lands.
+ */
+let pendingFullDecode: string | null = null;
 const REDECODE_DELAY_MS = 350;
 
 function scheduleRedecode() {
@@ -989,7 +998,7 @@ function scheduleRedecode() {
   decodeTimer = setTimeout(() => void redecodeNow(), REDECODE_DELAY_MS);
 }
 
-async function redecodeNow() {
+async function redecodeNow(reason: 'white-balance' | 'full-resolution' = 'white-balance') {
   decodeTimer = null;
   const s = get();
   const sid = s.engineSession;
@@ -1000,7 +1009,13 @@ async function redecodeNow() {
     void requestPrint();
     return;
   }
-  set({ redecoding: true, status: tz('Decoding with the new white balance…', '正在以新的白平衡解码…') });
+  const fullResolution = reason === 'full-resolution';
+  set({
+    redecoding: true,
+    status: fullResolution
+      ? tz('Decoding the full resolution…', '正在解码完整分辨率…')
+      : tz('Decoding with the new white balance…', '正在以新的白平衡解码…'),
+  });
   clearLatitude();
   try {
     const r = await host().redecode(sid, wire);
@@ -2143,17 +2158,30 @@ async function develop(path: string, gen: number) {
     const params = get().sidecar.params;
     const openingPair = get().pair ? pairSnapshotFor(get().pair!, params) : null;
     const decode = decodeWire(get().sidecar.decode, isRawPath(path));
+    // A first, half-resolution look keeps time-to-first-frame short; the
+    // full-resolution re-decode follows once that frame is on screen.
+    const halfDecode = !openingPair && decode && isRawPath(path) && hostRedecodes(get().hello?.methods)
+      ? { ...decode, half_size: true }
+      : null;
+    let staged = !!halfDecode;
+    pendingFullDecode = null;
     const openStarted = performance.now();
     let r;
     try {
       if (openingPair) {
         if (!get().hello?.methods?.includes('open_pair')) throw new Error(tz('This engine does not support half-frame pairs.', '此引擎不支持半格拼接。'));
         r = await host().openPair(path, wireParams(params), openingPair);
-      } else r = await host().open(path, wireParams(params), decode);
+      } else r = await host().open(path, wireParams(params), halfDecode ?? decode);
     } catch (e) {
-      // A host without R2 refuses the decode key: open with the camera's own.
-      if (!(decode && e instanceof HostCallError && e.code === 'unsupported')) throw e;
-      r = await host().open(path, wireParams(params));
+      if (staged) {
+        // No half-size decode in this host: open the usual way.
+        staged = false;
+        r = await host().open(path, wireParams(params), decode);
+      } else {
+        // A host without R2 refuses the decode key: open with the camera's own.
+        if (!(decode && e instanceof HostCallError && e.code === 'unsupported')) throw e;
+        r = await host().open(path, wireParams(params));
+      }
     }
     if (gen !== openGen) {
       await host().close(r.session).catch(() => {});
@@ -2162,7 +2190,8 @@ async function develop(path: string, gen: number) {
     sentParams = params;
     sentPair = openingPair ? JSON.stringify(pairWithMeterReadings(openingPair, openingPair, r.pair_info, params.autoExposureMethod)) : null;
     if (openingPair) adoptPairMeterReadings(openingPair, r.pair_info, params.autoExposureMethod);
-    sentDecode = JSON.stringify(decode);
+    pendingFullDecode = staged ? r.session : null;
+    sentDecode = staged ? null : JSON.stringify(decode);
     set({ engineSession: r.session, nativeSize: { width: r.width, height: r.height }, metadata: r.metadata, pairInfo: r.pair_info ?? null, frameKind: r.kind ?? (isRawPath(path) ? 'raw' : null) });
     if (openingPair) notePairExposure(get());
     if (openTrace?.generation === gen) {

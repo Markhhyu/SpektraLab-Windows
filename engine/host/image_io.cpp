@@ -816,6 +816,10 @@ bool decode_linear_prophoto(const fs::path& path, const DecodeOptions& options, 
         error=std::string(kUnsupportedPrefix)+"lens correction applies to RAW sources only";
         return false;
     }
+    if (options.half_size && probe.kind != FileKind::Raw) {
+        error=std::string(kUnsupportedPrefix)+"half_size applies to RAW files only";
+        return false;
+    }
     if (probe.kind == FileKind::Heic || probe.kind == FileKind::Exr) return decode_extra(path, probe.kind, out, probe, error);
     if (probe.kind == FileKind::Raw) {
         spk::io::DecodedRaw decoded;
@@ -829,8 +833,10 @@ bool decode_linear_prophoto(const fs::path& path, const DecodeOptions& options, 
             }
         }
         const bool ok = options.raw_mode == "headroom"
-                            ? spk::io::decode_raw_headroom(path, custom_wb ? &mul : nullptr, decoded, error)
-                            : spk::io::decode_raw_compatible(path, custom_wb ? &mul : nullptr, decoded, error);
+                            ? spk::io::decode_raw_headroom(path, custom_wb ? &mul : nullptr, decoded, error,
+                                                          options.half_size)
+                            : spk::io::decode_raw_compatible(path, custom_wb ? &mul : nullptr, decoded, error,
+                                                            options.half_size);
         if (!ok) return false;
         out.width = decoded.width;
         out.height = decoded.height;

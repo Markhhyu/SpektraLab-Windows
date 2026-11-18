@@ -129,6 +129,15 @@ described below.
   moves with it and collections keep tracking the photo. Renaming the frame
   that is open in Develop is refused, and a name clash is reported without
   touching the file.
+- Opening a RAW photo starts with a half-resolution LibRaw decode (no
+  demosaic) so the first frame lands in about half the decode time (~450 ms
+  instead of ~1.12 s for the 32.95 MP reference file); once a live frame is on
+  screen the session is re-decoded at full resolution automatically, and
+  metering, preview caches and export continue on that full frame. JPEG/TIFF
+  opens and half-frame pairs keep the single-stage path. The render host
+  exposes this as the new `decode.half_size` option on `open`; `redecode`
+  without it restores the full frame (verified end to end: 2344x3514 first
+  look, 4688x7028 after the re-decode).
 - A window-level module bar (Library | Develop | Export) sits above all
   three views, so the modes share one visible order instead of being an
   overlay on top of the editor. The active mode is highlighted, Export is

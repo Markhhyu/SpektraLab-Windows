@@ -79,6 +79,9 @@ struct DecodeOptions {
     // R2: a custom white balance at decode (RAW, both decode modes).
     std::optional<double> temperature_k, tint;
     bool lens_correction = false;
+    // A first, low-latency RAW look: LibRaw's fast half-resolution output (no
+    // demosaic). The session is re-decoded at full resolution afterwards.
+    bool half_size = false;
 };
 // Thrown as a plain error string prefixed "unsupported:" when a decode option
 // cannot be honoured for this file.

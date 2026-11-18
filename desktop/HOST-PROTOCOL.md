@@ -115,7 +115,7 @@ in the Adobe DNG SDK's definition (Robertson isotherms; tint = −3000 × the
 distance from the Planckian locus in CIE 1960 uv, positive is magenta) — the
 scale Lightroom/ACR use. The camera side is LibRaw's XYZ→camera matrix, so
 `as_shot` → `custom` with the same numbers reproduces As Shot (measured: mean
-difference 0.01/255). Both `compatible16` and `headroom` accept custom RAW white balance; raster inputs reject decode white balance. `lens_correction: true` uses the pinned Lensfun profile when the camera/lens match is unique; missing or ambiguous profiles and non-RAW inputs are explicitly `unsupported`
+difference 0.01/255). Both `compatible16` and `headroom` accept custom RAW white balance; raster inputs reject decode white balance. `half_size: true` asks LibRaw for its fast half-resolution output (no demosaic; the reported width/height are halved), so a client can paint a first look sooner and then call `redecode` without it for the full frame; raster inputs reject `half_size` as `unsupported`. `lens_correction: true` uses the pinned Lensfun profile when the camera/lens match is unique; missing or ambiguous profiles and non-RAW inputs are explicitly `unsupported`
 (LibRaw supplies the sensor decode; bundled Lensfun supplies calibration).
 
 What a file is decoded *to* (the engine develops linear ProPhoto RGB, top row first; AGENTS.md traps 11–12): RAW through LibRaw; TIFF/JPEG/PNG through their embedded matrix/TRC ICC profile (D50 colorants to XYZ to ProPhoto, as ColorSync does); without a profile, 8-bit files are sRGB and 16-bit/float TIFFs are linear ProPhoto (the macOS decoder's rule for an untagged deep TIFF). TIFF: 8/16-bit integer and 32-bit float, RGB or grey, uncompressed/LZW/deflate/PackBits, strips or tiles; not BigTIFF or CMYK. RGB LUT ICC profiles use LittleCMS; malformed profiles are rejected explicitly. HEIC/HEIF/HIF supports SDR HEVC through libheif/libde265 with ICC or NCLX; PQ/HLG is explicitly unsupported. EXR supports flat first-part RGB/Y float32 data with embedded primaries or default Rec.709; deep EXR is unsupported.
@@ -123,7 +123,7 @@ What a file is decoded *to* (the engine develops linear ProPhoto RGB, top row fi
 ### Sessions (one per open frame)
 | method | params | result |
 |---|---|---|
-| `open` | `{path, decode?: {raw_mode?: "compatible16"\|"headroom", white_balance?: {mode: "as_shot"\|"custom", temperature_k?, tint?}, lens_correction?: boolean}, params?: <full or partial params JSON>}` | `{session: "<sid>", width, height, kind, metadata, params, detected_input, output_color_space, timings_ms: {decode, open}}` — any other `decode` key is `unsupported` |
+| `open` | `{path, decode?: {raw_mode?: "compatible16"\|"headroom", white_balance?: {mode: "as_shot"\|"custom", temperature_k?, tint?}, lens_correction?: boolean, half_size?: boolean}, params?: <full or partial params JSON>}` | `{session: "<sid>", width, height, kind, metadata, params, detected_input, output_color_space, timings_ms: {decode, open}}` — any other `decode` key is `unsupported` |
 | `redecode` | `{session, decode}` | as `open` (same `session` id, params kept): decode the session's file again with other decode settings. The engine session is replaced; on failure the old one is untouched (R2) |
 | `close` | `{session}` | `{}` |
 | `render_source` | `{session,display:"srgb"\|"display-p3",long_edge?,generation?}` | `{image,generation,source:"decoded"}` + RGBA8 of the current decoded source; film/grade edits do not affect it |

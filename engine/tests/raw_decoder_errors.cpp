@@ -38,8 +38,15 @@ struct ScratchDirectory {
 
 void check_rejected(const std::filesystem::path& path, const char* label) {
     using Decode = bool (*)(const std::filesystem::path&, spk::io::DecodedRaw&, std::string&);
-    for(Decode decode : {static_cast<Decode>(&spk::io::decode_raw_compatible),
-                        static_cast<Decode>(&spk::io::decode_raw_headroom)}) {
+    // Lambdas keep the two policies distinguishable now that both carry the
+    // optional half-size argument.
+    const Decode compatible = [](const std::filesystem::path& p, spk::io::DecodedRaw& d, std::string& e) {
+        return spk::io::decode_raw_compatible(p, d, e);
+    };
+    const Decode headroom = [](const std::filesystem::path& p, spk::io::DecodedRaw& d, std::string& e) {
+        return spk::io::decode_raw_headroom(p, d, e);
+    };
+    for(Decode decode : {compatible, headroom}) {
     spk::io::DecodedRaw prior;
     prior.width = 7;
     prior.height = 11;

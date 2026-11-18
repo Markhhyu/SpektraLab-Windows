@@ -103,13 +103,15 @@ struct DecodedRaw {
 // No user black/white overrides, exposure adjustment, ICC profile or resize.
 // On failure, out is unchanged and error describes the failed stage.
 bool decode_raw_compatible(const std::filesystem::path& source,
-                           DecodedRaw& out, std::string& error);
+                           DecodedRaw& out, std::string& error, bool half_size = false);
 
 // The same policy with caller-chosen white-balance multipliers (R, G, B, G2;
 // LibRaw's user_mul) in place of the as-shot ones. nullptr is the overload
 // above. Used by spektralab-host for Temperature/Tint at decode.
+// half_size asks LibRaw for its fast half-resolution output (no demosaic), used
+// for the first, low-latency look before the full decode replaces it.
 bool decode_raw_compatible(const std::filesystem::path& source, const std::array<float, 4>* user_mul,
-                           DecodedRaw& out, std::string& error);
+                           DecodedRaw& out, std::string& error, bool half_size = false);
 
 // Experimental expanded-output policy for conventional three-colour Bayer
 // RAW only. As-shot WB is normalised by its largest multiplier (highlight=1)
@@ -120,12 +122,12 @@ bool decode_raw_compatible(const std::filesystem::path& source, const std::array
 // Unsupported sensor/layout/WB cases fail explicitly; compatible16 is never
 // substituted. On failure, out is unchanged.
 bool decode_raw_headroom(const std::filesystem::path& source,
-                         DecodedRaw& out, std::string& error);
+                         DecodedRaw& out, std::string& error, bool half_size = false);
 
 // The same expanded-output policy with caller-selected RAW white balance.
 // The applied multipliers are still max-normalised before AHD and exposure
 // restoration uses that actual selected WB, not the camera's as-shot value.
 bool decode_raw_headroom(const std::filesystem::path& source, const std::array<float, 4>* user_mul,
-                         DecodedRaw& out, std::string& error);
+                         DecodedRaw& out, std::string& error, bool half_size = false);
 
 }  // namespace spk::io

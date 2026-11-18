@@ -86,7 +86,7 @@ def exercise(host, directory):
     assert len(report["persistent"]["sessions"]) == 1, "private proof leaked a session"
     _, restored = good(host, "render_view", view)
     assert restored == before, "private proof lost the suspended editor cache"
-    assert hello["tiff_options"] == ["lzw", "preview-page"]
+    assert {"lzw", "preview-page"} <= set(hello["tiff_options"]), hello["tiff_options"]
     for compression in ("none", "lzw"):
         path = directory / f"preview-{compression}.tif"
         result, payload = good(host, "export_frame", {**base, "format": "tiff16", "path": str(path),

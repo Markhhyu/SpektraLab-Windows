@@ -115,6 +115,19 @@ export function isNeutral(a: Adjustments): boolean {
   );
 }
 
+/**
+ * Wire shape for the native host. The webview, the sidecar and the presets keep
+ * the masked grades under `local`; the host parses them from
+ * `adjustments.localAdjustments` (`engine/host/local_adjust.cpp`). Sending the
+ * wrong key is not an error the host can report: an unknown key is simply
+ * ignored, so the whole layer silently turns into a no-op. Every payload that
+ * crosses to the host must go through this one mapping.
+ */
+export function wireAdjustments(a: Adjustments): Record<string, unknown> {
+  const { local, ...rest } = a;
+  return { ...rest, localAdjustments: local ?? [] };
+}
+
 // ------------------------------------------------------------------ curves
 
 /** Monotone cubic (Fritsch–Carlson), as CurveMath.swift `evaluate`. */

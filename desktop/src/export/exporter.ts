@@ -1,7 +1,7 @@
 // Export immutable frame settings. The host grades, crops, converts colour
 // and writes atomically; full-resolution pixels never enter the webview.
 
-import { type Adjustments, curveTables, isNeutral, layer2Pixel, layer2Uniforms } from '@shared/adjustments';
+import { type Adjustments, curveTables, isNeutral, layer2Pixel, layer2Uniforms, wireAdjustments } from '@shared/adjustments';
 import { type Geometry, GEOMETRY_DEFAULT, isIdentity, outputSize, sourcePoint } from '@shared/geometry';
 import { canvasGeometryFor, resolveFilmEdgeParams, sourceGeometryFor } from '@shared/filmEdge';
 import type { FileMetadata, PairInfo } from '@shared/protocol';
@@ -286,7 +286,7 @@ export async function exportFrame(
     const transport = control.transport ?? host().transport;
     const res = await transport.request(r.format === 'di' ? 'export_cineon' : 'export_frame', {
       session: f.session, source_path: f.path, params, decode: decode ?? undefined,
-      adjustments: f.adjustments, ...view,
+      adjustments: wireAdjustments(f.adjustments), ...view,
       pair: f.pair,
       path: target.path, format: hostFormat(r), quality: r.format === 'jpeg' ? r.quality : undefined,
       tiff_compression: r.format === 'tiff' || r.format === 'di' ? r.tiffCompression ?? 'none' : undefined,
@@ -324,7 +324,7 @@ export async function renderProof(
     const proof = await host().renderProof({
       session: f.session, source_path: f.path, params: fullDelta(f.params, f.gate, catalog),
       decode: decodeWire(f.decode, isRawPath(f.path)) ?? undefined,
-      adjustments: f.adjustments, ...view, format: r.format === 'di' ? 'di' : hostFormat(r),
+      adjustments: wireAdjustments(f.adjustments), ...view, format: r.format === 'di' ? 'di' : hostFormat(r),
       pair: f.pair,
       color_space: r.colorSpace, long_edge: r.format === 'di' ? 0 : r.longEdge,
       display, proof_long_edge: Math.max(1, Math.min(4096, Math.ceil(edge))), generation, progress_id: job.progressId,

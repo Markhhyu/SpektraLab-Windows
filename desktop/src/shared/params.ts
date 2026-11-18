@@ -199,6 +199,36 @@ export function illuminantLabel(value: string): string {
   return value;
 }
 
+export const OVERSCAN_CARRIERS = ['none', 'black', 'open'] as const;
+
+export function carrierLabel(value: string): string {
+  if (value === 'black') return tz('Black carrier', '黑色片夹');
+  if (value === 'open') return tz('Open carrier', '开口片夹');
+  return tz('No carrier', '无片夹');
+}
+
+/** Wratten filters the engine bakes (`engine/src/core/camera_filters.hpp`). */
+export const CAMERA_FILTERS = ['', 'w8', 'w11', 'w12', 'w15', 'w21', 'w25', 'w47', 'w58'] as const;
+
+export function cameraFilterLabel(value: string): string {
+  switch (value) {
+    case 'w8': return tz('No. 8 · yellow', '8号 · 黄');
+    case 'w11': return tz('No. 11 · yellow-green', '11号 · 黄绿');
+    case 'w12': return tz('No. 12 · deep yellow', '12号 · 深黄');
+    case 'w15': return tz('No. 15 · deep yellow', '15号 · 深黄');
+    case 'w21': return tz('No. 21 · orange', '21号 · 橙');
+    case 'w25': return tz('No. 25 · red', '25号 · 红');
+    case 'w47': return tz('No. 47 · blue', '47号 · 蓝');
+    case 'w58': return tz('No. 58 · green', '58号 · 绿');
+    default: return tz('None', '无');
+  }
+}
+
+/** Taking-lens diffraction and the scanner's own blur, in µm. */
+export const LENS_BLUR_RANGE: [number, number] = [0, 200];
+export const SCANNER_BLUR_RANGE: [number, number] = [0, 20];
+export const DENSITY_GAMMA_RANGE: [number, number] = [0.2, 4];
+
 export const FILM_EDGE_FORMATS = [
   '135',
   '135_half',
@@ -315,6 +345,18 @@ export interface FilmParams {
   scanIlluminant: string;
   /** P1-8: the light the print is looked at under; `''` = same as the scan. */
   viewingIlluminant: string;
+  /** A Wratten filter in front of the taking lens (`engine/src/core/camera_filters.hpp`); `''` = none. */
+  cameraFilter: string;
+  /** Diffraction at the taking aperture, µm. Previews zero it in `digest()`. */
+  lensBlurUm: number;
+  /** Exposure of the stock's density curve; `1` is the curve the profile ships. */
+  densityCurveGamma: number;
+  /** Scanner white/black point correction and its lens blur, as on the Mac. */
+  scannerWhiteCorrection: boolean;
+  scannerBlackCorrection: boolean;
+  scannerLensBlur: number;
+  /** What the scan shows past the frame edges: `none` | `black` | `open`. */
+  overscanCarrier: string;
   development: DevelopmentSettings;
   contrastMask: ContrastMaskSettings;
   sceneLatitude: SceneLatitudeSettings;
@@ -350,6 +392,13 @@ export const FILM_PARAMS_DEFAULT: FilmParams = {
   preflashExposure: 0,
   scanIlluminant: '',
   viewingIlluminant: '',
+  cameraFilter: '',
+  lensBlurUm: 0,
+  densityCurveGamma: 1,
+  scannerWhiteCorrection: false,
+  scannerBlackCorrection: false,
+  scannerLensBlur: 0,
+  overscanCarrier: 'none',
   development: DEVELOPMENT_DEFAULT,
   contrastMask: CONTRAST_MASK_DEFAULT,
   sceneLatitude: SCENE_LATITUDE_DEFAULT,
@@ -408,6 +457,10 @@ export function decodeFilmParams(raw: unknown): FilmParams {
     'autoExposureMethod' in o ? (typeof o.autoExposureMethod === 'string' ? o.autoExposureMethod : null) : null;
   if (!('filmStock' in o)) base.autoExposureMethod = FILM_PARAMS_DEFAULT.autoExposureMethod;
   base.filmSide = base.filmSide === 'long' ? 'long' : 'short';
+  // An unknown filter or carrier in an older sidecar would make the host refuse
+  // the whole delta, and the wire has no way to say "keep the engine's".
+  base.cameraFilter = (CAMERA_FILTERS as readonly string[]).includes(base.cameraFilter) ? base.cameraFilter : '';
+  base.overscanCarrier = (OVERSCAN_CARRIERS as readonly string[]).includes(base.overscanCarrier) ? base.overscanCarrier : 'none';
   base.development = decodeShape(o.development, DEVELOPMENT_DEFAULT);
   base.contrastMask = decodeShape(o.contrastMask, CONTRAST_MASK_DEFAULT);
   base.sceneLatitude = decodeShape(o.sceneLatitude, SCENE_LATITUDE_DEFAULT);
@@ -530,6 +583,15 @@ export function wire(p: FilmParams, gate: FeatureGate = ALL_FEATURES, catalog?: 
     // named light is a real edit the delta has to carry.
     { name: 'scan_illuminant', value: p.scanIlluminant, layer: 'print' },
     { name: 'viewing_illuminant', value: p.viewingIlluminant, layer: 'print' },
+    // P2-03: path detail the engine always had but no panel exposed. Previews
+    // zero the two lens blurs in `digest()`, so they show on a full render.
+    { name: 'camera_filter', value: p.cameraFilter, layer: 'shoot' },
+    { name: 'lens_blur_um', value: clamp(p.lensBlurUm, LENS_BLUR_RANGE[0], LENS_BLUR_RANGE[1]), layer: 'shoot' },
+    { name: 'density_curve_gamma', value: clamp(p.densityCurveGamma, DENSITY_GAMMA_RANGE[0], DENSITY_GAMMA_RANGE[1]), layer: 'shoot' },
+    { name: 'overscan_carrier', value: p.overscanCarrier, layer: 'shoot' },
+    { name: 'scanner_white_correction', value: p.scannerWhiteCorrection, layer: 'print' },
+    { name: 'scanner_black_correction', value: p.scannerBlackCorrection, layer: 'print' },
+    { name: 'scanner_lens_blur', value: clamp(p.scannerLensBlur, SCANNER_BLUR_RANGE[0], SCANNER_BLUR_RANGE[1]), layer: 'print' },
   );
   if (gate.contrastMask) {
     f.push(

@@ -9,7 +9,9 @@ import {
   insertPoint,
   isNeutral,
   tonePosition,
+  wireAdjustments,
 } from './adjustments';
+import { createLocalAdjustment } from './localAdjust';
 
 describe('layer 2', () => {
   it('is the identity at its defaults', () => {
@@ -43,5 +45,19 @@ describe('layer 2', () => {
     expect(a.curves.rgb.points).toHaveLength(3);
     expect(a.exposure).toBe(0.5);
     expect(a.enabled).toBe(true);
+  });
+
+  it('puts local layers on the wire under the key the native host parses', () => {
+    const layer = { ...createLocalAdjustment('radial'), exposure: 1, feather: 0.5 };
+    const wired = wireAdjustments({ ...ADJUSTMENTS_DEFAULT, exposure: 0.5, local: [layer] });
+    expect(wired).toMatchObject({ exposure: 0.5 });
+    expect(wired.localAdjustments).toEqual([layer]);
+    // `local` is the sidecar's key; the host reads `localAdjustments` and
+    // ignores anything else, so leaking `local` would be silently inert.
+    expect(wired).not.toHaveProperty('local');
+  });
+
+  it('sends an empty layer list so the host can take its exact bypass', () => {
+    expect(wireAdjustments(ADJUSTMENTS_DEFAULT).localAdjustments).toEqual([]);
   });
 });

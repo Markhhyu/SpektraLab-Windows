@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Host } from './client';
 import type { Transport } from './transport';
-import { ADJUSTMENTS_DEFAULT } from '@shared/adjustments';
+import { ADJUSTMENTS_DEFAULT, wireAdjustments } from '@shared/adjustments';
+import { createLocalAdjustment } from '@shared/localAdjust';
 import { GEOMETRY_DEFAULT } from '@shared/geometry';
 
 const options = () => ({ adjustments: structuredClone(ADJUSTMENTS_DEFAULT), geometry: structuredClone(GEOMETRY_DEFAULT),
@@ -26,9 +27,27 @@ describe('Host.renderView', () => {
     const host = new Host({ request, state } as unknown as Transport);
     const opts = options();
     const view = await host.renderView('s1', 'live', opts);
-    expect(request).toHaveBeenCalledWith('render_view', { session: 's1', tier: 'live', ...opts, format: 'rgba8' }, expect.anything());
+    expect(request).toHaveBeenCalledWith('render_view',
+      { session: 's1', tier: 'live', ...opts, adjustments: wireAdjustments(opts.adjustments), format: 'rgba8' },
+      expect.anything());
     expect(view).toMatchObject({ colorSpace: 'Display P3', tier: 'live', reprinted: true, processedGeometry: opts.geometry });
     expect(Array.from(view.data)).toEqual([180, 120, 80, 255]);
+  });
+
+  it('sends masked local grades under the key the host parses', async () => {
+    const request = vi.fn().mockResolvedValue(response(12));
+    const host = new Host({ request, state } as unknown as Transport);
+    const opts = options();
+    opts.adjustments.local = [
+      { ...createLocalAdjustment('radial'), exposure: 1.25, feather: 0.4 },
+      { ...createLocalAdjustment('linear'), exposure: -0.5, invert: true },
+    ];
+    await host.renderView('s1', 'live', opts);
+    const sent = request.mock.calls[0]![1] as { adjustments: Record<string, unknown> };
+    expect(sent.adjustments.localAdjustments).toEqual(opts.adjustments.local);
+    // The host ignores keys it does not know, so sending `local` alone is a
+    // silent no-op rather than an error (v1.8.0 shipped exactly that).
+    expect(sent.adjustments).not.toHaveProperty('local');
   });
 
   it('rejects a response belonging to another requested generation', async () => {

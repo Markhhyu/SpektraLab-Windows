@@ -60,6 +60,26 @@ worth shipping, keeping the version bump and the asset name in step.
 
 ## History
 
+### v1.9.1 — 局部调整接线修复、影调蒙版重标定与成像链面板 / Local-adjustment wiring fix, tone-mask recalibration and the imaging-path panel
+
+**中文**
+- 修复 v1.8.0 引入的局部调整层：界面把图层放在 `adjustments.local`，宿主只读 `adjustments.localAdjustments`，未知键被静默忽略，所以此前预览与导出都完全不受影响。现在预览、胶片缩略图、导出与试印都走同一个映射；真实宿主实测同两层预览改变 69%、导出改变 96% 像素（旧键与"无图层"逐字节相同）。带局部图层的 Cineon DI 导出现在会明确报错，而不是悄悄丢掉图层。
+- 影调蒙版（Tone Mask）高光侧重标定：旧标定以中灰外 4 档为锚点，但相纸高光侧只有约 2.4 档可用，`highlights=1` 的效果被稀释到肉眼不可见。现在每一侧按本帧实测可达范围标定：640 px 实测高光带 2% 像素均值 3.3 → 555.9 码值（最大 36 → 4675），且 1→2→3 档单调。
+- 场景置位（Scene Placement）：`minimum_pull_back` 现在报告真正可用的最小值（高光 0.9922 → 1.0182；按旧值拖动会被 `room_below_minimum` 拒绝）。回拉到膝点越过中灰时，界面提示"再回拉会把整幅画面压平"，滑块停在最后一档。
+- 新增「成像链细节」面板，把引擎早已支持、界面却没有入口的 7 个观感参数接出来：相机滤镜 W8/W11/W12/W15/W21/W25/W47/W58、镜头模糊（µm）、密度曲线 gamma、扫描黑白点校正、扫描镜头模糊、片夹（none/black/open，胶片边缘启用时生效）。真实宿主逐项验证 6/7 单独改变像素（片夹需要先开胶片边缘）。`enlarger.illuminant` 仍不暴露：中性滤色片数据只有 TH-KG3 一个照明，换其它值会让偏色静默发生。
+- 构建：全量静态构建失败修复——静态 OpenMP 的 `libgomp.a` 通过 MinGW `dl` shim 解析 dlopen/dlerror，现在把该 shim 挂到 LibRaw 的链接接口上；`engine/tests/host_proof.py` 对 TIFF 编码列表的精确断言改为子集判断（v1.9.0 增加 Deflate 后必红）。
+- 安装包：37.63 MiB，sha256 `0725d1a231c2eb3d493adbed52f0def6aff8b9b8e5563417ef22c29c56c5259a`。
+- 验证：`ctest` 56/56；上游 parity 22/22（halation 面积乘子与耦合剂非单调两项为已记录的口径差异）；前端 541 通过 / 2 跳过；安装包内宿主 hello 显示 `warm_up`、无 `unsupported_features`、`params_schema` 105 字段、`tiff_options` 含 deflate，打开 4688×7028 RAW 并渲染一帧通过。
+
+**English**
+- Fixed the local-adjustment layers introduced in v1.8.0: the UI put layers in `adjustments.local`, the host only reads `adjustments.localAdjustments`, and unknown keys are ignored silently, so until now the layers had no effect on the preview or on exports. The preview, filmstrip thumbnails, exports and proofs now share one mapping; against the real host the same two layers change 69% of preview pixels and 96% of export pixels, while the old key stays byte-identical to "no layers". A Cineon DI export that carries layers now fails loudly instead of dropping them.
+- Tone Mask highlight side recalibrated: the old calibration anchored at four stops outside mid-grey, but paper only reaches about 2.4 stops above it, which diluted `highlights=1` into invisibility. Each side is now calibrated against the reach actually measured in the frame: at 640 px the top 2% band moved from a mean of 3.3 to 555.9 code values (max 36 → 4675), and 1 → 2 → 3 is monotonic.
+- Scene Placement: `minimum_pull_back` now reports the value that actually works (highlight 0.9922 → 1.0182; the old value is refused with `room_below_minimum`). Once a pull-back crosses the knee past mid-grey the UI says that pulling further would flatten the whole frame, and the slider stops at the last usable step.
+- New "Imaging path" panel exposes seven look parameters the engine already supported but no panel reached: camera filters W8/W11/W12/W15/W21/W25/W47/W58, lens blur in µm, density-curve gamma, scanner white/black point correction, scanner lens blur, and the carrier (none/black/open, effective once film edges are on). The real host changes pixels for six of the seven on their own; the carrier needs film edges enabled first. `enlarger.illuminant` stays hidden: the neutral-filter data has only a TH-KG3 illuminant, so any other value would shift colour silently.
+- Build: fixed the full static build — the static `libgomp.a` resolves dlopen/dlerror through the MinGW `dl` shim, which is now attached to LibRaw's link interface; `engine/tests/host_proof.py` checks that the TIFF codec list contains LZW and the preview page instead of equalling a fixed list (v1.9.0 added Deflate, so the old assertion could not pass).
+- Installer: 37.63 MiB, sha256 `0725d1a231c2eb3d493adbed52f0def6aff8b9b8e5563417ef22c29c56c5259a`.
+- Verification: `ctest` 56/56; upstream parity 22/22 (the halation area multiplier and the non-monotonic coupler case are the documented divergences); 541 frontend tests passed / 2 skipped; the host inside the bundle reports `warm_up`, no `unsupported_features`, a 105-field `params_schema` and Deflate in `tiff_options`, and opens the 4688×7028 RAW and renders a frame.
+
 ### v1.9.0 — 两段解码、渲染池与图库升级 / Two-stage decode, render pool and Library upgrades
 
 **中文**

@@ -21,6 +21,13 @@ import {
   FILM_FRAME_CUSTOM,
   ILLUMINANTS,
   illuminantLabel,
+  CAMERA_FILTERS,
+  cameraFilterLabel,
+  OVERSCAN_CARRIERS,
+  carrierLabel,
+  LENS_BLUR_RANGE,
+  SCANNER_BLUR_RANGE,
+  DENSITY_GAMMA_RANGE,
   SIDE_UNIT_DECIMALS,
   SIDE_UNIT_PER_MM,
   type SideUnit,
@@ -76,6 +83,7 @@ export function RightRail() {
             <FilmFormatSection />
             <DevelopmentSection />
             <LightingSection />
+            <ImagingSection />
             <ScenePlacementSection />
           </>
         ) : (
@@ -549,6 +557,87 @@ function LightingSection() {
         display={p.viewingIlluminant === '' ? sameAsScan : illuminantLabel(p.viewingIlluminant)}
         testId="viewing-illuminant"
       />
+    </Section>
+  );
+}
+
+// ------------------------------------------------------------ Imaging detail
+
+/** P2-03: the physical detail the stock profiles already imply. The engine has
+ *  always had these fields, but no panel reached them, so a dull or soft frame
+ *  could not be traced to the film, the taking lens or the scanner. */
+function ImagingSection() {
+  const p = useSession((s) => s.sidecar.params);
+  // The carrier only decides how the border is drawn around an overscanned frame, so
+  // with the film edge off it is inert (a 640px render is byte-identical for none and
+  // open). Disable it rather than offer a control that does nothing.
+  const carrierLive = useSession((s) => edgeEffective(s.sidecar.params.filmEdge, s.gate));
+  const set = (patch: Partial<typeof p>) => setParams((q) => ({ ...q, ...patch }));
+  const reset = () => set({
+    cameraFilter: '', lensBlurUm: 0, densityCurveGamma: 1,
+    scannerWhiteCorrection: false, scannerBlackCorrection: false, scannerLensBlur: 0, overscanCarrier: 'none',
+  });
+  return (
+    <Section
+      id="imaging"
+      title={tz('Imaging path', '成像链细节')}
+      onReset={reset}
+      resetHelp={tz('Reset the taking lens, the density curve and the scanner.', '重置镜头、密度曲线与扫描设置。')}
+    >
+      <PillMenu
+        label={tz('Camera filter', '镜头滤镜')}
+        value={p.cameraFilter}
+        options={CAMERA_FILTERS.map((v) => ({ value: v, label: cameraFilterLabel(v) }))}
+        onChange={(v) => set({ cameraFilter: v })}
+        display={cameraFilterLabel(p.cameraFilter)}
+        testId="camera-filter"
+      />
+      <ScrubSlider
+        label={tz('Lens diffraction', '镜头衍射')}
+        value={p.lensBlurUm}
+        range={[...LENS_BLUR_RANGE] as [number, number]}
+        snap={1}
+        format={(v) => v.toFixed(0) + ' µm'}
+        onChange={(v) => set({ lensBlurUm: v })}
+        testId="lens-blur"
+      />
+      <ScrubSlider
+        label={tz('Density curve gamma', '密度曲线伽马')}
+        value={p.densityCurveGamma}
+        range={[...DENSITY_GAMMA_RANGE] as [number, number]}
+        zero={1}
+        snap={0.05}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => set({ densityCurveGamma: v })}
+        testId="density-gamma"
+      />
+      <ToggleRow label={tz('Black point correction', '黑点校正')} on={p.scannerBlackCorrection} onChange={(v) => set({ scannerBlackCorrection: v })} testId="scanner-black" />
+      <ToggleRow label={tz('White point correction', '白点校正')} on={p.scannerWhiteCorrection} onChange={(v) => set({ scannerWhiteCorrection: v })} testId="scanner-white" />
+      <ScrubSlider
+        label={tz('Scanner blur', '扫描镜头模糊')}
+        value={p.scannerLensBlur}
+        range={[...SCANNER_BLUR_RANGE] as [number, number]}
+        snap={0.5}
+        format={(v) => v.toFixed(1) + ' µm'}
+        onChange={(v) => set({ scannerLensBlur: v })}
+        testId="scanner-blur"
+      />
+      <PillMenu
+        label={tz('Film carrier', '片夹')}
+        value={p.overscanCarrier}
+        options={OVERSCAN_CARRIERS.map((v) => ({ value: v, label: carrierLabel(v) }))}
+        onChange={(v) => set({ overscanCarrier: v })}
+        display={carrierLabel(p.overscanCarrier)}
+        disabled={!carrierLive}
+        reason={tz('Needs the film edge: the carrier only frames an overscanned border.', '需要启用胶片边缘：片夹只决定多出的边框如何呈现。')}
+        testId="overscan-carrier"
+      />
+      <p className="caption">
+        {tz(
+          'Previews skip both lens blurs; judge them on a full render or an export.',
+          '预览会跳过两处镜头模糊，请在整幅渲染或导出时判断。',
+        )}
+      </p>
     </Section>
   );
 }

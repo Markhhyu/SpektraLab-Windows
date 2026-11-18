@@ -135,6 +135,22 @@ std::vector<double> placed_histogram(const SceneStats& scene, const SceneLatitud
     return out;
 }
 
+// The room a pull-back of `N` would give on one side, or a negative when the
+// solve refuses it. Both sides run through the same inversion `fit` does -- the
+// shadow side through the bounded lift, the highlight side directly -- so the
+// number here is the room the render would actually get.
+double room_at(bool highlight, const Side& s, double max_lift, double m, double N) {
+    if (!(N > 0.0) || !(N < max_lift)) return -1.0;
+    if (highlight) {
+        const auto K = solve_knee(s.extreme, s.boundary, N, m);
+        return K ? s.boundary - *K : -1.0;
+    }
+    const double L = max_lift;
+    const double lift = N * L / std::sqrt(L * L - N * N);
+    const auto K = solve_knee(-s.extreme, -s.boundary, lift, m);
+    return K ? (-*K) - s.boundary : -1.0;
+}
+
 Fit fit(const Medium& medium, const SceneStats& scene, double highlight_pull_back,
         double shadow_pull_back, const SceneLatitudeParams& base, const Extremes& at) {
     Fit out;
@@ -209,6 +225,32 @@ Fit fit(const Medium& medium, const SceneStats& scene, double highlight_pull_bac
         if (s->room > kDomainStops || std::fabs(s->knee) > kDomainStops)
             out.issues.push_back({"out_of_range", name, "the solved knee or room is outside the wire's range"});
     }
+
+    // The smallest pull-back the curvature floor will actually run, in the
+    // wire's own units. `minimum` on its own is geometric -- the pull-back that
+    // lands the extreme exactly on the boundary -- and at exactly that value the
+    // knee sits on the boundary too, so the fit is refused with
+    // `room_below_minimum` and the only advice the UI can give is to exceed a
+    // number that does not work (measured on DSC07923.ARW: geometric 0.99,
+    // refused at 1.0, first accepted 1.02). Every reader of `minimum_pull_back`
+    // reads it as advice, so report the smallest value that is accepted even
+    // when the current fit is fine: a valid fit that still advertises 0.99 reads
+    // as "you may go to 0.99", which is a dead end. This changes no landing and
+    // no issue code for the requested value (that check already ran above); it
+    // only raises an advisory number that was too low.
+    auto report_attainable = [&](bool highlight, Side& s) {
+        double lo = std::max(s.minimum, 1e-3);
+        double hi = std::min(lo + kDomainStops, base.max_lift - 1e-9);
+        if (!(hi > lo) || room_at(highlight, s, base.max_lift, m, hi) < kMinRoom) return;
+        for (int i = 0; i < 60; ++i) {
+            const double mid = 0.5 * (lo + hi);
+            if (room_at(highlight, s, base.max_lift, m, mid) >= kMinRoom) hi = mid;
+            else lo = mid;
+        }
+        s.minimum = std::max(s.minimum, hi);
+    };
+    report_attainable(true, hs);
+    report_attainable(false, ss);
     if (hs.on && ss.on) {
         out.core = hs.knee - ss.knee;
         if (!(ss.knee < hs.knee))
@@ -261,6 +303,19 @@ Suggestion suggest(const Medium& medium, const SceneStats& scene, double margin,
     best.highlight_pull_back = over_h > 0.0 ? over_h + margin : 0.0;
     best.shadow_pull_back = over_s > 0.0 ? over_s + margin : 0.0;
     best.margin_used = margin;
+
+    // The walk above only ever lowers the margin, but a pull-back smaller than
+    // the curvature floor is refused and room grows with the pull-back -- so a
+    // picture that overshoots the boundary by less than the floor width can fail
+    // every step and come back with a suggestion the engine will not run (the
+    // "apply the suggestion" button then does nothing). Ask for the smallest
+    // values the curve accepts before giving up: `minimum_pull_back` now reports
+    // that value, not the geometric one (see `fit`).
+    const Fit probe = fit(medium, scene, 0.0, 0.0, base, at);
+    const double nh = over_h > 0.0 ? std::max(over_h + margin, probe.highlight.minimum) : 0.0;
+    const double ns = over_s > 0.0 ? std::max(over_s + margin, probe.shadow.minimum) : 0.0;
+    const Fit retry = fit(medium, scene, nh, ns, base, at);
+    if (retry.valid()) { best = {nh, ns, margin, true}; return best; }
     return best;
 }
 

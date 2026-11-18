@@ -157,6 +157,31 @@ export function placementWindow(at: PlacementMeasured, side: PlacementSide, othe
     }
     most = Math.max(Math.floor(good / 0.01) / 100, least);
   }
+  // A pull-back past the point where the solved knee crosses mid-grey stops
+  // compressing one side and starts flattening the whole frame. The engine
+  // accepts that value and only mentions it in `fit.warnings`, so the slider
+  // used to walk straight into it with no hint at all (measured on
+  // DSC07923.ARW: highlight knee 0.75 at the suggested 1.24, but -2.06 at 2.0).
+  // End the usable range there instead: dragging past it lands on the last
+  // value that still only compresses this side, and the caption says why.
+  const flatten = (x: number): boolean => {
+    const v = verdict(x);
+    if (!v.placed) return false;
+    const knee = side === 'highlight' ? v.placed.highlightKnee : v.placed.shadowKnee;
+    return side === 'highlight' ? knee < 0 : knee > 0;
+  };
+  if (flatten(most)) {
+    if (flatten(least)) most = least;
+    else {
+      let flat = most, honest = least;
+      while (flat - honest > 0.005) {
+        const mid = (flat + honest) / 2;
+        if (flatten(mid)) flat = mid; else honest = mid;
+      }
+      most = Math.max(Math.floor(honest / 0.01) / 100, least);
+    }
+    above = own(issue('knee_past_midgrey', side));
+  }
   return { span: [least, most], below, above };
 }
 
@@ -182,6 +207,7 @@ export function placementMessage(why: PlacementIssue | null, side: PlacementSide
     case 'no_window': return words('No pull-back can bring this side inside the latitude.', '这一侧没有可用的回拉量，无法拉回宽容度之内。');
     case 'out_of_range': return words('Pull back less: this is beyond the curve’s reach.', '回拉过多，已超出曲线可达的范围。');
     case 'pull_back_exceeds_max_lift': return words('Pull back less: this exceeds the shadow lift limit.', '回拉过多，已超出阴影可提升的上限。');
+    case 'knee_past_midgrey': return words('Pulling back further would flatten the whole frame: the knee has crossed mid-grey. Stopped at the last value that still only compresses this side.', '再回拉会把整幅画面压平（膝点已越过中灰）。已停在仍只压缩这一侧的最后一档。');
     case 'knees_cross': return words('The highlight and shadow curves would cross; reduce one side.', '高光与阴影曲线会交叉，请减少其中一侧的回拉。');
     default: return why.message || words('The placement could not be fitted to this frame.', '此场景置位无法拟合到当前照片。');
   }

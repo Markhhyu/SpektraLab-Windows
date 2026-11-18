@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_FEATURES, featureGate, fullDelta } from '@shared/params';
+import { wireAdjustments } from '@shared/adjustments';
+import { createLocalAdjustment } from '@shared/localAdjust';
 import { encodeSidecar, newSidecar } from '@shared/sidecar';
 import { StockCatalog } from '@shared/stocks';
 import { captureExportFrames, exportFrame, renderProof, hostWrites, type FrameToExport } from './exporter';
@@ -182,13 +184,26 @@ describe('host frame export', () => {
     const [method, args, options] = fake.request.mock.calls[0]!;
     expect(method).toBe('export_frame');
     expect(args).toMatchObject({ session: 'editor', source_path: expected.path,
-      params: fullDelta(expected.params, expected.gate), adjustments: expected.adjustments, geometry: expected.geometry,
+      params: fullDelta(expected.params, expected.gate), adjustments: wireAdjustments(expected.adjustments), geometry: expected.geometry,
       decode: { white_balance: { mode: 'custom', temperature_k: 6200, tint: 13 } },
       color_space: 'display-p3', format: 'jpeg', quality: 92, long_edge: 3000, overwrite: true,
       progress_id: expect.stringMatching(/^export-/) });
     expect(args.params).not.toHaveProperty('scene_latitude_active');
     expect(options).not.toHaveProperty('payload');
     expect(fake.open).not.toHaveBeenCalled();
+  });
+  it('sends masked local grades under the key the host parses, on export and on proof', async () => {
+    const f = frame();
+    f.adjustments.local = [{ ...createLocalAdjustment('linear'), exposure: -0.75, contrast: 20 }];
+    await exportFrame(recipe(), f, catalog, ['export_frame']);
+    const sent = fake.request.mock.calls[0]![1] as { adjustments: Record<string, unknown> };
+    expect(sent.adjustments.localAdjustments).toEqual(f.adjustments.local);
+    expect(sent.adjustments).not.toHaveProperty('local');
+    fake.renderProof.mockResolvedValue({ proof: { generation: 1 } });
+    await renderProof(recipe(), f, catalog, ['render_proof'], 'srgb', 512, 1);
+    const proof = fake.renderProof.mock.calls[0]![0] as { adjustments: Record<string, unknown> };
+    expect(proof.adjustments.localAdjustments).toEqual(f.adjustments.local);
+    expect(proof.adjustments).not.toHaveProperty('local');
   });
   it('uses source_path for a private job and exposes an empty session cancellation key', async () => {
     const f = frame(); delete f.session;

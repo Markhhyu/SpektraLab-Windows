@@ -51,7 +51,20 @@ if(SPEKTRALAB_LIBRAW_OPENMP)
         set(OpenMP_gomp_LIBRARY "${spk_static_gomp}" CACHE FILEPATH "Static MinGW OpenMP runtime" FORCE)
     endif()
     find_package(OpenMP REQUIRED COMPONENTS CXX)
-    target_link_libraries(spk_libraw PUBLIC OpenMP::OpenMP_CXX)
+    if(MINGW AND SPEKTRALAB_STATIC_RUNTIME AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # The static libgomp.a chosen above resolves dlopen/dlerror through the
+        # MinGW libdl shim instead of importing them, so every executable that
+        # links this archive needs the shim on its link line. spektralab-host
+        # adds it for itself, but the RAW helper test executables do not, and a
+        # full `all` build failed on them with "undefined reference to dlerror".
+        # Attaching the shim to the archive's INTERFACE keeps it with the
+        # dependency rather than repeating it in every consumer.
+        add_library(spk_openmp INTERFACE)
+        target_link_libraries(spk_openmp INTERFACE OpenMP::OpenMP_CXX dl)
+        target_link_libraries(spk_libraw PUBLIC spk_openmp)
+    else()
+        target_link_libraries(spk_libraw PUBLIC OpenMP::OpenMP_CXX)
+    endif()
     # LibRaw 0.22.2 intentionally disables OpenMP for non-MSVC Windows
     # compilers unless explicitly opted in. PUBLIC keeps its inline allocator
     # definitions identical in the library and all consumers of libraw.h.

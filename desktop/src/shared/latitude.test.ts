@@ -43,6 +43,20 @@ describe('Scene Placement against the engine CPU oracle', () => {
     expect(fitPlacement(measured, Number.NaN, 0, SCENE_LATITUDE_DEFAULT).issue?.code).toBe('out_of_range');
   });
 
+  it('ends the usable range before the knee flattens the whole frame', () => {
+    const w = placementWindow(measured, 'highlight', 0, SCENE_LATITUDE_DEFAULT);
+    const kneeAt = (x: number) => fitPlacement(measured, x, 0, SCENE_LATITUDE_DEFAULT).placed?.highlightKnee;
+    expect(w.above?.code).toBe('knee_past_midgrey');
+    const hi = placementLanding(w, 99);
+    expect(hi.value).toBe(w.span![1]);
+    expect(hi.issue?.code).toBe('knee_past_midgrey');
+    // The last accepted value still compresses only this side; a little past it
+    // the knee is under mid-grey, which is what the engine only warns about.
+    expect(kneeAt(w.span![1])!).toBeGreaterThanOrEqual(0);
+    expect(kneeAt(w.span![1] + 0.25)!).toBeLessThan(0);
+    expect(placementMessage(hi.issue, 'highlight', null, true)).toContain('压平');
+  });
+
   it('requires complete engine fit deltas and never carries a source photo curve into copied intent', () => {
     const source = { ...SCENE_LATITUDE_DEFAULT, active: true, highlightPullBack: 4, highlightKnee: -3, highlightRoom: 7 };
     expect(placementIntent(source)).toMatchObject({ active: false, highlightPullBack: 4, highlightRoom: 0, highlightKnee: 2 });

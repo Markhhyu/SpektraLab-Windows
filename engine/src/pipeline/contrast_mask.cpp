@@ -57,10 +57,21 @@ constexpr double kCellsPerSigma = 4.0;
 constexpr uint32_t kGridMinLongEdge = 512;
 
 // Where each branch's amount is read off, in stops beyond its knee: an amount
-// of N stops means a base exposure `kReach` stops outside the core is moved N
-// stops toward it. Four stops past a one-stop core is five from mid-grey --
-// the far end of a print's useful exposure range, where the mask matters.
+// of N stops means a base exposure `reach` stops outside the core is moved N
+// stops toward it.  Four stops past a one-stop core is five from mid-grey --
+// past the far end of a print's useful exposure range on the highlight side,
+// which is why the anchor is only a ceiling: the reach actually used is read
+// off the picture's own base field (see `side_reach` below).  A print holds
+// about +2.4 stops above mid-grey and -4.6 below on the product stack, so an
+// anchor at four stops left the highlight amounts diluted by the curve's cubic
+// near the knee: on DSC07923.ARW at 640 px, highlights=1 changed no pixel by
+// more than 36 of 65535 while shadows=1 moved the darkest cells by 981
+// (measured 2026-11-18, mask core 1.0, all other effects off).
 constexpr double kReach = 4.0;
+
+// The narrowest reach the calibration will use. A flat picture can put its
+// whole base field inside the core, and the closed form needs R > 0.
+constexpr double kMinReach = 0.5;
 
 // The gain limit, in stops, as a smooth bound (RFC-023 §15's fix). The amount
 // calibration below inverts it, so N stops at the reach is still N.
@@ -159,15 +170,20 @@ void gaussian(const std::vector<double>& in, std::vector<double>& out, uint32_t 
     pass(tmp, out, false);
 }
 
-// The branch's room `H` such that, after the gain bound, a base `kReach` stops
-// past the knee moves by exactly `amount` stops. Closed form both ways:
-// invert the bound (`g_2` with asymptote `kGainLimit`), then solve
-// `g_2(kReach, H) = kReach - delta` for `H`.
-double room_for(double amount) {
-    const double L = kGainLimit, R = kReach;
-    const double delta = amount * L / std::sqrt(L * L - amount * amount);
-    const double t = std::max(R - delta, 1e-3);   // delta >= R would need H <= 0
-    return R * t / std::sqrt(R * R - t * t);
+// The branch's room `H` for an amount of `N` stops at this side's own `reach`.
+// The old closed form inverted the gain bound at a fixed `kReach`, which is only
+// solvable while `N` is smaller than the reach the picture actually has. Once
+// the reach is read off the picture (see `side_reach`) the paper's shrunken
+// highlight side gives reach ~1.4 stops, so every amount from 2 up inverted to
+// `delta >= reach` and collapsed to the same degenerate room: the top of the
+// slider went dead (measured 2026-11-18: highlights=2 and 3 pixel-identical).
+// This map is keyed on the reach instead, so each step still means more: the
+// departure the shader makes at the reach is `reach - g(reach, H)`, which rises
+// monotonically with `N` and approaches the reach, the most the paper can show.
+// The gain bound still applies on top, so a blown highlight cannot run away.
+double room_for(double amount, double reach) {
+    const double R = std::max(reach, kMinReach);
+    return std::max(0.02 * R, R * std::exp(-std::max(0.0, amount)));
 }
 
 }  // namespace
@@ -212,12 +228,16 @@ bool Pipeline::prepare_contrast_mask(const Image& cmy, std::string& error,
     }
 
     const double k_lo = -m.core, k_hi = m.core;
+    // Provisional rooms, from the anchor ceiling: the reduce pass below only
+    // reads p[0..8], so these are replaced once the base field is known.
     const float p[16] = {
         float(print_gain_[0]), float(print_gain_[1]), float(print_gain_[2]),
         float(1.0 / a_ref[0]), float(1.0 / a_ref[1]), float(1.0 / a_ref[2]),
         float(print_offset_[0]), float(print_offset_[1]), float(print_offset_[2]),
-        float(k_lo), float(m.highlights > 0.0 ? room_for(m.highlights) : 1.0), m.highlights > 0.0 ? 1.0f : 0.0f,
-        float(k_hi), float(m.shadows > 0.0 ? room_for(m.shadows) : 1.0), m.shadows > 0.0 ? 1.0f : 0.0f,
+        float(k_lo), float(m.highlights > 0.0 ? room_for(m.highlights, kReach) : 1.0),
+        m.highlights > 0.0 ? 1.0f : 0.0f,
+        float(k_hi), float(m.shadows > 0.0 ? room_for(m.shadows, kReach) : 1.0),
+        m.shadows > 0.0 ? 1.0f : 0.0f,
         float(kGainLimit)};
     std::memcpy(mask_params_, p, sizeof p);
 
@@ -286,17 +306,46 @@ bool Pipeline::prepare_contrast_mask(const Image& cmy, std::string& error,
     for (size_t i = 0; i < x.size(); ++i) { coef[2 * i] = float(a[i]); coef[2 * i + 1] = float(b[i]); }
     mask_coef_ = gpu_->upload(coef.data(), coef.size() * sizeof(float), error);
     if (!mask_coef_) return false;
+
+    // --- the reach, per side, from this picture's own base field -------------
+    // The amount contract is "a base `reach` stops outside the core moves by N",
+    // so the reach has to be inside what the print can actually show; anchoring
+    // both sides at `kReach` silently diluted the highlight amounts to nothing
+    // on a print that only holds ~2.4 stops above mid-grey. Reading the reach
+    // off the base field keeps the promise on any picture and any paper without
+    // hard-coding a material's range, and the 95th percentile ignores the few
+    // specular cells that would otherwise set the anchor. No side of the field,
+    // no anchor: keep the ceiling, which is today's behaviour.
+    auto side_reach = [&](bool highlight) {
+        std::vector<double> d;
+        d.reserve(b.size());
+        const double knee = highlight ? k_lo : k_hi;
+        for (size_t i = 0; i < b.size(); ++i) {
+            const double base = a[i] * x[i] + b[i];
+            if (highlight ? base < knee : base > knee) d.push_back(std::fabs(base - knee));
+        }
+        if (d.empty()) return kReach;
+        const size_t k = std::min((d.size() * 95) / 100, d.size() - 1);
+        std::nth_element(d.begin(), d.begin() + k, d.end());
+        return std::min(kReach, std::max(kMinReach, d[k]));
+    };
+    const double reach_hi = side_reach(true), reach_lo = side_reach(false);
+    mask_params_[10] = float(m.highlights > 0.0 ? room_for(m.highlights, reach_hi) : 1.0);
+    mask_params_[13] = float(m.shadows > 0.0 ? room_for(m.shadows, reach_lo) : 1.0);
+
     mask_gw_ = gw; mask_gh_ = gh; mask_frame_w_ = W; mask_frame_h_ = H;
     mask_on_ = true;
 
     // The field at the grid's own cells: RFC-024's delta, in stops, after the
     // gain bound -- what `spk_contrast_mask_field` hands the canvas, and the
-    // third plane of the research dump. Computed only when someone asks.
+    // third plane of the research dump. Computed only when someone asks.  Read
+    // the rooms through `mask_params_`: the reach pass above overwrote them.
     auto delta_at = [&](size_t i) {
         const double bb = a[i] * x[i] + b[i];
+        const double h_lo = double(mask_params_[10]), h_hi = double(mask_params_[13]);
         double d = 0.0;
-        if (p[11] != 0.0f && bb < k_lo) { const double D = k_lo - bb; d = D - D * p[10] / std::sqrt(double(p[10]) * p[10] + D * D); }
-        else if (p[14] != 0.0f && bb > k_hi) { const double D = bb - k_hi; d = D * p[13] / std::sqrt(double(p[13]) * p[13] + D * D) - D; }
+        if (p[11] != 0.0f && bb < k_lo) { const double D = k_lo - bb; d = D - D * h_lo / std::sqrt(h_lo * h_lo + D * D); }
+        else if (p[14] != 0.0f && bb > k_hi) { const double D = bb - k_hi; d = D * h_hi / std::sqrt(h_hi * h_hi + D * D) - D; }
         return float(d * kGainLimit / std::sqrt(kGainLimit * kGainLimit + d * d));
     };
     if (delta_out) {

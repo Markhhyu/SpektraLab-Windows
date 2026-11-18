@@ -87,4 +87,24 @@ describe('the wire', () => {
     expect(filmFormatMM('short', 56, 1)).toBe(56);
     expect(filmFormatMM('short', 56, 70 / 56)).toBeCloseTo(70);
   });
+
+  it('sends the path detail the engine already had but no panel exposed', () => {
+    const names = new Set(wire(FILM_PARAMS_DEFAULT, ALL_FEATURES).map((f) => f.name));
+    for (const n of ['camera_filter', 'lens_blur_um', 'density_curve_gamma', 'overscan_carrier',
+      'scanner_white_correction', 'scanner_black_correction', 'scanner_lens_blur'])
+      expect(names.has(n), n).toBe(true);
+    const w = new Map(wire({ ...FILM_PARAMS_DEFAULT, cameraFilter: 'w21', lensBlurUm: 900,
+      densityCurveGamma: 40, scannerLensBlur: 99, scannerWhiteCorrection: true }, ALL_FEATURES)
+      .map((f) => [f.name, f.value]));
+    expect(w.get('camera_filter')).toBe('w21');
+    expect(w.get('lens_blur_um')).toBe(200);
+    expect(w.get('density_curve_gamma')).toBe(4);
+    expect(w.get('scanner_lens_blur')).toBe(20);
+    expect(w.get('scanner_white_correction')).toBe(true);
+  });
+
+  it('drops a filter or carrier name the host would refuse', () => {
+    const p = decodeFilmParams({ ...FILM_PARAMS_DEFAULT, cameraFilter: 'w99', overscanCarrier: 'cardboard' });
+    expect([p.cameraFilter, p.overscanCarrier]).toEqual(['', 'none']);
+  });
 });

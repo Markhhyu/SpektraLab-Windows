@@ -19,7 +19,7 @@ import type {
 import { browserTransport } from './browserShim';
 import { tauriTransport } from './tauriTransport';
 import { HostCallError, inTauri, type Transport } from './transport';
-import type { Adjustments } from '@shared/adjustments';
+import { wireAdjustments, type Adjustments } from '@shared/adjustments';
 import type { Geometry } from '@shared/geometry';
 import type { HalfFramePair } from '@shared/pair';
 
@@ -170,7 +170,8 @@ export class Host {
     const format = state.phase === 'ready' && state.hello.view_formats?.includes('rgba16') ? 'rgba16' : 'rgba8';
     const t0 = performance.now();
     const r = await this.call<{ image: ImageInfo; tier: Tier; print_cached: boolean; generation: number; pair_info?: PairInfo }>(
-      'render_view', { session, tier, ...snapshot, format }, tier === 'full' ? 900_000 : 180_000,
+      'render_view', { session, tier, ...snapshot, adjustments: wireAdjustments(snapshot.adjustments), format },
+      tier === 'full' ? 900_000 : 180_000,
     );
     if (r.result.generation !== snapshot.generation) throw new HostCallError('render_view', 'internal', 'view generation mismatch');
       const image = r.result.image;

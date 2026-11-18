@@ -87,7 +87,6 @@ jobs:
             -VulkanIncludeDirectory "$(cygpath -m /mingw64/include)" \
             -VulkanLibrary "$(cygpath -m "$vulkan")" \
             -GlslangExecutable "$(cygpath -m "$glslang")"
-            '-ExtraConfigureArguments' '-DSPEKTRALAB_LIBRAW_OPENMP=OFF'
 
       - name: Upload the build manifest
         uses: actions/upload-artifact@v4

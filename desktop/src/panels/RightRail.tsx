@@ -250,6 +250,12 @@ function CameraSection() {
       ]}
     >
       <PillMenu label={t('cameraMetering')} value={ae} options={options} fill onChange={setCameraMetering} testId="metering" />
+      <p className="caption">
+        {tz(
+          'Solve suggests a metering exposure (EV) and this paper’s neutral filter pack; the slider keeps your own exposure until you drag it.',
+          '配光只给出测光 EV 建议与这张相纸的中性滤色片包；曝光滑块仍按你的设置，拖动后才改变。',
+        )}
+      </p>
       {hole && focus && <PillMenu label={tz('Exposure scope', '曝光范围')} value={hole.exposureScope}
         options={[{ value: 'frame', label: tz('Frame', '这一格') }, { value: 'film', label: tz('+ Film', '+ 胶片') }]}
         onChange={(v) => updatePair((p) => ({ ...p, [focus]: { ...p[focus]!, exposureScope: v } }))} />}

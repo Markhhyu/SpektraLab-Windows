@@ -143,6 +143,9 @@ described below.
   overlay on top of the editor. The active mode is highlighted, Export is
   disabled until a photograph is selected, and the canvas bar's Library button
   routes through the same switcher.
+- The Camera section explains that Solve only suggests an exposure (EV) and the
+  paper's neutral filter pack; the exposure slider keeps the user's own value
+  until they drag it, so pressing Solve never silently re-exposes a photograph.
 - The right-hand parameter rail is titled "Develop" (Chinese "修改") like the
   module, so "develop" no longer means both the film development stage and the
   whole edit page; the solve action is "Solve" / "配光" and the meter-and-balance

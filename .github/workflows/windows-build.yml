@@ -72,6 +72,13 @@ jobs:
                   Select-Object -First 6 | ForEach-Object { Write-Host "  $($_.Name)" }
               }
             }
+            Get-ChildItem -LiteralPath 'C:\msys64' -Force -ErrorAction SilentlyContinue |
+              ForEach-Object { Write-Host "  C:\\\\msys64\\\\$($_.Name)" }
+            Get-ChildItem -LiteralPath 'C:\msys64\mingw64' -Force -ErrorAction SilentlyContinue |
+              ForEach-Object { Write-Host "  C:\\\\msys64\\\\mingw64\\\\$($_.Name)" }
+            Get-ChildItem -LiteralPath 'C:\msys64' -Recurse -Filter vulkan.h -ErrorAction SilentlyContinue |
+              Select-Object -First 5 | ForEach-Object { Write-Host "  found: $($_.FullName)" }
+            & where.exe gcc 2>$null | ForEach-Object { Write-Host "  gcc: $_" }
             throw 'MSYS2 mingw64 prefix with Vulkan headers was not found.'
           }
           $mingw = Join-Path $root 'mingw64'

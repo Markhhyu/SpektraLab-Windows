@@ -201,6 +201,8 @@ node scripts/package.mjs win      # stages host, builds the frontend and NSIS
   colour-science).
 - `engine/tests/calibration_sweep.py` — DIR/halation/grain monotonicity.
 - `cd desktop && npx vitest run` — 531 frontend tests (2 skipped).
+- GitHub Actions — `Build` (upstream macOS clean checkout) and
+  `Windows build` (an MSYS2 MinGW compile gate for the engine).
 
 ## Known limits
 

@@ -145,6 +145,8 @@ node scripts/package.mjs win      # 暂存 host、构建前端并产出 NSIS 安
   （需要装好 numpy/scipy/numba/colour-science 的 Python 环境）。
 - `engine/tests/calibration_sweep.py`——DIR/光晕/颗粒单调性。
 - `cd desktop && npx vitest run`——531 项前端测试（2 项跳过）。
+- GitHub Actions——`Build`（上游 macOS 干净检出构建）与
+  `Windows build`（MSYS2 MinGW 引擎编译门）。
 
 ## 已知限制
 

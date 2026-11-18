@@ -776,33 +776,82 @@ static bool write_tiff_page(std::FILE* file,const void* rgb,uint32_t w,uint32_t 
     const size_t row_bytes=size_t(w)*3*(bits/8);
     const size_t rows=std::max<size_t>(1,std::min<size_t>(h,(1u<<20)/row_bytes));
     const auto* input=static_cast<const uint8_t*>(rgb);
-    std::vector<uint32_t> offsets,counts;std::vector<uint8_t> converted;std::vector<uint8_t> predicted;
-    if constexpr(std::endian::native!=std::endian::little)if(bits==16)converted.resize(row_bytes*rows);
-    for(size_t y=0;y<h;y+=rows){const size_t bytes=row_bytes*std::min(rows,h-y);
-        const auto start=tiff_position(file);if(start<0||uint64_t(start)>UINT32_MAX){error="compressed image exceeds classic TIFF limits";return false;}
+    std::vector<uint32_t> offsets,counts;
+    const size_t strips=(h+rows-1)/rows;
+    // Strips are independent, so Deflate compresses a window of them in
+    // parallel. Only the write order matters (the IFD stores offsets in strip
+    // order), so each window is compressed first and then written in order.
+    auto strip_bytes=[&](size_t index,std::vector<uint8_t>& payload)->bool{
+        const size_t y=index*rows;
+        const size_t bytes=row_bytes*std::min(rows,h-y);
         const uint8_t* data=input+y*row_bytes;
-        if(!converted.empty()){for(size_t i=0;i<bytes;i+=2){uint16_t v;std::memcpy(&v,data+i,2);converted[i]=uint8_t(v);converted[i+1]=uint8_t(v>>8);}data=converted.data();}
-        if(options.deflate){
-            predicted.resize(bytes);
-            const size_t samples=row_bytes/(bits/8);
-            for(size_t r=0;r+row_bytes<=bytes;r+=row_bytes){
-                const uint8_t* src=data+r;uint8_t* dst=predicted.data()+r;
-                if(bits==8){
-                    for(size_t i=0;i<3;++i)dst[i]=src[i];
-                    for(size_t i=3;i<row_bytes;++i)dst[i]=uint8_t(src[i]-src[i-3]);
-                }else{
-                    for(size_t i=0;i<3;++i){uint16_t v;std::memcpy(&v,src+2*i,2);std::memcpy(dst+2*i,&v,2);}
-                    for(size_t i=3;i<samples;++i){uint16_t a,b;std::memcpy(&a,src+2*i,2);std::memcpy(&b,src+2*(i-3),2);const uint16_t d=uint16_t(a-b);std::memcpy(dst+2*i,&d,2);}
-                }
-            }
-            data=predicted.data();
+        std::vector<uint8_t> big_endian;
+        if constexpr(std::endian::native!=std::endian::little){
+            if(bits==16){big_endian.resize(bytes);for(size_t i=0;i<bytes;i+=2){uint16_t v;std::memcpy(&v,data+i,2);big_endian[i]=uint8_t(v);big_endian[i+1]=uint8_t(v>>8);}data=big_endian.data();}
         }
-        if(options.lzw){if(!lzw_strip(file,data,bytes,error))return false;}
-        else if(options.deflate){if(!deflate_strip(file,data,bytes,error))return false;}
-        else if(std::fwrite(data,1,bytes,file)!=bytes){error="TIFF strip write failed";return false;}
-        const auto end=tiff_position(file);if(end<start||uint64_t(end)>UINT32_MAX){error="compressed image exceeds classic TIFF limits";return false;}
-        offsets.push_back(uint32_t(start));counts.push_back(uint32_t(end-start));
+        payload.resize(bytes);
+        const size_t samples=row_bytes/(bits/8);
+        for(size_t r=0;r+row_bytes<=bytes;r+=row_bytes){
+            const uint8_t* src=data+r;uint8_t* dst=payload.data()+r;
+            if(bits==8){
+                for(size_t i=0;i<3;++i)dst[i]=src[i];
+                for(size_t i=3;i<row_bytes;++i)dst[i]=uint8_t(src[i]-src[i-3]);
+            }else{
+                for(size_t i=0;i<3;++i){uint16_t v;std::memcpy(&v,src+2*i,2);std::memcpy(dst+2*i,&v,2);}
+                for(size_t i=3;i<samples;++i){uint16_t a,b;std::memcpy(&a,src+2*i,2);std::memcpy(&b,src+2*(i-3),2);const uint16_t d=uint16_t(a-b);std::memcpy(dst+2*i,&d,2);}
+            }
+        }
+        return true;
+    };
+    auto compress_strip=[&](const std::vector<uint8_t>& payload,std::vector<uint8_t>& out,std::string& why)->bool{
+        uLongf bound=compressBound(uLong(payload.size()));
+        out.resize(size_t(bound));
+        if(compress2(out.data(),&bound,payload.data(),uLong(payload.size()),6)!=Z_OK){why="TIFF Deflate compression failed";return false;}
+        out.resize(size_t(bound));
+        return true;
+    };
+    const unsigned hardware=std::thread::hardware_concurrency();
+    const size_t workers=std::max<size_t>(1,std::min<size_t>(4,hardware?hardware:1));
+    if(options.deflate){
+        for(size_t a=0;a<strips;a+=workers){
+            const size_t b=std::min(strips,a+workers);
+            std::vector<std::vector<uint8_t>> ready(b-a);
+            std::vector<std::string> errors(b-a);
+            std::vector<std::thread> pool;
+            for(size_t k=a;k<b;++k)pool.emplace_back([&,k]{
+                std::vector<uint8_t> raw;
+                strip_bytes(k,raw);
+                compress_strip(raw,ready[k-a],errors[k-a]);
+            });
+            for(auto& worker:pool)worker.join();
+            for(size_t k=a;k<b;++k){
+                if(!errors[k-a].empty()){error=errors[k-a];return false;}
+                const auto start=tiff_position(file);
+                if(start<0||uint64_t(start)>UINT32_MAX){error="compressed image exceeds classic TIFF limits";return false;}
+                const auto& payload=ready[k-a];
+                if(!payload.empty()&&std::fwrite(payload.data(),1,payload.size(),file)!=payload.size()){error="TIFF strip write failed";return false;}
+                const auto stop=tiff_position(file);
+                if(stop<start||uint64_t(stop)>UINT32_MAX){error="compressed image exceeds classic TIFF limits";return false;}
+                offsets.push_back(uint32_t(start));counts.push_back(uint32_t(stop-start));
+            }
+        }
+    }else{
+        std::vector<uint8_t> converted;
+        if constexpr(std::endian::native!=std::endian::little)if(bits==16)converted.resize(row_bytes*rows);
+        for(size_t y=0;y<h;y+=rows){
+            const size_t bytes=row_bytes*std::min(rows,h-y);
+            const auto start=tiff_position(file);
+            if(start<0||uint64_t(start)>UINT32_MAX){error="compressed image exceeds classic TIFF limits";return false;}
+            const uint8_t* data=input+y*row_bytes;
+            if(!converted.empty()){for(size_t i=0;i<bytes;i+=2){uint16_t v;std::memcpy(&v,data+i,2);converted[i]=uint8_t(v);converted[i+1]=uint8_t(v>>8);}data=converted.data();}
+            if(options.lzw){if(!lzw_strip(file,data,bytes,error))return false;}
+            else if(std::fwrite(data,1,bytes,file)!=bytes){error="TIFF strip write failed";return false;}
+            const auto stop=tiff_position(file);
+            if(stop<start||uint64_t(stop)>UINT32_MAX){error="compressed image exceeds classic TIFF limits";return false;}
+            offsets.push_back(uint32_t(start));counts.push_back(uint32_t(stop-start));
+        }
     }
+
     const auto end=tiff_position(file);patch_tiff(prefix,origin,273,offsets);patch_tiff(prefix,origin,279,counts);
     if(!tiff_seek(file,origin)||std::fwrite(prefix.data(),1,prefix.size(),file)!=prefix.size()||!tiff_seek(file,uint64_t(end))){error="TIFF directory update failed";return false;}
     return true;

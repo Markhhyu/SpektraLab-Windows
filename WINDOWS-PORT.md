@@ -120,6 +120,10 @@ described below.
 - The canvas histogram can be folded away (small toggle) so it never covers
   the picture; the choice is remembered.
 - A unit test guards the Windows copy against macOS Command/Shift glyphs.
+- Deflate TIFF export compresses a window of strips in parallel (up to four
+  threads; strips are independent and writes stay in order). The 32.95 MP
+  tiff16 export dropped from ~2.9 s to ~0.96 s on the reference machine, with
+  byte-identical pixels on decode.
 
 ### Local adjustments (v1.8.0)
 

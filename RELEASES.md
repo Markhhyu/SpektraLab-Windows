@@ -60,6 +60,47 @@ worth shipping, keeping the version bump and the asset name in step.
 
 ## History
 
+### v1.9.0 — 两段解码、渲染池与图库升级 / Two-stage decode, render pool and Library upgrades
+
+**中文**
+- RAW 打开改为两段解码：先半分辨率出首帧（32.95 MP 参考图约 0.45 s，原约 1.12 s），
+  首帧上屏后自动补齐全分辨率；JPEG/TIFF 与半格拼接保持单段路径。
+- 批量导出可用后台渲染池（最多 4 个宿主，设置 → 渲染 → 批量渲染）；3 张 32.95 MP
+  TIFF 实测顺序 18.1 s → 并发 5.8 s（3.1×），额外宿主仅在导出期间存在。
+- 图库导入 8 张以上时通过渲染池读相机预览（可取消、失败列表与重试）；图库新增
+  拍摄时间排序、缩略图尺寸滑杆、就地重命名；胶片条可批量评级/旗标/颜色
+  （键盘 0-5 / P / X / U）。
+- TIFF Deflate 导出并行压缩（约 2.9 s → 0.96 s，像素与无压缩一致）；历史/预设、
+  局部调整、图库与渲染池等此前提交一并进入本版。
+- 界面：图库/修改/导出统一模块栏、术语统一、窄窗口侧栏收窄、画布加载骨架、
+  直方图可折叠、保存状态圆点、Camera 区配光说明。
+- 安装包：37.60 MiB，sha256 `2d0f1144bd525bf4c748dcc1611880e75b00aa3e1487025406dc436d4b8144ba`。
+- 验证：`ctest` 43/43；前端 531 通过 / 2 跳过；host 探针验证两段解码（2344×3514 →
+  4688×7028）、渲染池 3.1×、导入池化与集合/标记功能。
+
+**English**
+- RAW opens are two-stage: a half-resolution first look (~0.45 s instead of
+  ~1.12 s for the 32.95 MP reference) followed by an automatic full-resolution
+  re-decode once the first frame is on screen; JPEG/TIFF and half-frame pairs
+  keep the single-stage path.
+- Batch export can use the background render pool (up to four hosts; Settings →
+  Rendering → Batch rendering); three 32.95 MP TIFF exports went from 18.1 s
+  sequential to 5.8 s (3.1×), and the extra hosts exist only during the run.
+- Library imports of 8+ files read camera previews through the pool (cancellable,
+  failure list and retry); the Library adds EXIF capture-time sorting, a
+  thumbnail-size slider and in-place rename; the filmstrip can rate, flag and
+  label picked frames (keyboard 0-5 / P / X / U).
+- Deflate TIFF export compresses strips in parallel (~2.9 s → 0.96 s, pixels
+  identical to uncompressed); history/presets, local adjustments, Library and
+  render-pool work committed earlier in the batch are included.
+- UI: one module bar for Library/Develop/Export, unified terminology, narrower
+  rails on small windows, canvas loading skeleton, foldable histogram, save
+  state dot, and a note that Solve only suggests an exposure.
+- Installer: 37.60 MiB, sha256 `2d0f1144bd525bf4c748dcc1611880e75b00aa3e1487025406dc436d4b8144ba`.
+- Verification: `ctest` 43/43; 531 frontend tests passed / 2 skipped; host
+  probes for the two-stage decode (2344×3514 → 4688×7028), the 3.1× pool, pooled
+  imports and the Library marks.
+
 ### v1.8.0 — 局部调整 / Local adjustments
 
 **中文**

@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 这是 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的 **Windows / Vulkan 构建**：源自原项目最后一个
-Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.8.0**，
+Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己独立的版本线，当前为 **v1.9.0**，
 并包含 Windows 移植修复、性能优化和两个原生扩展（见下）。
 
 胶片过程模型、28 个实测胶片/相纸 profile 与打印 LUT 来自
@@ -98,6 +98,17 @@ Windows 测试版 **v1.3.4-beta.3**（tag `9ceca33`）。Windows 版使用自己
     属于正常的可撤销编辑；不合法的层会被明确拒绝。另：直方图与宽容度图改为平滑绘制，
     增加裁剪提示、EV 刻度与「应用建议置位」等控件。
 
+17. **RAW 两段解码与一批流程升级（`v1.9.0`）**——打开 RAW 现在先用半分辨率
+    LibRaw 解码出首帧（32.95 MP 参考图约 0.45 s，原约 1.12 s），首帧上屏后自动
+    补齐全分辨率解码，打开等待约减半。文件夹导入 8 张以上时通过渲染池读取相机
+    预览（可取消、失败列表与重试）。批量导出可用最多 4 个后台渲染宿主
+    （设置 → 渲染 → 批量渲染），3 张 32.95 MP TIFF 实测快 3.1 倍；额外宿主只在
+    导出期间存在。图库新增拍摄时间排序、缩略图尺寸滑杆与就地重命名；胶片条可
+    批量评级/旗标/颜色（键盘 0-5 / P / X / U）。TIFF Deflate 导出改为并行压缩
+    （约 2.9 s → 0.96 s，像素逐一相同）。图库、修改、导出统一到一条模块栏；
+    术语统一（修改 / 配光 / 测光与配光）；窄窗口下侧栏自动收窄；画布加载骨架、
+    直方图可折叠、保存状态可见，Camera 区注明配光只给建议、不会自动改曝光。
+
 ## 打包与 Releases
 
 - 发布用的 host 为**静态链接**（`-DSPEKTRALAB_STATIC_RUNTIME=ON`），只依赖系统 DLL
@@ -133,7 +144,7 @@ node scripts/package.mjs win      # 暂存 host、构建前端并产出 NSIS 安
 - `engine/tests/parity_upstream.py`——对公开上游 Python 包的整图 parity
   （需要装好 numpy/scipy/numba/colour-science 的 Python 环境）。
 - `engine/tests/calibration_sweep.py`——DIR/光晕/颗粒单调性。
-- `cd desktop && npx vitest run`——511 项前端测试（2 项跳过）。
+- `cd desktop && npx vitest run`——531 项前端测试（2 项跳过）。
 
 ## 已知限制
 

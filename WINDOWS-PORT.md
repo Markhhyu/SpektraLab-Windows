@@ -101,7 +101,7 @@ described below.
     Tests: `desktop/src/shared/catalog.test.ts` (8 cases) plus the full desktop
     suite (472 passed / 2 skipped); typecheck and lint are clean.
 
-### Batch and Library improvements (unreleased)
+### Batch and Library improvements (v1.9.0)
 
 - Folder imports read camera-embedded previews through the render pool when 8
   or more files are imported: up to four workers, cancellable from the import
@@ -174,7 +174,7 @@ described below.
   ramps to its end side, malformed layers return `bad_request`, and an export
   with a mask differs from one without.
 
-### Batch render pool (unreleased)
+### Batch render pool (v1.9.0)
 
 - Batch exports can run on up to four **background host processes** instead of
   the interactive one (`desktop/src-tauri/src/pool.rs`, `HostPool`). Each worker

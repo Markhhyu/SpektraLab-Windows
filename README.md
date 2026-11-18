@@ -5,7 +5,7 @@
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
 the spectral film-and-print simulator — derived from the original project's last
 Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
-version line, currently **v1.8.0**, plus the Windows port fixes, performance work
+version line, currently **v1.9.0**, plus the Windows port fixes, performance work
 and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs
@@ -139,6 +139,25 @@ the short version:
     histogram and the latitude plot were also rebuilt with smoothed rendering,
     clipping indicators, EV ticks and suggested-placement controls.
 
+17. **Two-stage RAW opens and a batch of workflow upgrades (`v1.9.0`)** —
+    opening a RAW photograph now starts with a half-resolution LibRaw decode
+    (~0.45 s instead of ~1.12 s for the 32.95 MP reference file), so the first
+    frame lands in roughly half the time; the full-resolution decode follows
+    automatically once that frame is on screen. Folder imports read camera
+    previews through the render pool when 8+ files are imported (cancellable,
+    with a failure list and retry). Batch export can run on up to four
+    background render hosts (Settings → Rendering → Batch rendering), measured
+    3.1× faster on three 32.95 MP TIFF exports; the extra hosts only exist for
+    the run. The Library gains EXIF capture-time sorting, a thumbnail-size
+    slider and in-place rename; the filmstrip can rate, flag and label picked
+    frames (also 0-5 / P / X / U on the keyboard). Deflate TIFF export
+    compresses strips in parallel (~2.9 s → ~0.96 s, byte-identical pixels).
+    Library, Develop and Export now share one module bar; terminology is
+    unified (Develop / Solve / Meter and balance); the side rails narrow on
+    smaller windows; the canvas shows a loading skeleton, the histogram folds
+    away, save state is visible and the Camera section explains that Solve only
+    suggests an exposure.
+
 ## Packaging and releases
 
 - The shipped host is **static** (`-DSPEKTRALAB_STATIC_RUNTIME=ON`), so it
@@ -181,7 +200,7 @@ node scripts/package.mjs win      # stages host, builds the frontend and NSIS
   upstream Python package (needs a Python venv with numpy/scipy/numba/
   colour-science).
 - `engine/tests/calibration_sweep.py` — DIR/halation/grain monotonicity.
-- `cd desktop && npx vitest run` — 511 frontend tests (2 skipped).
+- `cd desktop && npx vitest run` — 531 frontend tests (2 skipped).
 
 ## Known limits
 

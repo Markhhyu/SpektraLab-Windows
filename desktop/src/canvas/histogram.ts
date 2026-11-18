@@ -3,7 +3,7 @@
 
 import { createElement } from 'react';
 
-import { computeHistogram, type Histogram } from './histogram-core';
+import { computeHistogram, histogramPeak, histogramStats, smoothBins, type Histogram } from './histogram-core';
 
 export { computeHistogram, type Histogram };
 
@@ -47,26 +47,46 @@ export function histogramOf(px: Uint8Array): Promise<Histogram> {
   }
 }
 
-function path(bins: Uint32Array, peak: number, w: number, h: number): string {
+function smoothPath(bins: Uint32Array, peak: number, w: number, h: number, pad = 2): string {
+  const values = smoothBins(bins, 2);
   let d = `M0 ${h}`;
-  for (let i = 0; i < 256; i++) {
-    const x = (i / 255) * w;
-    const y = h - (Math.min(bins[i]!, peak) / peak) * h;
-    d += ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+  for (let i = 0; i < w; i++) {
+    const v = values[Math.round((i / Math.max(1, w - 1)) * (values.length - 1))] ?? 0;
+    const y = h - (Math.min(v, peak) / peak) * (h - pad);
+    d += ` L${i.toFixed(1)} ${y.toFixed(2)}`;
   }
   return d + ` L${w} ${h} Z`;
 }
 
-export function HistogramOverlay({ h, width = 150, height = 44 }: { h: Histogram; width?: number; height?: number }) {
-  // The 99.5th percentile bin as the ceiling, so one spike does not flatten the rest.
-  const all = [...h.r, ...h.g, ...h.b].sort((a, b) => a - b);
-  const peak = Math.max(1, all[Math.floor(all.length * 0.995)] ?? 1);
+function edgePath(bins: Uint32Array, peak: number, w: number, h: number): string {
+  const values = smoothBins(bins, 2);
+  let d = '';
+  for (let i = 0; i < w; i++) {
+    const v = values[Math.round((i / Math.max(1, w - 1)) * (values.length - 1))] ?? 0;
+    const y = h - (Math.min(v, peak) / peak) * (h - 2);
+    d += (i === 0 ? 'M' : ' L') + `${i.toFixed(1)} ${y.toFixed(2)}`;
+  }
+  return d;
+}
+
+export function HistogramOverlay({ h, width = 176, height = 58 }: { h: Histogram; width?: number; height?: number }) {
+  const peak = histogramPeak([...h.r, ...h.g, ...h.b], 0.995);
+  const stats = histogramStats(h);
+  const grid = [0.25, 0.5, 0.75];
+  const axisY = height - 0.5;
   return createElement(
     'svg',
     { className: 'histogram', width, height, viewBox: `0 0 ${width} ${height}`, 'data-testid': 'histogram' },
-    createElement('path', { d: path(h.y, peak, width, height), fill: 'var(--hist-y)', fillOpacity: 0.25 }),
-    createElement('path', { d: path(h.r, peak, width, height), fill: 'none', stroke: 'var(--hist-r)', strokeWidth: 1 }),
-    createElement('path', { d: path(h.g, peak, width, height), fill: 'none', stroke: 'var(--hist-g)', strokeWidth: 1 }),
-    createElement('path', { d: path(h.b, peak, width, height), fill: 'none', stroke: 'var(--hist-b)', strokeWidth: 1 }),
+    grid.map((f) => createElement('line', {
+      key: f, className: 'hist-grid', x1: f * width, x2: f * width, y1: 0, y2: axisY,
+    })),
+    createElement('line', { className: 'hist-axis', x1: 0, x2: width, y1: axisY, y2: axisY }),
+    createElement('path', { d: smoothPath(h.y, peak, width, height), fill: 'var(--hist-y)', fillOpacity: 0.5, className: 'hist-luma' }),
+    createElement('path', { d: smoothPath(h.r, peak, width, height), fill: 'var(--hist-r)', fillOpacity: 0.4, className: 'hist-channel' }),
+    createElement('path', { d: smoothPath(h.g, peak, width, height), fill: 'var(--hist-g)', fillOpacity: 0.4, className: 'hist-channel' }),
+    createElement('path', { d: smoothPath(h.b, peak, width, height), fill: 'var(--hist-b)', fillOpacity: 0.4, className: 'hist-channel' }),
+    createElement('path', { d: edgePath(h.y, peak, width, height), fill: 'none', stroke: 'var(--hist-y)', strokeOpacity: 0.9, strokeWidth: 1 }),
+    stats.clippedLow > 0.0005 && createElement('path', { className: 'hist-clip', d: 'M0 0 L7 0 L0 7 Z' }),
+    stats.clippedHigh > 0.0005 && createElement('path', { className: 'hist-clip', d: `M${width} 0 L${width - 7} 0 L${width} 7 Z` }),
   );
 }

@@ -56,6 +56,32 @@ This repository ships Windows installers only. Release notes are written in
 
 ## History
 
+### v1.5.0 — 影调工具视觉优化 / Readable tone tools
+
+安装包：`SpektraLab_1.5.0_x64-setup.exe`（NSIS，37.53 MiB），sha256
+`76eb6b0d79135fc279dc82ac165707f4c8b63863d8fd1e2a5c9d18359e2af246`。
+
+**中文**
+
+- 宽容度曲线重做：260×96 直方图式图表，平滑面积 + 渐变填充，可印放中等曝光带着色并标注阴影/高光 EV，坐标轴带 EV 刻度与边界标签。
+- 宽容度下方新增芯片行：保留档数、低于/范围内/高于百分比一眼可读。
+- 新增「应用建议置位」按钮：把测得的阴影/高光回拉量一键应用到场景置位。
+- 画布右上角照片直方图升级：176×58 平滑 RGB + 亮度叠加，带网格、坐标轴、亮度均值与两端裁剪标记。
+- 验证：桌面端 491 项测试通过（2 项跳过），typecheck / lint 通过。
+
+**English**
+
+- The latitude plot is now a 260×96 histogram-style chart: a smoothed,
+  gradient-filled scene distribution, the printable medium band shaded with
+  shadow/highlight EV labels, EV ticks and boundary labels on the axis.
+- A stat row below the plot reports the held stops and the below / within /
+  above shares at a glance.
+- A suggested-placement button applies the measured highlight/shadow pull-back
+  with one click.
+- The on-canvas histogram is now a 176×58 smoothed RGB + luma overlay with a
+  grid, axis, mean level and clipping markers.
+- Verified: 491 desktop tests passed (2 skipped); typecheck / lint clean.
+
 ### v1.4.0 — 图库快捷入口与胶片条筛选 / Library shortcut and filmstrip filters
 
 安装包：`SpektraLab_1.4.0_x64-setup.exe`（NSIS，37.55 MiB），sha256

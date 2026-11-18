@@ -5,7 +5,7 @@
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
 the spectral film-and-print simulator — derived from the original project's last
 Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
-version line, currently **v1.4.0**, plus the Windows port fixes, performance work
+version line, currently **v1.5.0**, plus the Windows port fixes, performance work
 and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs
@@ -100,6 +100,15 @@ the short version:
     from the library loads the whole visible page into the editor's filmstrip,
     so frames switch there without going back to the grid. Edits stay
     non-destructive per-image sidecars, exactly as before.
+
+13. **Readable tone tools (`v1.5.0`)** — the latitude plot is now a 260×96
+    histogram-style chart: the smoothed scene distribution is filled with a
+    gradient, the printable medium band (shadow/highlight EV) is shaded and
+    labelled, EV ticks and boundary labels are drawn along the axis, and a
+    stat row reports the held stops plus the below/within/above shares. A
+    suggested-placement button applies the measured highlight/shadow
+    pull-back in one click. The on-canvas histogram is now a 176×58 smoothed
+    RGB + luma overlay with a grid, axis and clipping markers.
 
 ## Packaging and releases
 

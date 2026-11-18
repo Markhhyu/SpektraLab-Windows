@@ -99,39 +99,100 @@ function LatitudeSection() {
   return (
     <Section id="latitude" title={t('sectionLatitude')} trailing={`${name(film)} · ${name(paper)}`} unsupported={noFilm ? tz('Film simulation is bypassed.', '当前不应用胶片模拟。') : failure}>
       <LatitudePlot reply={reply} />
+      {reply?.suggested?.valid && (reply.suggested.highlight_pull_back > 0 || reply.suggested.shadow_pull_back > 0) && (
+        <button
+          className="btn latitude-suggest"
+          data-testid="apply-suggested-placement"
+          onClick={() => {
+            if (reply.suggested.highlight_pull_back > 0) placeScene('highlight', reply.suggested.highlight_pull_back);
+            if (reply.suggested.shadow_pull_back > 0) placeScene('shadow', reply.suggested.shadow_pull_back);
+          }}
+        >
+          {tz('Apply suggested placement', '应用建议置位')}
+          <span className="num"> (+{reply.suggested.highlight_pull_back.toFixed(1)} / +{reply.suggested.shadow_pull_back.toFixed(1)} EV)</span>
+        </button>
+      )}
     </Section>
   );
 }
 
 function LatitudePlot({ reply }: { reply: LatitudeReply | null }) {
-  const W = 240;
-  const H = 60;
-  if (!reply) return <svg className="plot" viewBox={`0 0 ${W} ${H}`} height={H} />;
+  const W = 260;
+  const H = 96;
+  if (!reply) return <svg className="plot" viewBox={`0 0 ${W} ${H}`} height={H} data-testid="latitude-plot" />;
   const h = reply.scene.histogram;
-  const f = h.placed_fractions ?? h.fractions;
-  const peak = Math.max(...f, 1e-9);
+  const placed = h.placed_fractions ?? h.fractions;
+  const n = placed.length;
+  const smooth = (series: number[], radius = 2) => series.map((_, i) => {
+    let sum = 0;
+    let count = 0;
+    for (let j = Math.max(0, i - radius); j <= Math.min(n - 1, i + radius); j++) { sum += series[j] ?? 0; count++; }
+    return sum / count;
+  });
+  const smoothPlaced = smooth(placed);
+  const sortedPeak = [...smoothPlaced].sort((a, b) => a - b);
+  const peak = Math.max(1e-9, sortedPeak[Math.floor(sortedPeak.length * 0.995)] ?? Math.max(...smoothPlaced));
   const x = (ev: number) => ((ev - h.lo_ev) / (h.hi_ev - h.lo_ev)) * W;
-  const n = f.length;
+  const yOf = (v: number) => H - 12 - (Math.min(v, peak) / peak) * (H - 20);
+  const lo = reply.medium.shadow_ev;
+  const hi = reply.medium.highlight_ev;
   let below = 0;
   let above = 0;
   let total = 0;
-  f.forEach((v, i) => {
+  placed.forEach((v, i) => {
     const c = h.lo_ev + ((i + 0.5) * (h.hi_ev - h.lo_ev)) / n;
     total += v;
-    if (c < reply.medium.shadow_ev) below += v;
-    else if (c > reply.medium.highlight_ev) above += v;
+    if (c < lo) below += v;
+    else if (c > hi) above += v;
   });
-  const pct = (v: number) => ((v / (total || 1)) * 100).toFixed(1) + ' %';
+  const pct = (v: number) => ((v / (total || 1)) * 100).toFixed(1);
+  // A smooth area for the placed distribution, plus a faint outline of the
+  // measurement before scene placement when the two differ.
+  const area = smoothPlaced.map((v, i) => {
+    const cx = (i / Math.max(1, n - 1)) * W;
+    return `${i === 0 ? 'M' : 'L'}${cx.toFixed(1)} ${yOf(v).toFixed(1)}`;
+  }).join(' ') + ` L${W} ${H - 12} L0 ${H - 12} Z`;
+  const outline = smooth(h.fractions).map((v, i) => {
+    const cx = (i / Math.max(1, n - 1)) * W;
+    return `${i === 0 ? 'M' : 'L'}${cx.toFixed(1)} ${yOf(v).toFixed(1)}`;
+  }).join(' ');
+  // Five EV ticks, kept on round values when the range allows it.
+  const tickStep = Math.max(1, Math.pow(10, Math.floor(Math.log10(Math.max(1, (h.hi_ev - h.lo_ev) / 4)))));
+  const ticks: number[] = [];
+  for (let ev = Math.ceil(h.lo_ev / tickStep) * tickStep; ev <= h.hi_ev + 1e-9; ev += tickStep) ticks.push(Number(ev.toFixed(2)));
+  const tickLabel = (ev: number) => (ev > 0 ? '+' : '') + ev.toFixed(0);
   return (
     <>
-      <svg className="plot" viewBox={`0 0 ${W} ${H}`} height={H} data-testid="latitude-plot">
-        <rect x={x(reply.medium.shadow_ev)} y={0} width={x(reply.medium.highlight_ev) - x(reply.medium.shadow_ev)} height={H} fill="var(--latitude-beyond)" />
-        {f.map((v, i) => (
-          <rect key={i} x={(i / n) * W} y={H - (v / peak) * (H - 4)} width={W / n} height={(v / peak) * (H - 4)} fill="var(--latitude-inside)" />
-        ))}
-      </svg>
-      <div className="caption num">
-        {t('latitudeBelow')} {pct(below)} · {t('latitudeWithin')} {pct(total - below - above)} · {t('latitudeAbove')} {pct(above)} · {reply.medium.latitude_stops.toFixed(2)} {t('latitudeHeld')}
+      <div className="latitude-plot-wrap">
+        <svg className="plot" viewBox={`0 0 ${W} ${H}`} height={H} data-testid="latitude-plot">
+          <defs>
+            <linearGradient id="latitude-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--latitude-inside-edge)" stopOpacity="0.55" />
+              <stop offset="100%" stopColor="var(--latitude-inside-edge)" stopOpacity="0.08" />
+            </linearGradient>
+          </defs>
+          <rect x={x(lo)} y={0} width={Math.max(0, x(hi) - x(lo))} height={H - 12} fill="var(--latitude-inside)" fillOpacity="0.16" />
+          <rect x={0} y={0} width={Math.max(0, x(lo))} height={H - 12} fill="var(--latitude-beyond)" fillOpacity="0.30" />
+          <rect x={x(hi)} y={0} width={Math.max(0, W - x(hi))} height={H - 12} fill="var(--latitude-beyond)" fillOpacity="0.30" />
+          <path d={area} fill="url(#latitude-fill)" />
+          {placed !== h.fractions && <path d={outline} fill="none" stroke="var(--dim)" strokeOpacity="0.45" strokeWidth="1" strokeDasharray="2 2" />}
+          {ticks.map((ev) => (
+            <g key={ev}>
+              <line x1={x(ev)} x2={x(ev)} y1={H - 12} y2={H - 8} stroke="var(--plot-grid)" />
+              <text x={x(ev)} y={H - 1} textAnchor="middle" className="latitude-tick">{tickLabel(ev)}</text>
+            </g>
+          ))}
+          <line x1={x(lo)} x2={x(lo)} y1={0} y2={H - 12} stroke="var(--latitude-inside-edge)" strokeWidth="1" strokeDasharray="3 2" />
+          <line x1={x(hi)} x2={x(hi)} y1={0} y2={H - 12} stroke="var(--latitude-inside-edge)" strokeWidth="1" strokeDasharray="3 2" />
+          <text x={Math.max(2, x(lo) - 4)} y={10} textAnchor="end" className="latitude-bound">{lo.toFixed(1)} EV</text>
+          <text x={Math.min(W - 2, x(hi) + 4)} y={10} textAnchor="start" className="latitude-bound">+{hi.toFixed(1)} EV</text>
+        </svg>
+      </div>
+      <div className="latitude-stats num">
+        <span className="latitude-stat latitude-stat-value">{reply.medium.latitude_stops.toFixed(2)} {t('latitudeHeld')}</span>
+        <span className="latitude-stat">{t('latitudeBelow')} {pct(below)} %</span>
+        <span className="latitude-stat latitude-stat-in">{t('latitudeWithin')} {pct(total - below - above)} %</span>
+        <span className="latitude-stat">{t('latitudeAbove')} {pct(above)} %</span>
       </div>
     </>
   );

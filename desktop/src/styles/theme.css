@@ -341,7 +341,26 @@ input {
 }
 .histogram {
   background: rgba(30, 31, 30, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 3px;
+  padding: 3px 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(2px);
+}
+.hist-grid {
+  stroke: var(--plot-grid);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.hist-axis {
+  stroke: var(--plot-grid);
+  stroke-width: 1;
+}
+.hist-channel {
+  mix-blend-mode: screen;
+}
+.hist-clip {
+  fill: #e8b04e;
 }
 .tier-badge {
   font-size: var(--fs-small);
@@ -858,6 +877,51 @@ input {
   border-radius: 2px;
   display: block;
   width: 100%;
+}
+.latitude-plot-wrap {
+  background: var(--plot);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.latitude-plot-wrap .plot {
+  background: transparent;
+  border-radius: 0;
+}
+.latitude-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+  font-size: var(--fs-small);
+}
+.latitude-stat {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--dim);
+  white-space: nowrap;
+}
+.latitude-stat-value {
+  color: var(--text);
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.09);
+}
+.latitude-stat-in {
+  color: var(--text);
+}
+.latitude-tick {
+  fill: var(--dim);
+  font-size: 8px;
+  font-family: var(--font-mono);
+}
+.latitude-bound {
+  fill: var(--dim);
+  font-size: 8px;
+  font-family: var(--font-mono);
+}
+.latitude-suggest {
+  margin-top: 6px;
+  font-size: var(--fs-small);
 }
 
 /* dialogs */

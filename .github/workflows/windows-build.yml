@@ -75,7 +75,9 @@ jobs:
           if [ ! -f "$glslang" ]; then glslang=/mingw64/bin/glslang.exe; fi
           echo "vulkan loader: $vulkan"
           echo "glslang: $glslang"
-          pwsh.exe -NoProfile -File engine/build-windows.ps1 \
+          PS="/c/Program Files/PowerShell/7/pwsh.exe"
+          if [ ! -x "$PS" ]; then PS=powershell.exe; fi
+          "$PS" -NoProfile -File engine/build-windows.ps1 \
             -BuildDirectory build/windows \
             -Fresh -SkipTests -Jobs 4 \
             '-Desktop:$false' \

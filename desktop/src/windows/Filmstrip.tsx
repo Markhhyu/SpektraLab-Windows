@@ -15,7 +15,7 @@ import { type Geometry, GEOMETRY_DEFAULT } from '@shared/geometry';
 import { thumbnailGeometryPlan } from '@shared/surfaces';
 import { t, tz } from '../i18n';
 import { platform } from '../platform';
-import { useLibrary } from '../state/library';
+import { setColorLabel, setFlag, setRating, useLibrary } from '../state/library';
 import { FILMSTRIP_FILTER_DEFAULT, type FilmstripFilter, type FrameMark, frameMatchesMark } from '@shared/filmstripFilter';
 import type { ColorLabel, Flag, Rating } from '@shared/catalog';
 
@@ -201,6 +201,30 @@ export function Filmstrip() {
         <ChevronRight />
       </button>
       {menu && <div ref={menuEl} role="menu" className="menu pair-context filmstrip-menu" style={{ left: menu.x, top: menu.y }} data-testid="filmstrip-menu">
+        <div className="menu-row filmstrip-mark-row" role="group" aria-label={tz('Rating', '星级')}>
+          {([1, 2, 3, 4, 5] as Rating[]).map((r) => (
+            <button key={r} role="menuitem" className="filmstrip-mark" title={tz(`${r} star${r > 1 ? 's' : ''}`, `${r} 星`)}
+              data-testid={`filmstrip-rating-${r}`} onClick={() => { void setRating(r, targets); setMenu(null); }}>{'★'.repeat(r)}</button>
+          ))}
+          <button role="menuitem" className="filmstrip-mark" title={tz('Clear rating', '清除星级')}
+            data-testid="filmstrip-rating-0" onClick={() => { void setRating(0, targets); setMenu(null); }}>0</button>
+        </div>
+        <div className="menu-row filmstrip-mark-row" role="group" aria-label={tz('Flag', '旗标')}>
+          {( ['pick', 'reject', 'none'] as Flag[]).map((f) => (
+            <button key={f} role="menuitem" className={'filmstrip-mark' + (f === 'pick' ? ' is-pick' : f === 'reject' ? ' is-reject' : '')}
+              data-testid={`filmstrip-flag-${f}`} onClick={() => { void setFlag(f, targets); setMenu(null); }}>
+              {f === 'pick' ? tz('Pick', '保留') : f === 'reject' ? tz('Reject', '废弃') : tz('Unflag', '无旗标')}
+            </button>
+          ))}
+        </div>
+        <div className="menu-row filmstrip-mark-row" role="group" aria-label={tz('Colour label', '颜色标签')}>
+          {( ['red', 'yellow', 'green', 'blue', 'purple', 'none'] as ColorLabel[]).map((c) => (
+            <button key={c} role="menuitem" className={'filmstrip-mark filmstrip-swatch' + (c === 'none' ? ' is-none' : ` is-${c}`)}
+              title={c === 'none' ? tz('No label', '无颜色') : tz(c, { red: '红', yellow: '黄', green: '绿', blue: '蓝', purple: '紫' }[c])}
+              data-testid={`filmstrip-label-${c}`} onClick={() => { void setColorLabel(c, targets); setMenu(null); }} />
+          ))}
+        </div>
+        <div className="menu-sep" />
         <button role="menuitem" onClick={() => { void removeFrames(targets); setMenu(null); }}>
           {targets.length > 1 ? tz(`Remove ${targets.length} photos from the roll`, `从工作台移除 ${targets.length} 张照片`) : tz('Remove from the roll', '从工作台移除')}
         </button>

@@ -10,6 +10,7 @@ import { tz } from '../i18n';
 import { Import } from '../controls/icons';
 import { baseName, platform } from '../platform';
 import { useSession } from '../state/session';
+import { settingsStore, useSettings } from '../state/settings';
 import {
   addSelectionToCollection,
   clearError,
@@ -18,6 +19,7 @@ import {
   createSmartCollectionFromFilters,
   deleteCollectionById,
   deleteSmartCollectionById,
+  cancelImport,
   importPaths,
   openSelection,
   refreshEditedBadges,
@@ -258,6 +260,7 @@ function MetadataPanel({ entries, selection }: { entries: CatalogEntry[]; select
 function ImportDialog({ onClose }: { onClose: () => void }) {
   const busy = useLibrary((s) => s.busy);
   const progress = useLibrary((s) => s.progress);
+  const failures = useLibrary((s) => s.failures);
   const [kind, setKind] = useState<'folder' | 'files'>('folder');
 
   const start = async () => {
@@ -287,7 +290,23 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
           </div>
           {busy && (
             <div className="library-progress" data-testid="library-import-progress">
-              {busy}{progress ? ` ${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` : ''}
+              <span>{busy}{progress ? ` ${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` : ''}</span>
+              <button className="library-btn" onClick={() => cancelImport()} data-testid="library-import-stop">
+                {tz('Stop', '停止')}
+              </button>
+            </div>
+          )}
+          {!busy && failures.length > 0 && (
+            <div className="library-import-failures" data-testid="library-import-failures">
+              <span>
+                {tz(
+                  `${failures.length} file(s) had no readable preview.`,
+                  `${failures.length} 个文件没有可读的预览。`,
+                )}
+              </span>
+              <button className="library-btn" onClick={() => void importPaths(failures)} data-testid="library-import-retry">
+                {tz('Retry', '重试')}
+              </button>
             </div>
           )}
         </div>
@@ -312,6 +331,7 @@ export function LibraryView() {
   const progress = useLibrary((s) => s.progress);
   const error = useLibrary((s) => s.error);
   const editorHasPhoto = useSession((s) => !!s.selection);
+  const thumbSize = useSettings((s) => s.libraryThumbSize);
   const gridRef = useRef<HTMLDivElement>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [collectionDraft, setCollectionDraft] = useState<string | null>(null);
@@ -442,6 +462,12 @@ export function LibraryView() {
             {LABELS.filter((l) => l.value !== 'none').map((l) => <option key={l.value} value={l.value}>{tz(l.en, l.zh)}</option>)}
             <option value="none">{tz('None', '无')}</option>
           </select>
+        </label>
+        <label className="library-filter">
+          {tz('Size', '大小')}
+          <input type="range" min={96} max={240} step={8} value={thumbSize} title={`${thumbSize}px`}
+            onChange={(e) => settingsStore.getState().set('libraryThumbSize', Number(e.target.value))}
+            data-testid="library-thumb-size" />
         </label>
         <label className="library-filter">
           {tz('Sort', '排序')}
@@ -579,7 +605,7 @@ export function LibraryView() {
           </button>
         </aside>
 
-        <div className="library-grid" ref={gridRef} data-testid="library-grid">
+        <div className="library-grid" ref={gridRef} data-testid="library-grid" style={{ ["--library-thumb" as string]: `${thumbSize}px` }}>
           {inCollection && selection.length > 0 && (
             <div className="library-collection-bar">
               {tz('Collection', '集合')}: {inCollection.name}

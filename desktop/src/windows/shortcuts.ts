@@ -57,6 +57,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { keys: '← / →', en: 'Previous / next', zh: '上一张 / 下一张' },
       { keys: 'Delete', en: 'Remove from the roll', zh: '从工作台移除' },
+      { keys: '0 – 5 / P / X / U', en: 'Rate, flag or unflag selected frames', zh: '对选中照片评级 / 旗标' },
       { keys: 'Ctrl+J', en: 'New photo pair', zh: '新建双图拼接' },
       { keys: 'Ctrl+Alt+[ / ]', en: 'Rotate left / right', zh: '向左 / 右旋转' },
     ],

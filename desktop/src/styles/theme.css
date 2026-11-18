@@ -1192,6 +1192,46 @@ input {
 .filmstrip { position: relative; }
 .filmstrip-menu { bottom: auto; transform: translateY(-100%); }
 
+/* Rating / flag / colour rows inside the filmstrip context menu: the same
+   marks the Library writes to the catalog, reachable without leaving Develop. */
+.filmstrip-menu .menu-row {
+  display: flex;
+  gap: 2px;
+  padding: 2px 4px;
+}
+.filmstrip-mark-row { align-items: center; }
+.filmstrip-menu .filmstrip-mark {
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: var(--fs-small);
+  letter-spacing: 0.5px;
+}
+.filmstrip-menu .filmstrip-mark:hover { background: var(--well); }
+.filmstrip-menu .filmstrip-mark.is-pick { color: var(--accent); }
+.filmstrip-menu .filmstrip-mark.is-reject { color: var(--dim); text-decoration: line-through; }
+.filmstrip-menu .filmstrip-swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+}
+.filmstrip-menu .filmstrip-swatch.is-none { background: transparent; position: relative; }
+.filmstrip-menu .filmstrip-swatch.is-none::after {
+  content: '';
+  position: absolute;
+  left: 2px; right: 2px; top: 50%;
+  height: 1px;
+  background: var(--dim);
+  transform: rotate(-45deg);
+}
+.filmstrip-menu .filmstrip-swatch.is-red { background: #d9534f; }
+.filmstrip-menu .filmstrip-swatch.is-yellow { background: #e0b341; }
+.filmstrip-menu .filmstrip-swatch.is-green { background: #5cb85c; }
+.filmstrip-menu .filmstrip-swatch.is-blue { background: #4a90d9; }
+.filmstrip-menu .filmstrip-swatch.is-purple { background: #9b6bd4; }
+
 /* The Library entry: a labelled pill next to the import controls, so the
    persistent catalog is discoverable without hovering the icon bar. */
 .library-entry {

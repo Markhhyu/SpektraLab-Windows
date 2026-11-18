@@ -115,7 +115,7 @@
 .library-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(156px * var(--ui-scale)), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--library-thumb, 156px) * var(--ui-scale)), 1fr));
   gap: 10px;
   align-content: start;
   padding: 12px;
@@ -381,7 +381,25 @@
 .library-radio { display: flex; align-items: center; gap: 6px; color: var(--secondary-text); cursor: pointer; }
 .library-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .library-btn.is-primary { border-color: var(--accent); color: var(--accent); }
-.library-progress { color: var(--accent); }
+.library-progress {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.library-import-failures {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  color: var(--accent);
+  font-size: var(--fs-small);
+}
 
 .library-side-input {
   flex: 1;

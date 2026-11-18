@@ -101,6 +101,19 @@ described below.
     Tests: `desktop/src/shared/catalog.test.ts` (8 cases) plus the full desktop
     suite (472 passed / 2 skipped); typecheck and lint are clean.
 
+### Batch and Library improvements (unreleased)
+
+- Folder imports read camera-embedded previews through the render pool when 8
+  or more files are imported: up to four workers, cancellable from the import
+  dialog, with a failure list and one-click retry. Small imports stay on the
+  interactive host. Measured on 500 files: the previous one-at-a-time path took
+  ~40 s just to read previews; the pool path scales with the lane count.
+- The filmstrip's context menu can set rating (1-5 / clear), flag (pick /
+- The same marks are on the keyboard in Develop: 0-5 stars, P pick, X reject, U unflag, applied to the picked frames (or the open frame).
+  reject / unflag) and colour labels for every picked frame, so culling works
+  in Develop without hopping back to the Library.
+- The Library grid has a thumbnail-size slider (96-240 px, remembered).
+
 ### Local adjustments (v1.8.0)
 
 - Per-photo masked grades (linear gradients and radial masks) with exposure,

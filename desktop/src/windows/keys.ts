@@ -13,6 +13,7 @@ import { turned } from '@shared/geometry';
 import { openDialog, openFilesDialog, openExport, restartHost } from './actions';
 import { settingsStore } from '../state/settings';
 import { platform } from '../platform';
+import { setFlag, setRating } from '../state/library';
 
 export interface KeyLike {
   key: string;
@@ -44,6 +45,12 @@ export function isTypingKey(e: KeyLike): boolean {
 }
 
 type Action = () => void;
+
+/** Frames a mark command applies to: the picked set, else the open frame. */
+function markTargets(): string[] {
+  const s = sessionStore.getState();
+  return s.picked.length > 0 ? s.picked : (s.selection ? [s.selection] : []);
+}
 
 /** The shortcut table. Keys are `[ctrl+][alt+][shift+]<key>` with `key` lower-cased. */
 export function shortcutTable(): Record<string, Action> {
@@ -81,6 +88,17 @@ export function shortcutTable(): Record<string, Action> {
     '?': () => setPages({ shortcutsOpen: !sessionStore.getState().shortcutsOpen }),
     'ctrl+/': () => setPages({ shortcutsOpen: !sessionStore.getState().shortcutsOpen }),
     f11: () => void platform().toggleFullscreen(),
+    // Star / flag / colour marks on the filmstrip (same catalog the Library
+    // writes). Numbers, P/X/U are otherwise unused in the editor.
+    '0': () => void setRating(0, markTargets()),
+    '1': () => void setRating(1, markTargets()),
+    '2': () => void setRating(2, markTargets()),
+    '3': () => void setRating(3, markTargets()),
+    '4': () => void setRating(4, markTargets()),
+    '5': () => void setRating(5, markTargets()),
+    p: () => void setFlag('pick', markTargets()),
+    x: () => void setFlag('reject', markTargets()),
+    u: () => void setFlag('none', markTargets()),
     // Capture One's single keys.
     v: () => setTool('select'),
     h: () => setTool('hand'),

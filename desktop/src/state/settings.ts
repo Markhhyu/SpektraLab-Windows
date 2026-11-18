@@ -44,6 +44,8 @@ export interface Settings extends NewPhotoDefaults {
   /** Background host processes a batch may use. 0/1 keeps the interactive
    * host only, which is what a machine with little free VRAM wants. */
   renderPoolWorkers: number;
+  /** Library grid thumbnail size in CSS pixels (before interface scale). */
+  libraryThumbSize: number;
   filmEdgeBodySeed: number;
   collapsedSections: Record<string, boolean>;
   lastFolder: string | null;
@@ -68,6 +70,7 @@ export const SETTINGS_DEFAULT: Settings = {
   leftWidth: 254,
   rightWidth: 288,
   renderPoolWorkers: 2,
+  libraryThumbSize: 156,
   filmEdgeBodySeed: 0,
   collapsedSections: {},
   lastFolder: null,
@@ -96,6 +99,7 @@ export function loadSettings(storage: Pick<Storage, 'getItem'> | null): Settings
     s.rightWidth = boundedPanelWidth('rightWidth', s.rightWidth);
     if (!Number.isInteger(s.filmEdgeBodySeed) || s.filmEdgeBodySeed < 0 || s.filmEdgeBodySeed > 2147483647) s.filmEdgeBodySeed = 0;
     if (!Number.isInteger(s.renderPoolWorkers) || s.renderPoolWorkers < 0 || s.renderPoolWorkers > 4) s.renderPoolWorkers = SETTINGS_DEFAULT.renderPoolWorkers;
+    if (!Number.isInteger(s.libraryThumbSize) || s.libraryThumbSize < 96 || s.libraryThumbSize > 240) s.libraryThumbSize = SETTINGS_DEFAULT.libraryThumbSize;
     if (!['general', 'rendering', 'memory', 'diagnostics', 'agents'].includes(s.settingsPage)) s.settingsPage = 'general';
     s.recentFolders = (Array.isArray(s.recentFolders) ? s.recentFolders : [])
       .filter((p): p is string => typeof p === 'string' && p.length > 0).slice(0, RECENT_FOLDERS_MAX);

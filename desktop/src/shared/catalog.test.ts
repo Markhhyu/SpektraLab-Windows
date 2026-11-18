@@ -98,6 +98,17 @@ describe('catalog', () => {
     expect(sortEntries(entries, { key: 'date', descending: false }).map((e) => e.name)).toEqual(['two.ARW', 'three.ARW', 'one.ARW']);
   });
 
+  it('sorts by EXIF capture time and falls back to the file mtime', () => {
+    // one: newest EXIF, two: no EXIF (mtime 1), three: oldest EXIF.
+    const marked: CatalogEntry[] = entries.map((e) => {
+      if (e.name === 'one.ARW') return { ...e, capturedAt: '2026:05:02 10:00:00' };
+      if (e.name === 'three.ARW') return { ...e, capturedAt: '2026:05:01 09:00:00' };
+      return e;
+    });
+    expect(sortEntries(marked, { key: 'captured', descending: true }).map((e) => e.name)).toEqual(['one.ARW', 'three.ARW', 'two.ARW']);
+    expect(sortEntries(marked, { key: 'captured', descending: false }).map((e) => e.name)).toEqual(['two.ARW', 'three.ARW', 'one.ARW']);
+  });
+
   it('groups folders and keywords for the sidebar', () => {
     expect(folderGroups(entries).map((f) => [f.name, f.count])).toEqual([['A', 2], ['B', 1]]);
     expect(keywordGroups(entries)).toEqual([{ word: 'sky', count: 2 }, { word: 'moon', count: 1 }]);

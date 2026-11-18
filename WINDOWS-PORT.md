@@ -106,13 +106,20 @@ described below.
 - Folder imports read camera-embedded previews through the render pool when 8
   or more files are imported: up to four workers, cancellable from the import
   dialog, with a failure list and one-click retry. Small imports stay on the
-  interactive host. Measured on 500 files: the previous one-at-a-time path took
-  ~40 s just to read previews; the pool path scales with the lane count.
+  interactive host.
 - The filmstrip's context menu can set rating (1-5 / clear), flag (pick /
-- The same marks are on the keyboard in Develop: 0-5 stars, P pick, X reject, U unflag, applied to the picked frames (or the open frame).
   reject / unflag) and colour labels for every picked frame, so culling works
-  in Develop without hopping back to the Library.
+  in Develop without hopping back to the Library. The same marks are on the
+  keyboard: 0-5 stars, P pick, X reject, U unflag, applied to the picked frames
+  (or the open frame).
 - The Library grid has a thumbnail-size slider (96-240 px, remembered).
+- The Library can sort by EXIF capture time ("Captured"), read from the file
+  during import; files without a capture time fall back to their file mtime.
+- A photo being decoded shows a canvas skeleton instead of the previous frame,
+  so a ~1 s open reads as progress.
+- The canvas histogram can be folded away (small toggle) so it never covers
+  the picture; the choice is remembered.
+- A unit test guards the Windows copy against macOS Command/Shift glyphs.
 
 ### Local adjustments (v1.8.0)
 

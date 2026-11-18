@@ -59,7 +59,7 @@ import {
 import { HistogramOverlay, histogramOf, type Histogram } from './histogram';
 import { publishOutput } from './output';
 import { useI18n } from '../i18n';
-import { useSettings } from '../state/settings';
+import { settingsStore, useSettings } from '../state/settings';
 import { resolveDisplaySpace } from './colorSpace';
 import { inTauri } from '../host/transport';
 import { onFrameDrop } from '../windows/frameDrag';
@@ -132,7 +132,10 @@ export function Canvas() {
   const badge = useSession((s) => s.badge);
   const developing = useSession((s) => s.developing);
   const lastError = useSession((s) => s.lastError);
+  const histogramVisible = useSettings((s) => s.histogramVisible);
   const selection = useSession((s) => s.selection);
+  const engineSession = useSession((s) => s.engineSession);
+  const redecoding = useSession((s) => s.redecoding);
   const batch = useSession((s) => s.batchExporting);
   const exportOpen = useSession((s) => s.exportOpen);
   const displaySpace = useSession((s) => s.displaySpace);
@@ -543,6 +546,17 @@ export function Canvas() {
         </>}
       </div>}
       {glError && <div className="canvas-message">{tz('This display cannot draw the picture (WebGL2): ', '此显示无法绘制画面（WebGL2）：') + glError}</div>}
+      {selection && !engineSession && !lastError && !glError && (
+        // A new frame decodes for ~1.1 s; show a skeleton instead of a stale
+        // picture so the wait reads as work in progress (UX review D1).
+        <div className="canvas-loading" data-testid="canvas-loading" role="status" aria-live="polite">
+          <div className="canvas-loading-card">
+            <span className="canvas-loading-shimmer" aria-hidden="true" />
+            <span className="caption">{redecoding ? tz('Re-decoding with the new settings…', '正在按新设置重新解码…')
+              : tz('Opening photograph…', '正在打开照片…')}</span>
+          </div>
+        </div>
+      )}
       {!selection && !glError && <div className="canvas-message canvas-empty" data-testid="canvas-empty">
         <div className="canvas-empty-actions" onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => { if (e.code === 'Space') e.stopPropagation(); }}>
@@ -572,7 +586,10 @@ export function Canvas() {
         </div>
       )}
       <div className="canvas-corner">
-        {histogram && <HistogramOverlay h={histogram} />}
+        {histogram && (histogramVisible
+          ? <HistogramOverlay h={histogram} />
+          : <button className="histogram-toggle" data-testid="histogram-toggle" title={tz('Show histogram', '显示直方图')}
+              onClick={() => settingsStore.getState().set('histogramVisible', true)}>▤</button>)}
         {textureLimited && <span className="caption" data-testid="preview-limit" style={{ maxWidth: 280 }}>
           {tz(`Display detail is limited to ${maxTextureSize} pixels. Export keeps the chosen resolution.`,
             `当前显示最多 ${maxTextureSize} 像素；导出仍使用所选分辨率。`)}

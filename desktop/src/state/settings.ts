@@ -46,6 +46,8 @@ export interface Settings extends NewPhotoDefaults {
   renderPoolWorkers: number;
   /** Library grid thumbnail size in CSS pixels (before interface scale). */
   libraryThumbSize: number;
+  /** The canvas histogram can be folded away so it never covers the picture. */
+  histogramVisible: boolean;
   filmEdgeBodySeed: number;
   collapsedSections: Record<string, boolean>;
   lastFolder: string | null;
@@ -71,6 +73,7 @@ export const SETTINGS_DEFAULT: Settings = {
   rightWidth: 288,
   renderPoolWorkers: 2,
   libraryThumbSize: 156,
+  histogramVisible: true,
   filmEdgeBodySeed: 0,
   collapsedSections: {},
   lastFolder: null,

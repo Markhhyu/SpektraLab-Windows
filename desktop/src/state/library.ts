@@ -40,7 +40,7 @@ import {
 import { type FileEntry, baseName, platform } from '../platform';
 import { displayImage, host } from '../host/client';
 import type { RgbaImage } from '../host/client';
-import type { ImageInfo } from '@shared/protocol';
+import type { ImageInfo, ProbeResult } from '@shared/protocol';
 import type { Transport } from '../host/transport';
 import { POOL_MAX_WORKERS, poolAvailable, poolEnsure, poolShutdown, poolTransport } from '../host/pool';
 import { openCollection } from './session';
@@ -158,6 +158,21 @@ async function readThumb(
   return true;
 }
 
+/** Read one file's EXIF capture time through the same transport as its preview.
+ *  A file the host cannot probe keeps no `capturedAt`; sorting falls back to mtime. */
+async function readCapturedAt(transport: Pick<Transport, 'request'> | null, path: string): Promise<string | null> {
+  try {
+    const reply = transport
+      ? await transport.request('probe', { path }, { timeoutMs: 30_000 })
+      : await host().transport.request('probe', { path }, { timeoutMs: 30_000 });
+    const metadata = (reply.result as unknown as ProbeResult).metadata;
+    const raw = metadata?.datetime_original;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 let hydrating = false;
 /** Set by cancelImport(); the worker loops check it between previews. */
 let importCancelled = false;
@@ -269,7 +284,10 @@ export async function importPaths(paths: string[]): Promise<void> {
         if (!entry) return;
         try {
           const ok = await readThumb(entry, thumbs, transport);
-          catalog.entries = catalog.entries.map((e) => (e.path === entry.path ? { ...e, thumb: ok } : e));
+          const capturedAt = await readCapturedAt(transport, entry.path);
+          catalog.entries = catalog.entries.map((e) => (e.path === entry.path
+            ? { ...e, thumb: ok, ...(capturedAt ? { capturedAt } : {}) }
+            : e));
           set({ thumbs: { ...thumbs }, catalog: { ...catalog, entries: [...catalog.entries] } });
           if (!ok) failures.push(entry.path);
         } catch {

@@ -32,6 +32,8 @@ export interface CatalogEntry {
   thumb: boolean;
   /** Colour label, as in the classic grid workflow. */
   label: ColorLabel;
+  /** EXIF DateTimeOriginal, e.g. `2026:05:01 12:34:56`; absent when unreadable. */
+  capturedAt?: string;
   /** Free-text metadata edited in the library (never written into the RAW). */
   title: string;
   caption: string;
@@ -135,6 +137,7 @@ function entryOf(value: unknown, now: number): CatalogEntry | null {
     edited: o.edited === true,
     thumb: o.thumb === true,
     label: labelOf(o.label),
+    ...(str(o.capturedAt) ? { capturedAt: str(o.capturedAt) } : {}),
     title: str(o.title),
     caption: str(o.caption),
   };
@@ -353,9 +356,20 @@ export function sourceEntries(catalog: Catalog, filters: LibraryFilters): Catalo
   return catalog.entries;
 }
 
-export type SortKey = 'imported' | 'name' | 'folder' | 'rating' | 'date';
+export type SortKey = 'imported' | 'name' | 'folder' | 'rating' | 'date' | 'captured';
 export interface SortSetting { key: SortKey; descending: boolean }
 export const SORT_DEFAULT: SortSetting = { key: 'date', descending: true };
+
+/** Sortable instant from `capturedAt` (EXIF colon date) or the file mtime. */
+function capturedMs(entry: CatalogEntry): number {
+  const raw = entry.capturedAt;
+  if (raw) {
+    const iso = raw.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3').replace(' ', 'T');
+    const ms = Date.parse(iso);
+    if (Number.isFinite(ms)) return ms;
+  }
+  return entry.mtimeMs;
+}
 
 export function sortEntries(entries: readonly CatalogEntry[], sort: SortSetting): CatalogEntry[] {
   const dir = sort.descending ? -1 : 1;
@@ -366,6 +380,10 @@ export function sortEntries(entries: readonly CatalogEntry[], sort: SortSetting)
       case 'folder': return dir * (a.folder.localeCompare(b.folder) || a.name.localeCompare(b.name));
       case 'rating': return dir * (a.rating - b.rating) || a.name.localeCompare(b.name);
       case 'imported': return dir * (a.importedAt - b.importedAt) || a.name.localeCompare(b.name);
+      case 'captured': {
+        // EXIF first, file mtime when the camera wrote no DateTimeOriginal.
+        return dir * (capturedMs(a) - capturedMs(b)) || a.name.localeCompare(b.name);
+      }
       default: return dir * (a.mtimeMs - b.mtimeMs) || a.name.localeCompare(b.name);
     }
   });
@@ -390,7 +408,7 @@ export function keywordGroups(entries: readonly CatalogEntry[]): { word: string;
 export function updateEntries(
   catalog: Catalog,
   paths: readonly string[],
-  patch: { rating?: Rating; flag?: Flag; label?: ColorLabel; keywords?: string[]; thumb?: boolean; edited?: boolean; title?: string; caption?: string },
+  patch: { rating?: Rating; flag?: Flag; label?: ColorLabel; keywords?: string[]; thumb?: boolean; edited?: boolean; title?: string; caption?: string; capturedAt?: string },
 ): Catalog {
   const targets = new Set(paths.map((p) => p.toLowerCase()));
   return {

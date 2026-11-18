@@ -475,6 +475,8 @@ export function LibraryView() {
             const [key, dir] = e.target.value.split(':');
             setSort({ key: key as typeof sort.key, descending: dir === 'desc' });
           }} data-testid="library-sort">
+            <option value="captured:desc">{tz('Captured ↓', '拍摄时间 ↓')}</option>
+            <option value="captured:asc">{tz('Captured ↑', '拍摄时间 ↑')}</option>
             <option value="date:desc">{tz('Date ↓', '日期 ↓')}</option>
             <option value="date:asc">{tz('Date ↑', '日期 ↑')}</option>
             <option value="imported:desc">{tz('Imported ↓', '导入 ↓')}</option>

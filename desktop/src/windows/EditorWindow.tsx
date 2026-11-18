@@ -9,7 +9,7 @@ import { importPreviews, useSession } from '../state/session';
 import { PreviewBuildStatus } from './PreviewBuildStatus';
 import { Filmstrip } from './Filmstrip';
 import { TopBar } from './TopBar';
-import { AboutDialog, HostFailure, SettingsDialog, ShortcutsDialog } from './Dialogs';
+import { AboutDialog, HostFailure, SettingsDialog, HistoryDialog, ShortcutsDialog } from './Dialogs';
 import { ExportPage } from '../export/ExportPage';
 import { PanelResize } from '../controls/PanelResize';
 import { LibraryView } from './LibraryView';
@@ -43,6 +43,7 @@ export function EditorWindow() {
       <SettingsDialog />
       <AboutDialog />
       <ShortcutsDialog />
+      <HistoryDialog />
       <ExportPage />
       {libraryOpen && <LibraryView />}
     </>

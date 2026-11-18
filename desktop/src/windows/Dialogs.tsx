@@ -9,11 +9,12 @@ import { t, tz } from '../i18n';
 import { hostMessage } from '../host/messages';
 import { host } from '../host/client';
 import { platform, type AppPaths } from '../platform';
-import { recomputeFilmFormat, requestPrint, setPages, useSession, sessionStore } from '../state/session';
+import { historyJump, recomputeFilmFormat, requestPrint, setPages, useSession, sessionStore } from '../state/session';
 import { INTERFACE_SCALES, PREVIEW_EDGES, settingsStore, useSettings, SETTINGS_DEFAULT } from '../state/settings';
 import { featureGate } from '@shared/params';
 import { AgentsSettings, MemorySettings, UpdateSettings } from './SettingsPages';
 import { SHORTCUT_GROUPS } from './shortcuts';
+import { describeChange } from './history';
 import { diagnosticReport } from './diagnosticReport';
 import { DiagnosticSettings } from './DiagnosticSettings';
 import { NewPhotoDefaultsSettings } from './NewPhotoDefaultsSettings';
@@ -250,7 +251,7 @@ export function AboutDialog() {
     <Frame open={open} onClose={() => setPages({ aboutOpen: false })} title="SpektraLab" testId="about">
       <div className="dialog-body">
         <p>
-          {tz('Version', '版本')} {paths?.version ?? '1.6.0'} — {tz('film and print emulation built on the spektrafilm engine.', '基于 spektrafilm 引擎的胶片与相纸模拟。')}
+          {tz('Version', '版本')} {paths?.version ?? '1.7.0'} — {tz('film and print emulation built on the spektrafilm engine.', '基于 spektrafilm 引擎的胶片与相纸模拟。')}
         </p>
         <p className="caption">
           {tz(
@@ -357,6 +358,49 @@ export function ShortcutsDialog() {
         ))}
       </div>
       <p className="caption">{tz('Shortcuts for the photo editor. Library and Develop pages keep their own keys while focused.', '照片编辑器的快捷键；图库页与修改页在聚焦时使用各自的按键。')}</p>
+    </Frame>
+  );
+}
+
+// ------------------------------------------------------------- history page
+
+/** The Ctrl+H page: every undo step of the open frame, newest first. Picking a
+ *  row jumps the session to that snapshot (Redo replays from there). */
+export function HistoryDialog() {
+  const open = useSession((s) => s.historyOpen);
+  const undo = useSession((s) => s.undo);
+  const catalog = useSession((s) => s.catalog);
+  const stockName = (id: string) => catalog.stock(id)?.name ?? id;
+  const steps = undo.map((entry, index) => ({
+    index,
+    label: describeChange(index > 0 ? undo[index - 1]! : null, entry, stockName),
+  }));
+  steps.push({ index: undo.length, label: tz('Current state', '当前状态') });
+  const rows = [...steps].reverse();
+  return (
+    <Frame open={open} onClose={() => setPages({ historyOpen: false })} title={tz('History', '历史记录')} testId="history">
+      <div className="history-list">
+        {rows.map((row) => (
+          <button
+            key={row.index}
+            type="button"
+            className={row.index === undo.length ? 'history-row is-current' : 'history-row'}
+            disabled={row.index === undo.length || row.index >= undo.length}
+            onClick={() => {
+              if (row.index < undo.length) historyJump(row.index);
+            }}
+          >
+            <span className="history-index">{row.index === undo.length ? '•' : row.index + 1}</span>
+            <span className="history-label">{row.label}</span>
+          </button>
+        ))}
+      </div>
+      <p className="caption">
+        {tz(
+          'Every edit in this session is listed here; choosing an earlier step keeps its result editable, and Redo (Ctrl+Shift+Z) replays forward.',
+          '这里列出本次会话的每一处编辑；选择较早的步骤仍可继续修改，重做（Ctrl+Shift+Z）会向后重放。',
+        )}
+      </p>
     </Frame>
   );
 }

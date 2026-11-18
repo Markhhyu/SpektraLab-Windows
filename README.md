@@ -5,7 +5,7 @@
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
 the spectral film-and-print simulator — derived from the original project's last
 Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
-version line, currently **v1.6.0**, plus the Windows port fixes, performance work
+version line, currently **v1.7.0**, plus the Windows port fixes, performance work
 and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs
@@ -117,6 +117,16 @@ the short version:
     separated and end with a help button; a finished export can hand straight
     back to the Library; the film and paper lists gained a search box and
     recent picks; macOS ⌘ labels were replaced with Windows Ctrl chords.
+
+15. **History and presets (`v1.7.0`)** — every edit is now inspectable:
+    `Ctrl+H` opens a history panel that lists each undo step (newest first) with
+    a generated label (film/paper change, development, tone mask, exposure,
+    adjustments, crop, white balance, …). Clicking a row jumps the open frame to
+    that snapshot, and Redo replays forward from there. A Presets panel in the
+    parameters rail saves the current film parameters plus the adjustment layers
+    to an app-level store and applies them to other photographs as a normal
+    undoable edit; presets can be renamed and deleted.
+
 
 ## Packaging and releases
 

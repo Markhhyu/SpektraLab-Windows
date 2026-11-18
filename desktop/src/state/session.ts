@@ -146,6 +146,8 @@ export interface SessionState {
   aboutOpen: boolean;
   /** The `?` shortcut reference page. */
   shortcutsOpen: boolean;
+  /** The history list page (Ctrl+H): every undo step for this frame. */
+  historyOpen: boolean;
   batchExporting: boolean;
 }
 
@@ -196,6 +198,7 @@ const INITIAL: SessionState = {
   settingsOpen: false,
   aboutOpen: false,
   shortcutsOpen: false,
+  historyOpen: false,
   batchExporting: false,
 };
 
@@ -1028,12 +1031,19 @@ function restore(e: UndoEntry) {
   else void requestPrint();
 }
 
+function historySnapshot(): UndoEntry {
+  const s = get();
+  return { noFilm: s.sidecar.noFilm, params: s.sidecar.params, adjustments: s.sidecar.adjustments,
+    geometry: s.sidecar.geometry, heldCrop: s.sidecar.heldCrop, pair: s.pair, decode: s.sidecar.decode,
+    placementNeedsFit: s.sidecar.placementNeedsFit };
+}
+
 export function undo() {
   const s = get();
   if (s.batchExporting || !s.selection) return;
   const prev = s.undo[s.undo.length - 1];
   if (!prev) return;
-  const cur = { noFilm: s.sidecar.noFilm, params: s.sidecar.params, adjustments: s.sidecar.adjustments, geometry: s.sidecar.geometry, heldCrop: s.sidecar.heldCrop, pair: s.pair, decode: s.sidecar.decode, placementNeedsFit: s.sidecar.placementNeedsFit };
+  const cur = historySnapshot();
   set({ undo: s.undo.slice(0, -1), redo: [...s.redo, cur] });
   lastUndoAt = 0;
   restore(prev);
@@ -1045,10 +1055,26 @@ export function redo() {
   if (s.batchExporting || !s.selection) return;
   const next = s.redo[s.redo.length - 1];
   if (!next) return;
-  const cur = { noFilm: s.sidecar.noFilm, params: s.sidecar.params, adjustments: s.sidecar.adjustments, geometry: s.sidecar.geometry, heldCrop: s.sidecar.heldCrop, pair: s.pair, decode: s.sidecar.decode, placementNeedsFit: s.sidecar.placementNeedsFit };
+  const cur = historySnapshot();
   set({ redo: s.redo.slice(0, -1), undo: [...s.undo, cur] });
   lastUndoAt = 0;
   restore(next);
+}
+
+/** Jump the history stack to a snapshot (0 = oldest edit; `undo.length` is
+ * the present). Forward states move onto the redo stack in order, so a jump
+ * and later Redo walk back through exactly the states this stack held. */
+export function historyJump(index: number) {
+  const s = get();
+  if (s.batchExporting || !s.selection) return;
+  if (!Number.isInteger(index) || index < 0 || index >= s.undo.length) return;
+  const target = s.undo[index];
+  if (!target) return;
+  const cur = historySnapshot();
+  set({ undo: s.undo.slice(0, index), redo: [...s.redo, cur, ...s.undo.slice(index + 1).reverse()] });
+  lastUndoAt = 0;
+  restore(target);
+  set({ status: tz(`History — ${index + 1} of ${index + 1} steps applied.`, `历史 — 已应用第 ${index + 1} 步。`) });
 }
 
 // -------------------------------------------------------- scene placement
@@ -2316,7 +2342,7 @@ export function setComparePosition(p: number) {
   if (v !== get().comparePosition) set({ comparePosition: v });
 }
 
-export function setPages(p: Partial<Pick<SessionState, 'exportOpen' | 'settingsOpen' | 'aboutOpen' | 'shortcutsOpen' | 'batchExporting' | 'clipboardGroups'>>) {
+export function setPages(p: Partial<Pick<SessionState, 'exportOpen' | 'settingsOpen' | 'aboutOpen' | 'shortcutsOpen' | 'historyOpen' | 'batchExporting' | 'clipboardGroups'>>) {
   if (p.exportOpen && !pairComplete()) { set({ status: tz('Fill both frames before exporting this pair.', '请先在两格中都放入照片，再导出拼接。') }); return; }
   set(p);
   if (get().batchExporting || get().exportOpen) foregroundWork(); else resumePreviewsWhenIdle();

@@ -1302,3 +1302,25 @@ input {
   text-align: center;
   white-space: nowrap;
 }
+
+/* ------------------------------------------------ history list (Ctrl+H) */
+.history-list { display: flex; flex-direction: column; gap: 2px; max-height: 380px; overflow: auto; margin: 4px 0 10px; }
+.history-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font-size: var(--fs-small); cursor: pointer; }
+.history-row:hover:not(:disabled) { background: var(--field); }
+.history-row.is-current { color: var(--accent, #6ea8ff); font-weight: 600; cursor: default; }
+.history-row:disabled { opacity: 0.55; }
+.history-index { width: 18px; flex: none; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-dim, #8b8b8b); font-size: 11px; }
+.history-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ------------------------------------------------------------- presets list */
+.preset-save { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px; }
+.preset-name-input { flex: 1; min-width: 0; height: 22px; padding: 0 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--field); color: var(--text); font-size: var(--fs-small); }
+.preset-save .btn { flex: none; }
+.preset-list { display: flex; flex-direction: column; gap: 1px; margin: 0 0 8px; padding: 0; list-style: none; }
+.preset-row { display: flex; align-items: center; gap: 2px; border-radius: 4px; }
+.preset-row:hover { background: var(--field); }
+.preset-name { flex: 1; min-width: 0; text-align: left; padding: 5px 6px; border: 0; background: transparent; color: var(--text); font-size: var(--fs-small); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-name:disabled { opacity: 0.5; cursor: default; }
+.preset-icon { flex: none; width: 22px; height: 22px; border: 0; border-radius: 4px; background: transparent; color: var(--text-dim, #8b8b8b); cursor: pointer; font-size: 12px; }
+.preset-icon:hover { background: var(--rule); color: var(--text); }
+.caption-error { color: var(--danger, #e06c75); }

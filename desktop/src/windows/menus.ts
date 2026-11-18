@@ -166,6 +166,7 @@ async function rebuild(): Promise<void> {
   const edit = await submenu(tz('&Edit', '编辑(&E)'), [
     await item(tz('Undo', '撤销'), undo, 'CmdOrCtrl+Z'),
     await item(tz('Redo', '重做'), redo, 'CmdOrCtrl+Shift+Z'),
+    await item(tz('History…', '历史记录…'), () => setPages({ historyOpen: true }), 'CmdOrCtrl+H'),
     await sep(),
     await item(tz('Copy Settings', '拷贝设置'), copySettings, 'CmdOrCtrl+Shift+C'),
     await item(tz('Paste Settings', '粘贴设置'), () => void pasteSettings(), 'CmdOrCtrl+Shift+V'),

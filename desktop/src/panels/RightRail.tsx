@@ -46,6 +46,7 @@ import { unsupportedReason } from './gate';
 import { type LatitudeReply, type PlacementSide, placementMessage } from '@shared/latitude';
 import { edgeEffective, edgeFormat } from '@shared/filmEdge';
 import { setLibraryOpen } from '../state/library';
+import { applyPreset, deletePreset, renamePreset, saveCurrentPreset, usePresets } from '../state/presets';
 
 export function RightRail() {
   const tab = useSettings((s) => s.parametersTab);
@@ -78,6 +79,7 @@ export function RightRail() {
           </>
         ) : (
           <>
+            <PresetsSection />
             <WhiteBalanceSection />
             <ExposureSection />
             <CurveSection />
@@ -803,3 +805,72 @@ function ToneMaskSection() {
   );
 }
 
+
+// ------------------------------------------------------------------- Presets
+
+function PresetsSection() {
+  const presets = usePresets((s) => s.presets);
+  const ready = usePresets((s) => s.ready);
+  const error = usePresets((s) => s.error);
+  const hasPhoto = useSession((s) => !!s.sidecar);
+  const [name, setName] = useState('');
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+
+  const save = () => {
+    const trimmed = name.trim() || `Preset ${presets.length + 1}`;
+    if (!hasPhoto) return;
+    void saveCurrentPreset(trimmed).then((id) => { if (id) setName(''); });
+  };
+
+  return (
+    <Section id="presets" title={tz('Presets', '预设')}>
+      <div className="preset-save">
+        <input
+          className="preset-name-input"
+          data-testid="preset-name"
+          value={name}
+          placeholder={tz('Preset name', '预设名称')}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+        />
+        <button className="btn" data-testid="preset-save" disabled={!hasPhoto} onClick={save}>{tz('Save current', '保存当前')}</button>
+      </div>
+      {error && <p className="caption caption-error">{error}</p>}
+      {presets.length === 0 ? (
+        <p className="caption">{tz('No presets yet. Save the current settings to reuse them on another photograph.', '还没有预设。把当前设置保存下来，就能套用到其他照片。')}</p>
+      ) : (
+        <ul className="preset-list" data-testid="preset-list">
+          {presets.map((preset) => (
+            <li className="preset-row" key={preset.id}>
+              {renaming?.id === preset.id ? (
+                <input
+                  className="preset-name-input"
+                  autoFocus
+                  data-testid="preset-rename"
+                  value={renaming.name}
+                  onChange={(e) => setRenaming({ id: preset.id, name: e.target.value })}
+                  onBlur={() => { void renamePreset(preset.id, renaming.name); setRenaming(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { void renamePreset(preset.id, renaming.name); setRenaming(null); }
+                    if (e.key === 'Escape') setRenaming(null);
+                  }}
+                />
+              ) : (
+                <button
+                  className="preset-name"
+                  data-testid="preset-apply"
+                  title={tz('Apply preset', '应用预设')}
+                  disabled={!hasPhoto}
+                  onClick={() => applyPreset(preset.id)}
+                >{preset.name}</button>
+              )}
+              <button className="preset-icon" title={tz('Rename', '重命名')} onClick={() => setRenaming({ id: preset.id, name: preset.name })}>✎</button>
+              <button className="preset-icon" title={tz('Delete', '删除')} onClick={() => void deletePreset(preset.id)}>✕</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {ready && <p className="caption">{tz('Applying a preset is an undoable edit stored in this photograph\'s sidecar.', '应用预设是一次可撤销的编辑，会写进这张照片的 sidecar。')}</p>}
+    </Section>
+  );
+}

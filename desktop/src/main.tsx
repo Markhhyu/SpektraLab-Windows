@@ -7,6 +7,7 @@ import { setLanguage } from './i18n';
 import { settingsStore } from './state/settings';
 import { boot } from './state/session';
 import { bootLibrary } from './state/library';
+import { bootPresets } from './state/presets';
 import { EditorWindow } from './windows/EditorWindow';
 import { installKeys, webviewOwnsMenuKeys } from './windows/keys';
 import { MENU_CHORDS, installMenu, refreshRecentMenu } from './windows/menus';
@@ -60,6 +61,7 @@ createRoot(document.getElementById('root')!).render(
 
 void boot();
 void bootLibrary();
+  void bootPresets();
 
 // For the layout harness and for debugging from the webview inspector.
 import { sessionStore } from './state/session';

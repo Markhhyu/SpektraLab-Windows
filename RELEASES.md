@@ -44,19 +44,22 @@ worth shipping, keeping the version bump and the asset name in step.
    `unsupported_features`, `params_schema` contains the new fields, then open a
    RAW and render one live frame.
 
-5. **Publish.** Copy the installer to the release, write the notes below in
-   Chinese and English, compute the checksum, and attach both:
+5. **Publish.** Add the new entry to `## History` below (Chinese and English
+   sections, one sentence per bullet, `Full Changelog` link), then compute the
+   checksum and attach both files:
 
    ```bash
    sha256sum SpektraLab_<version>_x64-setup.exe > SpektraLab_<version>_x64-setup.exe.sha256
+   python scripts/release_notes.py <version> > notes.md
    gh release create v<version> \
        --title "v<version> — <short title>" \
-       --notes-file release-notes.md \
+       --notes-file notes.md \
        <installer> <installer>.sha256
    ```
 
-   The notes file is the bilingual block from `RELEASES.md`'s history entry —
-   keep the two in sync.
+   The history entry *is* the release body: `scripts/release_notes.py` slices it
+   out of `RELEASES.md` and lowers the heading level for the standalone page, so
+   no per-release notes file is committed and the two cannot drift apart.
 
 ## History
 

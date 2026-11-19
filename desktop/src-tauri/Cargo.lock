@@ -3260,7 +3260,7 @@ dependencies = [
 
 [[package]]
 name = "spektralab"
-version = "1.9.2"
+version = "1.9.3"
 dependencies = [
  "base64 0.22.1",
  "log",

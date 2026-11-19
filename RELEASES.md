@@ -60,6 +60,28 @@ worth shipping, keeping the version bump and the asset name in step.
 
 ## History
 
+### v1.9.3 — 颗粒按各自片种重新标定 / Grain calibrated per stock
+
+[中文](#cn-1.9.3) | [English](#en-1.9.3)
+
+<h4 id="cn-1.9.3">新增功能</h4>
+
+- 四个 VISION3 电影负片（50D、250D、200T、500T）的颗粒按各自 datasheet 的 diffuse rms 颗粒度分别标定；此前所有片种共用一组全局参数。
+
+#### 问题修复
+
+- 修正红色颗粒锚点被读在颗粒曲线末端的问题。按资料自身的读数规则（密度 1.0 → 特性曲线 → 颗粒曲线）重读后，蓝色颗粒最粗、红色最细，与实际彩色负片一致。
+
+<h4 id="en-1.9.3">New Features</h4>
+
+- Calibrate the grain of the four VISION3 stocks (50D, 250D, 200T, 500T) to each film's published diffuse-rms granularity; every stock previously shared one global setting.
+
+#### Bug Fixes
+
+- Fix the red grain anchor being taken at the far end of the granularity curve. Read by the sheet's own rule (density 1.0, then the characteristic curve, then the granularity curve), blue grain is the coarsest and red the finest, as on a real colour negative.
+
+Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.9.2...v1.9.3
+
 ### v1.9.2 — 颗粒按真实胶片 datasheet 重标定、显影进入颗粒密度轴 / Grain calibrated to real film datasheets, development folded into the grain density axis
 
 **中文**

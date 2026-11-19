@@ -719,6 +719,61 @@ bool digest(Params& p, const Json& neutral_filters, std::string& error) {
     return true;
 }
 
+namespace {
+
+// Per-stock RMS granularity, as the ratio each stock needs against the
+// VISION3 50D calibration that `GrainParams::particle_scale` already carries.
+//
+// The numbers are the manufacturer's own diffuse-rms granularity curves read at
+// each channel's density 1.0 (48 um aperture, ECN-2, Status M, sigma-D x1000):
+// 50D 4.76/5.30/11.97, 250D 6.10/8.47/11.49 (blue is an edge read: the blue
+// minimum density sits at about 1.0), 200T 5.15/8.19/20.38, 500T
+// 6.09/10.99/30.44, per channel R, G, B.  Method, uncertainty and the reading
+// history live in film-validation/realism/vision3_granularity.json.
+//
+// sigma scales as sqrt(particle_area_um2 * particle_scale[ch]), so a stock
+// that wants k times 50D's sigma needs k^2 on `particle_scale`; storing k
+// keeps the table comparable with the sheet numbers at a glance.
+//
+// This intentionally diverges from the reference, which has one global grain
+// calibration for all 28 stocks and so renders an ISO 50 cinema negative with
+// an ISO 500's grain.  The 22 upstream parity cases all run with grain off.
+struct StockGrainRatio {
+    const char* stock;
+    double r, g, b;
+};
+
+constexpr StockGrainRatio kStockGrainRatios[] = {
+    // k = sigma-d of the stock / sigma-d of VISION3 50D, per channel R,G,B,
+    // read from each sheet page 4 by its own printed rule (density 1.0 ->
+    // characteristic curve -> granularity curve).  Sheet values at density
+    // 1.0: 50D 4.76/5.30/11.97, 250D 6.10/8.47/11.49 (blue is an edge read:
+    // 250D's blue minimum density sits at about 1.0), 200T 5.15/8.19/20.38,
+    // 500T 6.09/10.99/30.44.  Numbers and method in
+    // film-validation/realism/vision3_granularity.json.
+    {"kodak_vision3_250d", 6.10 / 4.76, 8.47 / 5.30, 11.49 / 11.97},
+    {"kodak_vision3_200t", 5.15 / 4.76, 8.19 / 5.30, 20.38 / 11.97},
+    {"kodak_vision3_500t", 6.09 / 4.76, 10.99 / 5.30, 30.44 / 11.97},
+};
+
+}  // namespace
+
+void apply_stock_grain_calibration(Params& p) {
+    const StockGrainRatio* row = nullptr;
+    for (const auto& candidate : kStockGrainRatios) {
+        if (p.film.info.stock == candidate.stock ||
+            p.film.info.base_stock == candidate.stock) {
+            row = &candidate;
+            break;
+        }
+    }
+    if (row == nullptr) return;  // 50D-calibrated default is the fallback
+    const double ratio[3] = {row->r, row->g, row->b};
+    for (int c = 0; c < 3; ++c) {
+        p.film_render.grain.particle_scale[c] *= ratio[c] * ratio[c];
+    }
+}
+
 bool init_params(const std::string& resources_dir, const std::string& film_stock,
                  const std::string& print_stock, const Json& neutral_filters,
                  Params& out, std::string& error) {

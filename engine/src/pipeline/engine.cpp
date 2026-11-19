@@ -919,6 +919,7 @@ spk_session* open_frame(spk_engine* engine, const FrameIn& frame, const char* pa
     apply_product_defaults(session->params, session->product_defaults);
     session->params.settings.working_precision = "float32";
     if (!digest(session->params, engine->neutral_filters, error)) { g_error = error; return nullptr; }
+    apply_stock_grain_calibration(session->params);
 
     // Uploaded as handed over, alpha and all; `spk_take_rgb` drops the fourth
     // channel on device below. Stripping it on the host would be a full-frame
@@ -2509,6 +2510,7 @@ spk_status spk_set_params(spk_session* session, const char* params_delta_json, c
         // schema row to be read back through.
         apply_product_defaults(fresh, session->product_defaults);
         if (!digest(fresh, engine->neutral_filters, error)) { g_error = error; return SPK_ERR_USER; }
+        apply_stock_grain_calibration(fresh);
         session->params = fresh;
     } else {
         apply_delta(session->params, delta);

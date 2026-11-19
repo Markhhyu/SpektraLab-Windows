@@ -38,16 +38,21 @@ struct GrainParams {
     /// Deliberately diverges from the reference's {1.6, 1.6, 3.2}: measured on
     /// developed negative density at a 48 um aperture (Kodak's diffuse rms
     /// granularity convention, sigma-D x1000, ECN-2, Status M), the reference
-    /// gives R 6.0 / G 5.9 / B 10.1 where the VISION3 50D datasheet curves read
-    /// 2.6 / 5.3 / 10.5.  The blue layer is already the coarsest, as it should
-    /// be, but the red record is 2.3x too coarse; a real negative keeps its red
-    /// grain the finest of the three.  sigma scales as
-    /// sqrt(particle_area_um2 * particle_scale[ch]), so these values solve to
-    /// the datasheet: R 2.6 / G 5.3 / B 10.2 measured, 2.6 / 5.3 / 10.5 on the
-    /// datasheet.  See film-validation/realism/README.md and
-    /// bench/realism_tune_grain.py; parity_grain.py now records an intentional
-    /// divergence.
-    double particle_scale[3] = {0.30, 1.29, 3.33};
+    /// gives R 10.1 / G 5.9 / B 6.0 -- i.e. its blue record is the finest,
+    /// while every real colour negative has blue the coarsest and red the
+    /// finest.  sigma scales as sqrt(particle_area_um2 * particle_scale[ch]),
+    /// so these values solve to the VISION3 50D sheet read by its own rule
+    /// ("density 1.0 -> characteristic curve -> granularity curve"):
+    /// R 4.76 / G 5.30 / B 11.97 on the sheet, R 4.7 / G 5.3 / B 12.0 measured.
+    ///
+    /// v1 of this table solved to R 2.6 because the red granularity curve was
+    /// misread at its far-right end (log exposure about 5) instead of where the
+    /// red characteristic curve crosses density 1.0.  Correcting that made the
+    /// red record 1.8x coarser and pulled the per-stock red ratios from about
+    /// 2x down to about 1.1-1.3x.  See film-validation/realism/sources.md and
+    /// bench/realism_tune_grain.py; parity_grain.py records the intentional
+    /// divergence from the reference.
+    double particle_scale[3] = {1.01, 1.29, 4.47};
     double particle_scale_layers[3] = {2.0, 1.0, 0.5};
     double density_min[3] = {0.03, 0.03, 0.03};
     double uniformity[3] = {0.97, 0.99, 0.97};
@@ -597,6 +602,14 @@ Json read_params(const Params& params);
 // preview/lut/debug switches, then the stock-specific overrides and the
 // halation preset. Must run before a pipeline is built.
 bool digest(Params& params, const Json& neutral_filters, std::string& error);
+
+// Scales the grain's per-channel particle size to the stock's published
+// diffuse-rms granularity.  `grain::particle_scale` is calibrated once, on
+// VISION3 50D; every other emulsion measured off the same manufacturer curves
+// needs its own ratio.  Runs after `digest` on the two paths that rebuild the
+// tree from a profile (`open` and a stock change) and never on a plain delta,
+// so the ratios are applied exactly once per profile load.
+void apply_stock_grain_calibration(Params& params);
 
 // The halation preset `digest` applies, keyed by the film's `use` and its
 // `antihalation` tag (or `no`, under `antihalation_removed`). Exposed because

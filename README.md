@@ -38,125 +38,24 @@ frame in ~0.2 s on the reference machine.
 
 ## What this build adds
 
-Everything is listed with measurements in [`WINDOWS-PORT.md`](WINDOWS-PORT.md);
-the short version:
+This is not a recompile: the renderer was ported from Metal to Vulkan, the
+interface was rebuilt as a Tauri/React app, and the film path gained capabilities
+the macOS app does not have. The full list with measurements is in
+[`DIFFERENCES.md`](DIFFERENCES.md); per-release changes are in
+[`RELEASES.md`](RELEASES.md) and the port's engineering detail in
+[`WINDOWS-PORT.md`](WINDOWS-PORT.md).
 
-#### Correctness and robustness (P0)
+In short:
 
-1. **Tone Mask on the Vulkan backend** — the macOS contrast-mask node was made
-   platform-neutral and two compute kernels were added; the host no longer
-   advertises `contrast_mask` as unsupported, so the UI works.
-2. **Whole-image parity harness** against the public Python reference
-   (`engine/tests/parity_upstream.py`): 22 cases, all inside the 3e-5 bar;
-   documented semantic divergences are asserted separately.
-3. **Editor residency budget** — at most two editor caches stay resident;
-   older ones are suspended to disk and their GPU memory released
-   (`SPEKTRAFILM_HOST_RESIDENT_EDITORS` overrides).
-4. **First-viewer latency** — the embedded camera preview is painted before
-   the engine open; the host gained `warm_up`, and meter computation no longer
-   sorts 1.7 M doubles.
-
-#### Performance (P1)
-
-5. First-frame warm-up: `spk_warm_up` runs while the RAW decodes; cold live
-   first frame ~260 ms → ~180 ms.
-6. TIFF **Deflate + predictor** option (`tiff_compression: "deflate"`):
-   ~11 % smaller 16-bit exports (lossless, validated against libtiff/OIIO).
-7. Unified export path: `export_image` reuses the GPU render + streaming
-   encoder — `tiff16` 2079 → 217 ms, `jpeg` 1849 → 243 ms on 32.95 MP.
-8. Calibration sweep harness (`engine/tests/calibration_sweep.py`): DIR
-   couplers, halation and grain monotonicity against the reference, 13 points,
-   0 failures.
-9. Decode instrumentation (`SPEKTRAFILM_DECODE_TIMINGS`) and a parallel
-   16-bit→float pack step; two-stage decode is documented as a product decision.
-
-#### Native extensions (not in the macOS app)
-
-10. **Development panel (`P1-7`)** — push/pull −3…+3 stops in 1/3 stops and
-    developer temperature 18–24 °C. The measured density curve is bent by a
-    three-parameter family fitted to the Portra 800 push1/push2 profiles;
-    temperature folds in at 1/6 stop per °C and grain scales with the push.
-    `Off` is a byte-exact bypass. This is an approximation of the measured
-    push profiles (~2.6 % mean difference), not a per-stock replacement.
-11. **Lighting panel (`P1-8`)** — scan light and viewing light are selectable
-    (`D50/D55/D65/D75/E/A/Incandescent/Kinoton 75P/TH-KG3/BB<kelvin>`).
-    Scan constants rebake for the named light; a different viewing light is a
-    CAT02 soft proof and takes over the glare tint. Leaving both on the stock
-    default is the exact pre-P1-8 rendering.
-
-12. **Library and collections (`v1.3.0`)** — a persistent photo catalog with a
-    two-module workspace (Library / Develop). Open it from the labelled
-    **Library** button, **File → Library…** (`Ctrl+Shift+L`). Importing a
-    folder or photo registers references only (originals are never copied or
-    modified); photos opened through the normal open path are registered
-    automatically and thumbnails are filled in the background. Folder,
-    keyword, star, flag, colour-label and search filters run over Collections
-    (manual groups; add or remove the current selection) and Smart Collections
-    (saved filter presets). The catalog lives in
-    `<AppData>\app.spektralab.desktop\Catalog\catalog.json` with thumbnails
-    under `...\Catalog\thumbs\`. The metadata panel edits title/caption/
-    keywords and applies rating/flag/colour labels in bulk; **Sync Settings**
-    copies the anchor photo's develop sidecar to every selected photo. Opening
-    from the library loads the whole visible page into the editor's filmstrip,
-    so frames switch there without going back to the grid. Edits stay
-    non-destructive per-image sidecars, exactly as before.
-
-13. **Readable tone tools (`v1.5.0`)** — the latitude plot is now a 260×96
-    histogram-style chart: the smoothed scene distribution is filled with a
-    gradient, the printable medium band (shadow/highlight EV) is shaded and
-    labelled, EV ticks and boundary labels are drawn along the axis, and a
-    stat row reports the held stops plus the below/within/above shares. A
-    suggested-placement button applies the measured highlight/shadow
-    pull-back in one click. The on-canvas histogram is now a 176×58 smoothed
-    RGB + luma overlay with a grid, axis and clipping markers.
-
-14. **Workflow polish (`v1.6.0`)** — the Tone Mask panel exposes the engine's
-    highlights/shadows/core/radius controls (hidden before because the host
-    capability was not wired through); `?` opens a keyboard-shortcut sheet
-    (also Help → Keyboard Shortcuts); the top bar groups are visually
-    separated and end with a help button; a finished export can hand straight
-    back to the Library; the film and paper lists gained a search box and
-    recent picks; macOS ⌘ labels were replaced with Windows Ctrl chords.
-
-15. **History and presets (`v1.7.0`)** — every edit is now inspectable:
-    `Ctrl+H` opens a history panel that lists each undo step (newest first) with
-    a generated label (film/paper change, development, tone mask, exposure,
-    adjustments, crop, white balance, …). Clicking a row jumps the open frame to
-    that snapshot, and Redo replays forward from there. A Presets panel in the
-    parameters rail saves the current film parameters plus the adjustment layers
-    to an app-level store and applies them to other photographs as a normal
-    undoable edit; presets can be renamed and deleted.
-
-16. **Local adjustments (`v1.8.0`)** — a Local Adjustments section in the
-    parameters rail adds masked grades: linear gradients and radial masks with
-    exposure, contrast, highlights, shadows, saturation, temperature, tint,
-    feather and invert controls (up to 16 layers per photograph). The masks are
-    evaluated in the finished frame (after crop and rotation) and applied by the
-    native host in linear light after the print is rendered, so they compose on
-    top of Layer 2 without touching the negative or the paper curve. Masks and
-    their settings are stored in the photograph's sidecar and are normal
-    undoable edits; malformed layers are rejected as bad requests. The SVG
-    histogram and the latitude plot were also rebuilt with smoothed rendering,
-    clipping indicators, EV ticks and suggested-placement controls.
-
-17. **Two-stage RAW opens and a batch of workflow upgrades (`v1.9.0`)** —
-    opening a RAW photograph now starts with a half-resolution LibRaw decode
-    (~0.45 s instead of ~1.12 s for the 32.95 MP reference file), so the first
-    frame lands in roughly half the time; the full-resolution decode follows
-    automatically once that frame is on screen. Folder imports read camera
-    previews through the render pool when 8+ files are imported (cancellable,
-    with a failure list and retry). Batch export can run on up to four
-    background render hosts (Settings → Rendering → Batch rendering), measured
-    3.1× faster on three 32.95 MP TIFF exports; the extra hosts only exist for
-    the run. The Library gains EXIF capture-time sorting, a thumbnail-size
-    slider and in-place rename; the filmstrip can rate, flag and label picked
-    frames (also 0-5 / P / X / U on the keyboard). Deflate TIFF export
-    compresses strips in parallel (~2.9 s → ~0.96 s, byte-identical pixels).
-    Library, Develop and Export now share one module bar; terminology is
-    unified (Develop / Solve / Meter and balance); the side rails narrow on
-    smaller windows; the canvas shows a loading skeleton, the histogram folds
-    away, save state is visible and the Camera section explains that Solve only
-    suggests an exposure.
+- **Film** — per-stock grain calibrated to film datasheets, development push/pull
+  with temperature, selectable scan and viewing illuminants, a recalibrated Tone
+  Mask, and Scene Placement guidance.
+- **Performance** — warm-up before the first live frame, two-stage RAW opens, one
+  export path for preview and export, parallel Deflate, and a four-host batch
+  export pool.
+- **Workflow** — a library with collections, a history panel, presets, masked
+  local adjustments, and an imaging-path panel for the camera and scanner
+  controls.
 
 ## Packaging and releases
 

@@ -62,8 +62,6 @@ worth shipping, keeping the version bump and the asset name in step.
 
 ### v1.9.3 — 颗粒按各自片种重新标定 / Grain calibrated per stock
 
-[中文](#cn-1.9.3) | [English](#en-1.9.3)
-
 <h4 id="cn-1.9.3">新增功能</h4>
 
 - 四个 VISION3 电影负片（50D、250D、200T、500T）的颗粒按各自 datasheet 的 diffuse rms 颗粒度分别标定；此前所有片种共用一组全局参数。
@@ -83,8 +81,6 @@ worth shipping, keeping the version bump and the asset name in step.
 Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.9.2...v1.9.3
 
 ### v1.9.2 — 颗粒按真实胶片标定、显影进入颗粒密度轴 / Grain calibrated to real film, development folded into the grain axis
-
-[中文](#cn-1.9.2) | [English](#en-1.9.2)
 
 <h4 id="cn-1.9.2">新增功能</h4>
 
@@ -128,8 +124,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.9.1...
 
 ### v1.9.1 — 局部调整接线修复、影调蒙版重标定、成像链面板 / Local-adjustment wiring, tone-mask recalibration and the imaging-path panel
 
-[中文](#cn-1.9.1) | [English](#en-1.9.1)
-
 <h4 id="cn-1.9.1">新增功能</h4>
 
 - 新增「成像链细节」面板，把引擎早已支持、界面却没有入口的 7 个观感参数接出来：相机滤镜 W8–W58、镜头模糊（µm）、密度曲线 gamma、扫描黑白点校正、扫描镜头模糊、片夹（none/black/open）。
@@ -172,8 +166,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.9.0...
 
 ### v1.9.0 — 两段解码、渲染池与图库升级 / Two-stage decode, render pool and Library upgrades
 
-[中文](#cn-1.9.0) | [English](#en-1.9.0)
-
 <h4 id="cn-1.9.0">新增功能</h4>
 
 - RAW 打开改为两段解码：先半分辨率出首帧（32.95 MP 参考图约 0.45 s，原约 1.12 s），首帧上屏后自动补齐全分辨率。
@@ -212,8 +204,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.8.0...
 
 ### v1.8.0 — 局部调整 / Local adjustments
 
-[中文](#cn-1.8.0) | [English](#en-1.8.0)
-
 <h4 id="cn-1.8.0">新增功能</h4>
 
 - 参数右栏新增「局部调整」：线性渐变与径向蒙版，每层可调曝光、对比度、高光、阴影、饱和度、色温、色调、羽化与反转，每张照片最多 16 层。
@@ -246,8 +236,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.7.0...
 
 ### v1.7.0 — 历史与预设 / History and presets
 
-[中文](#cn-1.7.0) | [English](#en-1.7.0)
-
 <h4 id="cn-1.7.0">新增功能</h4>
 
 - 历史面板：`Ctrl+H` 按步骤列出每次撤销（最新在上）并自动生成说明，点击任意一行可跳回该快照，之后仍可用重做向前重放。
@@ -279,8 +267,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.7.0...
 Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.6.0...v1.7.0
 
 ### v1.6.0 — 工作流打磨 / Workflow polish
-
-[中文](#cn-1.6.0) | [English](#en-1.6.0)
 
 <h4 id="cn-1.6.0">新增功能</h4>
 
@@ -324,8 +310,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.5.0...
 
 ### v1.5.0 — 影调工具视觉优化 / Readable tone tools
 
-[中文](#cn-1.5.0) | [English](#en-1.5.0)
-
 <h4 id="cn-1.5.0">新增功能</h4>
 
 - 宽容度曲线重做为 260×96 直方图式图表：平滑面积 + 渐变填充，可印放中等曝光带着色并标注阴影/高光 EV，坐标轴带 EV 刻度与边界标签。
@@ -360,8 +344,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.4.0...
 
 ### v1.4.0 — 图库快捷入口与胶片条筛选 / Library shortcut and filmstrip filters
 
-[中文](#cn-1.4.0) | [English](#en-1.4.0)
-
 <h4 id="cn-1.4.0">新增功能</h4>
 
 - 编辑器右侧参数栏顶部新增「图库 / 修改」模块切换，点「图库」直接进入图库，图库页顶部可切回修改。
@@ -393,8 +375,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.4.0...
 Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.3.0...v1.4.0
 
 ### v1.3.0 — 完整图库 / Full library
-
-[中文](#cn-1.3.0) | [English](#en-1.3.0)
 
 <h4 id="cn-1.3.0">新增功能</h4>
 
@@ -432,8 +412,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.2.1...
 
 ### v1.2.1 — 稳定性与文档同步 / Stability, compatibility checks and docs
 
-[中文](#cn-1.2.1) | [English](#en-1.2.1)
-
 <h4 id="cn-1.2.1">问题修复</h4>
 
 - 关闭窗口时先向渲染宿主发送 shutdown 请求并等待其自行退出（最多 700 ms），不再直接强杀；正常关闭降为 INFO，异常退出仍按预算自动重启并上报。
@@ -468,8 +446,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.2.0...
 
 ### v1.2.0 — 图库到修改的胶片条连续浏览 / Library-to-filmstrip browsing
 
-[中文](#cn-1.2.0) | [English](#en-1.2.0)
-
 <h4 id="cn-1.2.0">新增功能</h4>
 
 - 从图库双击（或 Enter）打开照片时，编辑器底部胶片条会装入当前筛选/排序后的整页照片，可直接点缩略图或用方向键切换。
@@ -501,8 +477,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.2.0...
 Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.1.1...v1.2.0
 
 ### v1.1.1 — 图库入口与自动登记 / Library entry and auto-registration
-
-[中文](#cn-1.1.1) | [English](#en-1.1.1)
 
 <h4 id="cn-1.1.1">新增功能</h4>
 
@@ -537,8 +511,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.1.1...
 Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.1.0...v1.1.1
 
 ### v1.1.0 — 图库 / Library
-
-[中文](#cn-1.1.0) | [English](#en-1.1.0)
 
 <h4 id="cn-1.1.0">新增功能</h4>
 
@@ -576,8 +548,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.0.0...
 
 ### v1.0.0 — 独立版本线与命名统一 / Independent version line
 
-[中文](#cn-1.0.0) | [English](#en-1.0.0)
-
 <h4 id="cn-1.0.0">新增功能</h4>
 
 - Windows 版改用独立语义化版本号，首个版本为 1.0.0，不再沿用上游 `1.3.4-beta.3`，避免与 macOS 版本混淆。
@@ -610,8 +580,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.3.4-be
 
 ### v1.3.4-beta.3-win.2 — 测光回归修复 / Metering regression fix
 
-[中文](#cn-1.3.4-beta.3-win.2) | [English](#en-1.3.4-beta.3-win.2)
-
 <h4 id="cn-1.3.4-beta.3-win.2">问题修复</h4>
 
 - 修复 win.1 引入的自动测光回归：`center_weighted`、`average`、`median` 三种测光方法在测光器并行化后恒返回 0 EV，选择它们时自动曝光不施加增益、配光读数显示 0.000。
@@ -633,8 +601,6 @@ Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.3.4-be
 Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.3.4-beta.3-win.1...v1.3.4-beta.3-win.2
 
 ### v1.3.4-beta.3-win.1 — Windows 移植、P0/P1 优化、显影与光源 / Windows port, P0/P1 optimisations, development and lighting
-
-[中文](#cn-1.3.4-beta.3-win.1) | [English](#en-1.3.4-beta.3-win.1)
 
 <h4 id="cn-1.3.4-beta.3-win.1">新增功能</h4>
 

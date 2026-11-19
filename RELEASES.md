@@ -60,6 +60,24 @@ worth shipping, keeping the version bump and the asset name in step.
 
 ## History
 
+### v1.9.2 — 颗粒按真实胶片 datasheet 重标定、显影进入颗粒密度轴 / Grain calibrated to real film datasheets, development folded into the grain density axis
+
+**中文**
+- 颗粒模型按真实胶片 datasheet 重标定。以 VISION3 50D 的 Diffuse rms Granularity 曲线为锚（48 µm 孔径、ECN-2、Status M，σD×1000，净密度 1.0），在显影密度的真实口径下逐通道对齐：红 6.0 → **2.6**（datasheet 2.6）、绿 5.9 → **5.3**（5.3）、蓝 10.1 → **10.2**（10.5）。旧模型红通道比蓝通道还粗 2.3 倍；现在红最细、蓝最粗，符合彩色负片物理。根因是 `GrainParams.particle_scale` 全局共享（`{1.6, 1.6, 3.2}`），已改为按 datasheet 反解的 `{0.30, 1.29, 3.33}`，并在注释中记录锚点、方法与偏离理由。引擎侧独立核对：印片空间红/绿粒度比 1.593 → 0.795，蓝/绿 1.595 → 1.823。
+- 显影 push/pull 现在会把 `development_morph` 烘进颗粒的密度轴与层密度表（此前颗粒强度只随 push 线性缩放、与落到哪一档密度无关）。同一密度下 2 档 push 约 +34–43%，1 档 +16–21%，1 档 pull −5…−17%。
+- 审计了"显影 morph 与颗粒幅度重复计数"的疑虑：把幅度乘子临时归零后实测，morph 表对同密度 σD 的影响 <±5%（它只改变像素落在哪个密度，不改变该密度有多粗），push→颗粒的全部响应仍来自 `1 + 0.18·push + 0.03·(temp−20)`，故系数保留原值并在源码注明"这是唯一耦合，改动需重测固定密度响应"。
+- 新增可复现的真实感度量工具链（`film-validation/bench/realism_*.py` + `film-validation/realism/README.md`）：datasheet 数字化（含人工网格读数与自动跟踪失败教训）、参考实现真实密度取样、逐通道标定、push sweep 同密度比较、分辨率/预览一致性。
+- 安装包：37.60 MiB，sha256 `4b9551b72fae1c7007cc80b36725c8c486e2af0da4ff08d3ea5c6c5231c5c0be`。
+- 验证：`ctest` 56/56；上游 parity 22/22（官方用例均关闭颗粒，颗粒偏离为已记录的有意偏离）；前端 541 通过 / 2 跳过；安装包内宿主 hello 无 `unsupported_features`、`params_schema` 105 字段、`tiff_options` 含 deflate，打开 4688×7028 RAW 渲染通过，且打包宿主的红/绿粒度比已是 0.795。
+
+**English**
+- Grain recalibrated against a real film datasheet. Using the VISION3 50D Diffuse rms Granularity curves as the anchor (48 µm aperture, ECN-2, Status M, sigma-D x1000 at net density 1.0) and measuring in developed density, each channel now matches: red 6.0 → **2.6** (datasheet 2.6), green 5.9 → **5.3** (5.3), blue 10.1 → **10.2** (10.5). The old model made red 2.3x coarser than blue; now red is the finest and blue the coarsest, as in a real colour negative. The cause was the globally shared `GrainParams.particle_scale` (`{1.6, 1.6, 3.2}`), now `{0.30, 1.29, 3.33}` solved from the datasheet, with the anchor, method and divergence recorded in the comment. Independent engine-side check: red/green granularity ratio in print space 1.593 → 0.795, blue/green 1.595 → 1.823.
+- Development push/pull now folds `development_morph` into the grain density axis and the layer density tables (previously grain strength only scaled linearly with push, regardless of which density a pixel landed on). At matched density, two stops of push is about +34–43%, one stop +16–21%, one stop of pull −5…−17%.
+- Audited the suspected double counting between the development morph and the grain amplitude: with the amplitude multiplier zeroed, the morph tables move sigma-D by under ±5% at matched density (they change which density a pixel lands on, not how coarse that density is), and the whole push → grain response still comes from `1 + 0.18·push + 0.03·(temp−20)`, so the coefficient is unchanged and the source now states that it is the only coupling and must be re-measured if changed.
+- New reproducible realism tooling (`film-validation/bench/realism_*.py` and `film-validation/realism/README.md`): datasheet digitisation (including the manual reading rule and why automatic curve tracing failed), real-density sampling from the reference implementation, per-channel calibration, push sweeps compared at matched density, and resolution/preview consistency.
+- Installer: 37.60 MiB, sha256 `4b9551b72fae1c7007cc80b36725c8c486e2af0da4ff08d3ea5c6c5231c5c0be`.
+- Verification: `ctest` 56/56; upstream parity 22/22 (every official case runs grain off, so the grain divergence is intentional and documented); 541 frontend tests passed / 2 skipped; the host inside the bundle reports no `unsupported_features`, a 105-field `params_schema`, Deflate in `tiff_options`, opens the 4688×7028 RAW and renders a frame, and its red/green granularity ratio is already 0.795.
+
 ### v1.9.1 — 局部调整接线修复、影调蒙版重标定与成像链面板 / Local-adjustment wiring fix, tone-mask recalibration and the imaging-path panel
 
 **中文**

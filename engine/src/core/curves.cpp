@@ -142,6 +142,17 @@ void development_morph(const DevelopmentParams& p, DevelopmentMorph& out) {
     // Push processing coarsens the grain (more development of the same
     // particles); a pull smooths it. The temperature term is the same
     // activity, at a third of the push's strength.
+    // Push processing coarsens the grain (more development of the same
+    // particles); a pull smooths it. The temperature term is the same
+    // activity, at a third of the push's strength.
+    //
+    // This is the *only* push -> grain coupling. `build_grain_tables` bakes the
+    // morph into the density axis and the layer tables too, but measured on
+    // developed density at matched net density (bench/realism_push_compare.py,
+    // VISION3 50D, 48 um aperture) that part moves sigma-D by under 5%: it
+    // changes which density a pixel lands on, not how coarse that density is.
+    // So there is no double counting to remove -- but do not grow this
+    // coefficient without re-measuring the fixed-density response.
     const double grain = 1.0 + 0.18 * push + 0.03 * (p.temperature_c - 20.0);
     out.grain_scale = std::min(2.0, std::max(0.5, grain));
 }

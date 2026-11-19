@@ -5,7 +5,7 @@
 A Windows / Vulkan build of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) —
 the spectral film-and-print simulator — derived from the original project's last
 Windows beta, **v1.3.4-beta.3** (tag `9ceca33`). The Windows edition has its own
-version line, currently **v1.9.1**, plus the Windows port fixes, performance work
+version line, currently **v1.9.2**, plus the Windows port fixes, performance work
 and two native extensions described below.
 
 The film process model, the 28 measured film/paper profiles and the print LUTs

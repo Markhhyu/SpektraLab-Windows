@@ -33,7 +33,21 @@ struct GrainParams {
     bool active = true;
     bool sublayers_active = true;
     double particle_area_um2 = 0.2;
-    double particle_scale[3] = {1.6, 1.6, 3.2};
+    /// Per-channel particle area scale, R, G, B.
+    ///
+    /// Deliberately diverges from the reference's {1.6, 1.6, 3.2}: measured on
+    /// developed negative density at a 48 um aperture (Kodak's diffuse rms
+    /// granularity convention, sigma-D x1000, ECN-2, Status M), the reference
+    /// gives R 6.0 / G 5.9 / B 10.1 where the VISION3 50D datasheet curves read
+    /// 2.6 / 5.3 / 10.5.  The blue layer is already the coarsest, as it should
+    /// be, but the red record is 2.3x too coarse; a real negative keeps its red
+    /// grain the finest of the three.  sigma scales as
+    /// sqrt(particle_area_um2 * particle_scale[ch]), so these values solve to
+    /// the datasheet: R 2.6 / G 5.3 / B 10.2 measured, 2.6 / 5.3 / 10.5 on the
+    /// datasheet.  See film-validation/realism/README.md and
+    /// bench/realism_tune_grain.py; parity_grain.py now records an intentional
+    /// divergence.
+    double particle_scale[3] = {0.30, 1.29, 3.33};
     double particle_scale_layers[3] = {2.0, 1.0, 0.5};
     double density_min[3] = {0.03, 0.03, 0.03};
     double uniformity[3] = {0.97, 0.99, 0.97};

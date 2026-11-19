@@ -291,16 +291,70 @@ bool Pipeline::build(const Params& params, std::string& error) {
         // The axis is the normalised curve itself, negated for positive film
         // because the reference negates both the axis and the query to keep
         // `np.interp`'s increasing-x requirement.
+        //
+        // B-1: the grain tables are read as "developed density -> sub-layer
+        // densities", so they have to move with the same curve morph the rest
+        // of the pipeline uses. They used to be baked from the unmorphed
+        // profile, which meant a push only reached the grain through the
+        // multiplicative `grain_scale` (1 + 0.18/stop) while the steeper,
+        // denser curve it produces never entered the lookup: measured on
+        // DSC07923.ARW the push+2 grain RMS rose 10 % overall, but the dark
+        // band fell 21 % because the lookup still landed on the old curve.
+        // With the morph baked in, grain follows the developed density, and a
+        // lookup at a given density sees the sub-layer density that density
+        // actually came from.
+        auto sample_channel = [&](const Vec& curve, size_t c, double x) {
+            const Vec& lex = film.data.log_exposure;
+            if (x <= lex.front()) return curve[c];
+            if (x >= lex.back()) return curve[(k - 1) * 3 + c];
+            size_t lo = 0, hi = k - 1;
+            while (hi - lo > 1) {
+                const size_t mid = (lo + hi) / 2;
+                if (lex[mid] <= x) lo = mid; else hi = mid;
+            }
+            const double x0 = lex[lo], x1 = lex[hi];
+            const double t = x1 > x0 ? (x - x0) / (x1 - x0) : 0.0;
+            return curve[lo * 3 + c] + (curve[hi * 3 + c] - curve[lo * 3 + c]) * t;
+        };
+        auto sample_layer = [&](size_t sl, size_t ch, double x) {
+            const Vec& lex = film.data.log_exposure;
+            const Vec& lay = film.data.density_curves_layers;
+            const auto at = [&](size_t i) { return lay[i * 9 + sl * 3 + ch]; };
+            if (x <= lex.front()) return at(0);
+            if (x >= lex.back()) return at(k - 1);
+            size_t lo = 0, hi = k - 1;
+            while (hi - lo > 1) {
+                const size_t mid = (lo + hi) / 2;
+                if (lex[mid] <= x) lo = mid; else hi = mid;
+            }
+            const double x0 = lex[lo], x1 = lex[hi];
+            const double t = x1 > x0 ? (x - x0) / (x1 - x0) : 0.0;
+            return at(lo) + (at(hi) - at(lo)) * t;
+        };
         Vec axis = film.normalized_curves;
+        // ylay[k][ch * 3 + sl] from density_curves_layers[k][sl][ch].
+        Vec ylay(k * 9, 0.0);
+        if (dev.active) {
+            for (size_t i = 0; i < k; ++i) {
+                for (size_t c = 0; c < 3; ++c) {
+                    const double x = (film.data.log_exposure[i] - dev.shift[c]) /
+                                     dev.exposure_scale[c];
+                    axis[i * 3 + c] = dev.amplitude[c] * sample_channel(film.normalized_curves, c, x);
+                    for (size_t sl = 0; sl < 3; ++sl)
+                        ylay[i * 9 + c * 3 + sl] =
+                            dev.amplitude[c] * sample_layer(sl, c, x);
+                }
+            }
+        } else {
+            for (size_t i = 0; i < k; ++i)
+                for (size_t sl = 0; sl < 3; ++sl)
+                    for (size_t ch = 0; ch < 3; ++ch)
+                        ylay[i * 9 + ch * 3 + sl] =
+                            film.data.density_curves_layers[i * 9 + sl * 3 + ch];
+        }
         if (film.info.is_positive()) for (double& v : axis) v = -v;
         Vec inv;
         axis_and_inv(axis, k, inv);
-        // ylay[k][ch * 3 + sl] from density_curves_layers[k][sl][ch].
-        Vec ylay(k * 9, 0.0);
-        for (size_t i = 0; i < k; ++i)
-            for (size_t sl = 0; sl < 3; ++sl)
-                for (size_t ch = 0; ch < 3; ++ch)
-                    ylay[i * 9 + ch * 3 + sl] = film.data.density_curves_layers[i * 9 + sl * 3 + ch];
         baked_.grain_xa = gpu_->upload_persistent_f32(axis.data(), axis.size(), error);
         baked_.grain_inv = gpu_->upload_persistent_f32(inv.data(), inv.size(), error);
         baked_.grain_ylay = gpu_->upload_persistent_f32(ylay.data(), ylay.size(), error);

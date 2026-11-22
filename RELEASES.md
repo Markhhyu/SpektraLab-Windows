@@ -63,6 +63,40 @@ worth shipping, keeping the version bump and the asset name in step.
 
 ## History
 
+### v1.9.4 — 界面重做、缩略图快十倍 / Interface rebuilt, thumbnails ten times faster
+
+<h4 id="cn-1.9.4">新增功能</h4>
+
+- 重做图库与标记：星级、旗标、颜色标签换成真正的控件，卡片上悬停即可标记，多选时显示混合态；工具栏、侧栏、网格、元数据面板与空状态统一到新的深色主题。
+- 胶片条优先复用导入时缓存的 JPEG，同一张照片不再为缩略图重复解码。
+
+#### 性能
+
+- 缩略图不再解码相机里那张全尺寸预览，改为挑最小够用的一张：A7M4 上 320 px 缩略图 220 ms → 18 ms，2048 px 预览 300 ms → 36 ms，相邻 10 张 2.5 s → 0.19 s。
+- 从图库进入修改不再清空胶片条，同一批照片重进时保留已解码的缩略图。（画布首帧仍要真解码 RAW，约 0.5 s，这部分是解码本身的成本。）
+
+#### 问题修复
+
+- 多选时旗标、颜色标签、星级不再把"无"当成选中值，混合态显示为未选中。
+- 嵌入预览小于目标尺寸时不再强行上采样后重算。
+
+<h4 id="en-1.9.4">New Features</h4>
+
+- Rebuilt the library and its marking: star ratings, flags and colour labels are real controls that can be set from the card on hover, and multi-select shows the mixed state; the toolbar, sidebar, grid, metadata panel and empty state now share the new dark theme.
+- The filmstrip reuses the JPEG the library cached at import, so a photo is no longer decoded twice for its thumbnail.
+
+#### Performance
+
+- Thumbnails no longer decode the camera's full-resolution preview: the host picks the smallest embedded preview that still covers the request, so a 320 px thumbnail drops from 220 ms to 18 ms, a 2048 px preview from 300 ms to 36 ms, and ten neighbours from 2.5 s to 0.19 s.
+- Opening a photo from the library no longer resets the strip, so a second visit keeps the thumbnails already decoded. (The canvas frame still needs a real RAW decode, about 0.5 s, which is the decode itself.)
+
+#### Bug Fixes
+
+- Multi-select no longer shows "none" as the selected flag, colour label or rating; the mixed state renders as unselected.
+- An embedded preview smaller than the request is no longer upscaled and re-decoded.
+
+Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.9.3...v1.9.4
+
 ### v1.9.3 — 颗粒按各自片种重新标定 / Grain calibrated per stock
 
 <h4 id="cn-1.9.3">新增功能</h4>

@@ -72,6 +72,50 @@ function Stars({ rating }: { rating: number }) {
   return <span className="library-stars" aria-label={`${rating} stars`}>{'★'.repeat(rating)}<span className="library-stars-empty">{'★'.repeat(5 - rating)}</span></span>;
 }
 
+/** Five clickable stars; clicking the current value clears the rating. */
+function RatingButtons({ value, onChange, label }: { value: number | null; onChange: (next: Rating) => void; label: string }) {
+  return (
+    <span className="mark-stars" role="group" aria-label={label}>
+      {([1, 2, 3, 4, 5] as const).map((n) => (
+        <button key={n} type="button" className={`mark-star${value !== null && n <= value ? ' is-on' : ''}`}
+          aria-label={tz(`${n} star`, `${n} 星`)} aria-pressed={value !== null && n <= value}
+          onClick={() => onChange((value === n ? 0 : n) as Rating)}>★</button>
+      ))}
+    </span>
+  );
+}
+
+function FlagButtons({ value, onChange, compact }: { value: Flag | null; onChange: (next: Flag) => void; compact?: boolean }) {
+  const options: { value: Flag; en: string; zh: string; short: string }[] = [
+    { value: 'pick', en: 'Pick', zh: '留用', short: '留' },
+    { value: 'reject', en: 'Reject', zh: '排除', short: '排' },
+    { value: 'none', en: 'None', zh: '无', short: '无' },
+  ];
+  return (
+    <span className={`mark-flags${compact ? ' is-compact' : ''}`}>
+      {options.map((o) => (
+        <button key={o.value} type="button" className={`mark-flag is-${o.value}${value === o.value ? ' is-on' : ''}`}
+          aria-pressed={value === o.value} title={tz(o.en, o.zh)}
+          onClick={() => onChange(o.value)}>{compact ? o.short : tz(o.en, o.zh)}</button>
+      ))}
+    </span>
+  );
+}
+
+function LabelSwatches({ value, onChange }: { value: ColorLabel | null; onChange: (next: ColorLabel) => void }) {
+  return (
+    <span className="mark-labels">
+      {LABELS.map((l) => (
+        <button key={l.value} type="button"
+          className={`mark-swatch${value === l.value ? ' is-on' : ''}${l.value === 'none' ? ' is-none' : ''}`}
+          style={l.value === 'none' ? undefined : { ['--swatch' as string]: labelColor(l.value) }}
+          aria-label={tz(l.en, l.zh)} aria-pressed={value === l.value} title={tz(l.en, l.zh)}
+          onClick={() => onChange(l.value)} />
+      ))}
+    </span>
+  );
+}
+
 function labelColor(value: ColorLabel | 'all'): string {
   switch (value) {
     case 'red': return '#d9534f';
@@ -143,43 +187,24 @@ function MetadataPanel({ entries, selection }: { entries: CatalogEntry[]; select
   }
 
   if (!single) {
+    const first = selected[0]!;
+    const sharedRating = selected.every((e) => e.rating === first.rating) ? first.rating : null;
+    const sharedFlag = selected.every((e) => e.flag === first.flag) ? first.flag : null;
+    const sharedLabel = selected.every((e) => e.label === first.label) ? first.label : null;
     return (
       <aside className="library-meta" data-testid="library-meta">
         <div className="library-meta-title">{selected.length} {tz('photographs selected', '张照片已选')}</div>
-        <div className="library-meta-row">
+        <div className="library-meta-row" data-testid="library-meta-rating">
           <span>{tz('Rating', '星级')}</span>
-          <select
-            value=""
-            onChange={(e) => { if (e.target.value !== '') void setRating(Number(e.target.value) as Rating); }}
-            data-testid="library-meta-rating"
-          >
-            <option value="">—</option>
-            {RATING_OPTIONS.map((r) => <option key={r} value={r}>{r}★</option>)}
-          </select>
+          <RatingButtons value={sharedRating} onChange={(r) => void setRating(r)} label={tz('Rating', '星级')} />
         </div>
-        <div className="library-meta-row">
+        <div className="library-meta-row" data-testid="library-meta-flag">
           <span>{tz('Flag', '旗标')}</span>
-          <select
-            value=""
-            onChange={(e) => { if (e.target.value) void setFlag(e.target.value as Flag); }}
-            data-testid="library-meta-flag"
-          >
-            <option value="">—</option>
-            <option value="pick">{tz('Pick', '留用')}</option>
-            <option value="reject">{tz('Reject', '排除')}</option>
-            <option value="none">{tz('None', '无')}</option>
-          </select>
+          <FlagButtons value={sharedFlag} onChange={(f) => void setFlag(f)} />
         </div>
-        <div className="library-meta-row">
+        <div className="library-meta-row" data-testid="library-meta-label">
           <span>{tz('Label', '颜色')}</span>
-          <select
-            value=""
-            onChange={(e) => { if (e.target.value) void setColorLabel(e.target.value as ColorLabel); }}
-            data-testid="library-meta-label"
-          >
-            <option value="">—</option>
-            {LABELS.map((l) => <option key={l.value} value={l.value}>{tz(l.en, l.zh)}</option>)}
-          </select>
+          <LabelSwatches value={sharedLabel} onChange={(l) => void setColorLabel(l)} />
         </div>
         <button className="library-btn library-meta-wide" onClick={() => void syncDevelopSettings()} data-testid="library-sync">
           {tz('Sync Settings', '同步修改设置')}
@@ -236,25 +261,19 @@ function MetadataPanel({ entries, selection }: { entries: CatalogEntry[]; select
           <button className="library-btn" onClick={addKeyword}>＋</button>
         </div>
       </div>
-      <div className="library-meta-row">
-        <span>{tz('Rating', '星级')}</span>
-        <select value={single.rating} onChange={(e) => void setRating(Number(e.target.value) as Rating, [single.path])} data-testid="library-meta-rating">
-          {RATING_OPTIONS.map((r) => <option key={r} value={r}>{r === 0 ? tz('None', '无') : `${r}★`}</option>)}
-        </select>
-      </div>
-      <div className="library-meta-row">
-        <span>{tz('Flag', '旗标')}</span>
-        <select value={single.flag} onChange={(e) => void setFlag(e.target.value as Flag, [single.path])} data-testid="library-meta-flag">
-          <option value="none">{tz('None', '无')}</option>
-          <option value="pick">{tz('Pick', '留用')}</option>
-          <option value="reject">{tz('Reject', '排除')}</option>
-        </select>
-      </div>
-      <div className="library-meta-row">
-        <span>{tz('Label', '颜色')}</span>
-        <select value={single.label} onChange={(e) => void setColorLabel(e.target.value as ColorLabel, [single.path])} data-testid="library-meta-label">
-          {LABELS.map((l) => <option key={l.value} value={l.value}>{tz(l.en, l.zh)}</option>)}
-        </select>
+      <div className="library-meta-marks">
+        <div className="library-meta-row" data-testid="library-meta-rating">
+          <span>{tz('Rating', '星级')}</span>
+          <RatingButtons value={single.rating} onChange={(r) => void setRating(r, [single.path])} label={tz('Rating', '星级')} />
+        </div>
+        <div className="library-meta-row" data-testid="library-meta-flag">
+          <span>{tz('Flag', '旗标')}</span>
+          <FlagButtons value={single.flag} onChange={(f) => void setFlag(f, [single.path])} />
+        </div>
+        <div className="library-meta-row" data-testid="library-meta-label">
+          <span>{tz('Label', '颜色')}</span>
+          <LabelSwatches value={single.label} onChange={(l) => void setColorLabel(l, [single.path])} />
+        </div>
       </div>
       <button className="library-btn library-meta-wide" disabled={selection.length < 2} onClick={() => void syncDevelopSettings()} data-testid="library-sync">
         {tz('Sync Settings', '同步修改设置')}
@@ -669,15 +688,28 @@ export function LibraryView() {
                 {entry.edited && <span className="library-flag library-flag-edited">{tz('Edited', '已修改')}</span>}
                 <span className="library-dot" data-label={entry.label} style={{ background: labelColor(entry.label), display: entry.label === 'none' ? 'none' : undefined }} />
                 <Stars rating={entry.rating} />
+                <div className="library-quick" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                  <RatingButtons value={entry.rating} onChange={(r) => void setRating(r, [entry.path])} label={tz('Rating', '星级')} />
+                  <FlagButtons compact value={entry.flag} onChange={(f) => void setFlag(f, [entry.path])} />
+                  <LabelSwatches value={entry.label} onChange={(l) => void setColorLabel(l, [entry.path])} />
+                </div>
               </div>
               <div className="library-cell-name">{entry.name || baseName(entry.path)}</div>
             </div>
           ))}
           {entries.length === 0 && (
             <div className="library-empty">
-              {total === 0
-                ? tz('No photographs yet. Import a folder to build your library.', '还没有照片。导入一个文件夹来建立图库。')
-                : tz('No photographs match the filters.', '没有照片匹配当前筛选。')}
+              <div className="library-empty-title">{tz('No photographs', '没有照片')}</div>
+              <div className="library-empty-hint">
+                {total === 0
+                  ? tz('Import a folder to start a catalog. The originals stay where they are.', '导入一个文件夹来建立图库。原文件仍留在原处。')
+                  : tz('Nothing matches the current filters.', '没有照片匹配当前筛选。')}
+              </div>
+              {total === 0 && (
+                <button className="library-btn is-primary" onClick={() => setImportOpen(true)} data-testid="library-empty-import">
+                  {tz('Import a folder…', '导入文件夹…')}
+                </button>
+              )}
             </div>
           )}
         </div>

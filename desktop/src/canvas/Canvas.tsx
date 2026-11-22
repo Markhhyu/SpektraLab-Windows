@@ -65,7 +65,11 @@ import { inTauri } from '../host/transport';
 import { onFrameDrop } from '../windows/frameDrag';
 import { clampZoom } from './zoom';
 
-const SURROUND = 0x5f / 255;
+// The surround is the colour the GL viewport is cleared to, so it is the empty
+// area around the picture and what an unselected canvas shows. It used to match
+// the old #5f5f5f ground; the dark theme clears to the rail ground instead, which
+// keeps a picture read as a print on a dark table rather than on grey card.
+const SURROUND = 0x17 / 255;
 
 export interface Layout {
   viewport: { width: number; height: number };
@@ -558,6 +562,10 @@ export function Canvas() {
         </div>
       )}
       {!selection && !glError && <div className="canvas-message canvas-empty" data-testid="canvas-empty">
+        <div className="canvas-empty-head">
+          <span className="canvas-empty-title">{tz('No photograph open', '还没有打开照片')}</span>
+          <span className="canvas-empty-hint">{tz('A RAW, TIFF or JPEG on its own, or a whole folder to browse.', '可以打开单张 RAW / TIFF / JPEG，也可以打开整个文件夹浏览。')}</span>
+        </div>
         <div className="canvas-empty-actions" onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => { if (e.code === 'Space') e.stopPropagation(); }}>
           <button className="btn primary" disabled={batch} onClick={() => void openDialog()} title="Ctrl+O">

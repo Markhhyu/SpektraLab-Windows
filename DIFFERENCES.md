@@ -37,6 +37,15 @@ one-stop overview of what differs; the per-release history lives in
   compression is parallel, about 2.9 s → 0.96 s.
 - Batch export render pool (up to four hosts): three 32.95 MP TIFF exports
   measured 18.1 s → 5.8 s (3.1×), with the extra hosts alive only during the run.
+- **Cheapest sufficient embedded preview (`v1.9.4`).** The host used to unpack the
+  camera's full-resolution preview for every thumbnail (220 ms for 320 px on an
+  A7M4 ARW, which also stores a 1616×1080 and a 160×120 preview); it now picks the
+  smallest preview that still covers the request, so 320 px takes 18 ms and a
+  2048 px preview 36 ms. A preview is never upscaled to reach the request.
+- **Filmstrip keeps what it decoded (`v1.9.4`).** Opening a photo from the library
+  no longer resets the thumbnail cache, and unloaded cells fall back to the JPEG
+  the library cached at import, so revisiting the same page costs no host round
+  trips.
 
 ## Film simulation
 
@@ -89,6 +98,10 @@ one-stop overview of what differs; the per-release history lives in
 - **Workflow polish (`v1.6.0`, `v1.9.0`)** — Tone Mask panel, shortcut sheet,
   searches and recent picks for stocks, module bar, EXIF sorting, thumbnail-size
   slider, in-place rename, filmstrip rating/flagging and a two-stage open.
+- **Rebuilt interface (`v1.9.4`)** — a dark theme with shared tokens, a redesigned
+  gallery toolbar, sidebar, grid and metadata panel, real rating/flag/label
+  controls (set from the card on hover, mixed state on multi-select), toggles,
+  sliders and switches throughout, and an empty state for an unimported library.
 
 ## Deliberate divergences and known limits
 
@@ -140,6 +153,11 @@ macOS 版没有的能力。本文件集中说明这些差异；逐版本历史�
 - TIFF Deflate + predictor：16-bit 导出约小 11% 且无损；条带并行压缩，约 2.9 s → 0.96 s。
 - 批量导出渲染池（最多 4 个宿主）：3 张 32.95 MP TIFF 实测 18.1 s → 5.8 s（3.1 倍），
   额外宿主只在导出期间存在。
+- **挑最小够用的嵌入预览（`v1.9.4`）**：此前每张缩略图都去解相机里那张全尺寸预览
+  （A7M4 的 ARW 里另存着 1616×1080 与 160×120 两张，320 px 缩略图却要 220 ms）；
+  现在按目标尺寸挑最小的够用预览，320 px 降到 18 ms、2048 px 预览 36 ms，且从不放大。
+- **胶片条保留已解码的缩略图（`v1.9.4`）**：从图库打开照片不再清空缩略图缓存；还没
+  进过队列的格子回退到导入时缓存的 JPEG，所以重进同一页不再产生宿主往返。
 
 ## 胶片模拟
 
@@ -179,6 +197,9 @@ macOS 版没有的能力。本文件集中说明这些差异；逐版本历史�
   与一键建议置位。
 - **工作流打磨（`v1.6.0`、`v1.9.0`）**：影调蒙版面板、快捷键速查、片种搜索与最近
   使用、统一模块栏、拍摄时间排序、缩略图尺寸、就地重命名、胶片条评级/旗标与两段打开。
+- **界面重做（`v1.9.4`）**：带共享 token 的深色主题；图库工具栏、侧栏、网格与元数据
+  面板重绘；星级/旗标/颜色标签换成真控件（卡片悬停即可标记，多选显示混合态）；
+  开关、滑杆、分段控件全面统一；未导入的图库有空状态。
 
 ## 有意偏离与已知限制
 

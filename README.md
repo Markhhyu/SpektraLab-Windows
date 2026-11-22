@@ -26,8 +26,8 @@ film model and 28 measured film/paper profiles. This repository is the
 backend, inside a Tauri/React desktop interface.
 
 It began as a port of upstream v1.3.4-beta.3 (tag `9ceca33`) and now has its own
-version line, currently **v1.9.3**: per-stock grain and development controls,
-scan/viewing illuminants, and Windows-side performance work.
+version line, currently **v1.9.4**: a rebuilt interface (theme, library and
+marking) and a filmstrip that loads its thumbnails in milliseconds.
 
 > **This is a derivative project, not the upstream.** Issues about the macOS app
 > belong to [JamesQiu2005/SpektraLab](https://github.com/JamesQiu2005/SpektraLab);

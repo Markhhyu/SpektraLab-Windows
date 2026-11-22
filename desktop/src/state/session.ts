@@ -1758,8 +1758,13 @@ async function setLibrary(folder: string, files: FileEntry[]) {
   files = frameOrder.apply(folder, files);
   await flushSave();
   if (get().externalEditConflict) throw new Error(tz('Resolve the external edit conflict before opening another folder.', '请先处理外部编辑冲突，再打开其他文件夹。'));
+  // Re-entering the same library page must not throw away thumbnails that are
+  // already decoded: that made the strip visibly rebuild itself every time.
+  const sameSet = get().folder === folder &&
+    get().frames.length === files.length &&
+    get().frames.every((f, i) => f.path === files[i]!.path);
   await closeEngineSession();
-  thumbs.reset();
+  if (!sameSet) thumbs.reset();
   frameImages.print = null;
   frameImages.original = null;
   set({ folder, frames: files, selection: null, picked: [], savedGeometry: {}, thumbVersion: get().thumbVersion + 1, imageVersion: get().imageVersion + 1, badge: null });

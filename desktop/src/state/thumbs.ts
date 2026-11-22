@@ -25,11 +25,25 @@ class ThumbCache {
   private failed = new Set<string>();
   private revisions = new Map<string, number>();
   private epoch = 0;
+  private fallback: ((path: string) => string | null) | null = null;
+  private stale = new Set<string>();
+
+  // The library already pays to decode one JPEG per catalog entry when it
+  // imports; the filmstrip can show that instead of asking the host for the
+  // embedded preview again (that request used to decode the full-size preview
+  // for every frame the moment a library page was opened).
+  setFallback(read: (path: string) => string | null) { this.fallback = read; }
 
   get(path: string, source: RequestSource = 'general'): string | null {
     const e = this.map.get(path);
     if (e) return e.url;
     if (source === 'filmstrip' && !this.filmstripPaths.has(path)) return null;
+    const cached = this.stale.has(path) ? null : this.fallback?.(path);
+    if (cached) {
+      this.map.set(path, { url: cached, print: false });
+      this.failed.delete(path);
+      return cached;
+    }
     // An export-grid request must survive the same cell leaving the strip.
     if (source === 'general') {
       const queued = this.queue.find((request) => request.path === path);
@@ -77,9 +91,12 @@ class ThumbCache {
     this.pending.clear();
     this.failed.clear();
     this.revisions.clear();
+    this.stale.clear();
   }
 
   invalidate(path: string) {
+    // The file changed on disk: do not serve the catalog's older JPEG again.
+    this.stale.add(path);
     const old = this.map.get(path);
     if (old) URL.revokeObjectURL(old.url);
     this.map.delete(path);

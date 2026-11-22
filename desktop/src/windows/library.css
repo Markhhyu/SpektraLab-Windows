@@ -422,3 +422,452 @@
   color: var(--text);
   font: inherit;
 }
+
+/* ── polish pass ────────────────────────────────────────────────────────────
+   The catalog was laid out with one flat tone for every surface, so the
+   toolbar, the sidebar and the grid read as one sheet of grey and the marks
+   were plain words on top of the thumbnail. This pass gives each layer a
+   depth step (ground → card → field), turns the marks into controls, and
+   keeps every value coming from theme.css tokens. */
+
+.library { background: var(--ground); }
+
+.library-toolbar {
+  height: calc(46px * var(--ui-scale));
+  padding: 0 14px;
+  gap: 10px;
+  background: linear-gradient(180deg, var(--card), color-mix(in srgb, var(--card) 88%, #000));
+  border-bottom: 1px solid var(--border);
+}
+
+.library-modules {
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--well);
+  gap: 2px;
+}
+
+.library-module {
+  height: calc(24px * var(--ui-scale));
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--dim);
+  font-weight: 500;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.library-module:hover { background: var(--row-hover); color: var(--text); }
+.library-module.is-active {
+  background: var(--pill);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 var(--border-strong), 0 1px 2px #0006;
+}
+
+.library-btn {
+  height: calc(28px * var(--ui-scale));
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  font-weight: 500;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.library-btn:hover { border-color: var(--border-strong); background: var(--pill); color: var(--text); }
+.library-btn:active { transform: translateY(0.5px); }
+.library-btn.is-primary {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.library-btn.is-primary:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+.library-search {
+  height: calc(30px * var(--ui-scale));
+  max-width: 380px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--well);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.library-search::placeholder { color: var(--dim); }
+.library-search:focus { outline: none; border-color: var(--accent); background: var(--field); }
+
+.library-filter {
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-subtle);
+  color: var(--dim);
+  font-size: var(--fs-small);
+  letter-spacing: 0.02em;
+}
+
+.library-filter select {
+  height: calc(26px * var(--ui-scale));
+  padding: 0 22px 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  appearance: none;
+  background-color: var(--field);
+  background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%),
+    linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+  background-position: calc(100% - 12px) 52%, calc(100% - 8px) 52%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease);
+}
+.library-filter select:hover { border-color: var(--border-strong); }
+.library-filter select:focus { outline: none; border-color: var(--accent); }
+
+.library-filter input[type="range"] {
+  width: calc(96px * var(--ui-scale));
+  height: 3px;
+  appearance: none;
+  border-radius: 999px;
+  background: var(--rule);
+  cursor: pointer;
+}
+.library-filter input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: 0 1px 3px #000a;
+  transition: transform var(--dur) var(--ease);
+}
+.library-filter input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.12); }
+
+.library-count {
+  padding: 2px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--secondary-text);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+}
+
+/* Sidebar: sections get their own rhythm and the active row carries an
+   accent rail, so "where am I" is answerable at a glance. */
+.library-side {
+  width: calc(218px * var(--ui-scale));
+  padding: 10px 8px 16px;
+  background: linear-gradient(180deg, var(--card), color-mix(in srgb, var(--card) 92%, #000));
+  border-right: 1px solid var(--border-subtle);
+}
+
+.library-side-title {
+  margin: 16px 8px 6px;
+  font-size: calc(10px * var(--ui-scale));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.library-side-title:first-child { margin-top: 4px; }
+
+.library-side-row {
+  align-items: center;
+  min-height: calc(26px * var(--ui-scale));
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--secondary-text);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.library-side-row:hover { background: var(--row-hover); color: var(--text); }
+.library-side-row.is-active {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.library-side-row.is-active span { color: var(--accent); }
+.library-side-row span {
+  min-width: 22px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--well);
+  font-size: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.library-side-row.is-active span { background: transparent; }
+.library-side-item.is-active { background: transparent; }
+.library-side-item.is-active .library-side-row { background: var(--accent-soft); }
+
+.library-side-add {
+  float: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.library-side-title:hover .library-side-add,
+.library-side-item:hover .library-side-add { opacity: 1; }
+.library-side-add:hover { background: var(--field); color: var(--text); }
+
+/* Grid: cards float on the ground, the frame is drawn on hover/selection
+   rather than always-on, and the thumbnail gets a hairline so bright frames
+   do not bleed into the background. */
+.library-grid {
+  gap: 12px;
+  padding: 14px;
+  background:
+    radial-gradient(1200px 500px at 50% -200px, color-mix(in srgb, var(--card) 60%, transparent), transparent 70%);
+}
+
+.library-cell {
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+.library-cell:hover {
+  background: var(--row-hover);
+  border-color: var(--border-subtle);
+}
+.library-cell.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-1);
+}
+
+.library-thumb {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--plot);
+}
+.library-thumb img { transition: transform 220ms var(--ease); }
+.library-cell:hover .library-thumb img { transform: scale(1.025); }
+.library-thumb-missing {
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--dim);
+}
+
+.library-stars {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #00000070;
+  transition: opacity var(--dur) var(--ease);
+}
+.library-cell:hover .library-stars { opacity: 0; }
+
+.library-flag {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 55%, transparent);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+.library-flag-pick { color: #93d693; background: #14311bcc; }
+.library-flag-reject { color: #e89494; background: #331416cc; }
+.library-flag-edited { color: var(--accent); background: #33240fcc; }
+
+.library-dot {
+  box-shadow: 0 0 0 1px #000000b0, 0 1px 3px #0008;
+}
+
+.library-cell-name {
+  padding: 0 2px;
+  font-size: calc(10.5px * var(--ui-scale));
+  color: var(--secondary-text);
+  transition: color var(--dur) var(--ease);
+}
+.library-cell:hover .library-cell-name,
+.library-cell.is-selected .library-cell-name { color: var(--text); }
+
+/* Marks as controls: stars, flags and colour labels share one geometry, so
+   the same widget works in the hover overlay and in the metadata panel. */
+.library-quick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 6px 5px;
+  background: linear-gradient(180deg, transparent, #08090ad9 55%);
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.library-cell:hover .library-quick { opacity: 1; transform: none; }
+
+.mark-stars, .mark-flags, .mark-labels { display: inline-flex; align-items: center; gap: 3px; }
+.mark-flags { margin-left: auto; }
+
+.mark-star {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #ffffff45;
+  font-size: calc(13px * var(--ui-scale));
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.mark-star:hover { color: #ffffffd0; transform: scale(1.15); }
+.mark-star.is-on { color: var(--accent); text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 55%, transparent); }
+
+.mark-flag {
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: #00000066;
+  color: var(--dim);
+  font-size: 9px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+.mark-flag:hover { color: var(--text); border-color: var(--border-strong); }
+.mark-flag.is-pick.is-on { color: #93d693; border-color: #93d69388; background: #14311bcc; }
+.mark-flag.is-reject.is-on { color: #e89494; border-color: #e8949488; background: #331416cc; }
+.mark-flag.is-none.is-on { color: var(--text); background: #ffffff18; }
+
+.mark-swatch {
+  width: calc(12px * var(--ui-scale));
+  height: calc(12px * var(--ui-scale));
+  padding: 0;
+  border: 1px solid #00000066;
+  border-radius: 50%;
+  background: var(--swatch, transparent);
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.mark-swatch:hover { transform: scale(1.2); }
+.mark-swatch.is-on { box-shadow: 0 0 0 2px var(--ground), 0 0 0 3px var(--accent); }
+.mark-swatch.is-none {
+  background: var(--well);
+  color: var(--dim);
+  font-size: 9px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mark-swatch.is-none.is-on { box-shadow: 0 0 0 2px var(--ground), 0 0 0 3px var(--text); }
+
+/* Metadata panel: keep facts on one baseline and let the marks grow, since
+   this column has the room for a real control. */
+.library-meta {
+  width: calc(268px * var(--ui-scale));
+  padding: 14px;
+  background: var(--card);
+  border-left: 1px solid var(--border-subtle);
+  font-size: calc(10.5px * var(--ui-scale));
+}
+.library-meta-title { font-size: calc(12.5px * var(--ui-scale)); font-weight: 600; }
+.library-meta-sub { margin: 3px 0 12px; }
+.library-meta-facts { gap: 5px; margin-bottom: 12px; }
+.library-meta-facts div { padding-bottom: 4px; border-bottom: 1px solid var(--border-subtle); }
+.library-meta-facts b { font-variant-numeric: tabular-nums; }
+.library-meta-row {
+  min-height: calc(30px * var(--ui-scale));
+  padding: 0 2px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.library-meta-row > span { font-size: var(--fs-small); letter-spacing: 0.02em; }
+.library-meta-marks .mark-star { font-size: calc(16px * var(--ui-scale)); }
+.library-meta-marks .mark-flag { padding: 2px 8px; font-size: 10px; }
+.library-meta-marks .mark-swatch { width: 14px; height: 14px; }
+.library-meta-empty { padding: 28px 8px; line-height: 1.6; }
+
+.library-keyword {
+  padding: 2px 8px;
+  border-color: var(--border-subtle);
+  border-radius: 999px;
+  background: var(--well);
+  color: var(--secondary-text);
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.library-keyword:hover { border-color: var(--accent); color: var(--text); }
+
+.library-footer {
+  height: calc(32px * var(--ui-scale));
+  padding: 0 14px;
+  background: var(--card);
+  border-top: 1px solid var(--border-subtle);
+}
+.library-footer kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--well);
+  color: var(--secondary-text);
+  font: inherit;
+  font-size: 9.5px;
+}
+
+.library-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 76px 20px;
+  color: var(--dim);
+}
+.library-empty-title { color: var(--text); font-size: calc(15px * var(--ui-scale)); font-weight: 600; }
+.library-empty-hint { max-width: 420px; line-height: 1.6; font-size: var(--fs-small); }
+.library-empty .library-btn { margin-top: 10px; }
+
+.library-modal-backdrop { background: #050506cc; backdrop-filter: blur(2px); }
+.library-modal {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+}
+.library-modal-title { font-size: calc(14px * var(--ui-scale)); font-weight: 600; }
+
+/* The hover overlay has to fit inside a thumbnail, so the flag set collapses
+   to single glyphs there; the metadata panel keeps the spelled-out labels. */
+.mark-flag { white-space: nowrap; }
+.library-quick {
+  padding: 26px 6px 6px;
+  gap: 4px;
+}
+.library-quick .mark-star { font-size: calc(12px * var(--ui-scale)); }
+.library-quick .mark-flags { margin-left: auto; }
+.mark-flags.is-compact { gap: 3px; }
+.mark-flags.is-compact .mark-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(17px * var(--ui-scale));
+  height: calc(17px * var(--ui-scale));
+  padding: 0;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.mark-flags.is-compact .mark-flag.is-pick.is-on { border-color: #93d69388; background: #14311bdd; }
+.mark-flags.is-compact .mark-flag.is-reject.is-on { border-color: #e8949488; background: #331416dd; }
+.mark-flags.is-compact .mark-flag.is-none.is-on { border-color: var(--border-strong); background: #ffffff22; }
+
+/* The active sidebar row is a button; keep its focus ring inside the row so
+   it reads as a selection rather than a stray box. */
+.library-side-row:focus-visible,
+.library-btn:focus-visible,
+.library-search:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}

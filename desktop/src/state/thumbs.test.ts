@@ -26,6 +26,18 @@ describe('thumbnail invalidation', () => {
   });
 });
 
+describe('library thumbnails', () => {
+  it('reuses the catalog JPEG instead of asking the host to decode the embedded preview', async () => {
+    fake.thumbnail.mockResolvedValue({});
+    const { thumbs } = await import('./thumbs');
+    thumbs.setFallback((path) => (path === '/shot.ARW' ? 'data:image/jpeg;base64,AAAA' : null));
+    thumbs.setFilmstripPaths(['/shot.ARW', '/other.ARW']);
+    expect(thumbs.get('/shot.ARW', 'filmstrip')).toBe('data:image/jpeg;base64,AAAA');
+    expect(thumbs.get('/other.ARW', 'filmstrip')).toBeNull();
+    expect(fake.thumbnail.mock.calls.map(([path]) => path)).toEqual(['/other.ARW']);
+  });
+});
+
 describe('thumbnail scheduling', () => {
   it('pauses queued work without duplicating or replacing the two active requests', async () => {
     const finishes: (() => void)[] = [];

@@ -7,26 +7,27 @@
   color-scheme: dark;
   --ui-scale: 1.15;
 
-  --ground: #5f5f5f;
-  --card: #2d2d2c;
-  --well: #5f5f5f;
-  --pill: #5f5f5f;
-  --field: #2d2d2c;
-  --rule: #3a3b39;
-  --rule-region: #1a1a19;
-  --text: #f9f7f3;
-  --dim: #898989;
-  --secondary-text: #dad8d4;
-  --plot: #1e1f1e;
-  --plot-grid: #3a3b39;
-  --plot-mid-grey: #4a4b49;
-  --accent: #e1a95f;
-  --selection: #ffffff;
-  --on-selection: #0f0e0e;
-  --export-chip: #686969;
-  --selection-frame: #faf8f4;
-  --knob: #fbf8f3;
-  --navigator-well: #1a1a19;
+  --ground: #191a1c;
+  --card: #202124;
+  --well: #191a1d;
+  --pill: #2a2c30;
+  --field: #26282c;
+  --rule: #34363a;
+  --rule-region: #101113;
+  --text: #f2efe9;
+  --dim: #8b8d92;
+  --secondary-text: #cdc9c2;
+  --plot: #141517;
+  --plot-grid: #2d2f33;
+  --plot-mid-grey: #4a4c50;
+  --accent: #e3a961;
+  --accent-soft: rgba(227, 169, 97, 0.14);
+  --selection: #f2efe9;
+  --on-selection: #17181a;
+  --export-chip: #3a3c40;
+  --selection-frame: #f7f4ee;
+  --knob: #f6f3ec;
+  --navigator-well: #101113;
   --latitude-inside: #9c9c9a;
   --latitude-inside-edge: #d6d5d2;
   --latitude-beyond: #3f3f3d;
@@ -36,13 +37,29 @@
   --hist-y: #bdbdbd;
   --disabled-opacity: 0.38;
 
+  /* Surfaces, depth and motion. The measured port had one border colour and no
+     radii; these are additive so a component can join the scheme without a
+     literal. */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --row-hover: rgba(255, 255, 255, 0.035);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 0.14s;
+
   /* Type: two section-title sizes (12 left, 10.5 right), body 10.5, small 9. */
-  --fs-rail-title: calc(12px * var(--ui-scale));
+  --fs-rail-title: calc(12.5px * var(--ui-scale));
   --fs-left-section: calc(12px * var(--ui-scale));
   --fs-right-section: calc(10.5px * var(--ui-scale));
-  --fs-body: calc(10.5px * var(--ui-scale));
-  --fs-small: calc(9px * var(--ui-scale));
-  --fs-action: calc(13.11px * var(--ui-scale));
+  --fs-body: calc(11px * var(--ui-scale));
+  --fs-small: calc(9.5px * var(--ui-scale));
+  --fs-action: calc(13.3px * var(--ui-scale));
 
   /* Metrics */
   --left-width: 254px;
@@ -1509,4 +1526,482 @@ input {
 .save-dot.is-saved { background: #5cb85c; opacity: 0.9; }
 @keyframes save-pulse {
   50% { opacity: 0.35; }
+}
+
+/* =====================================================================
+   Polish pass.
+
+   The port kept the measured metrics of the macOS build: one border
+   colour, a 1.4 px track, a 10 px checkbox and no motion. It reads flat and
+   mechanical on Windows at 100% scaling, where the tracks and tick boxes
+   land on half pixels. This block only touches surface, depth, motion and
+   control affordances; row heights, rail widths and the plot remain as
+   measured, so nothing reflows.
+   ===================================================================== */
+
+html,
+body,
+#root {
+  background: var(--card);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* Scrollbars: the default Windows chrome is a bright slab against the rail. */
+* {
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------- chrome */
+
+.topbar {
+  background: linear-gradient(180deg, #24252a, #1e1f22);
+  border-bottom-color: var(--border-subtle);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+.topbar-brand {
+  letter-spacing: 0.02em;
+}
+.module-bar {
+  background: linear-gradient(180deg, #24252a, #202124);
+  border-bottom-color: var(--border-subtle);
+}
+.module-bar-title {
+  color: var(--secondary-text);
+  letter-spacing: 0.04em;
+}
+.module-tab {
+  border-radius: var(--radius-sm);
+  color: var(--dim);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.module-tab:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+.module-tab.is-active {
+  background: var(--accent-soft);
+  color: #f1c489;
+}
+.rail {
+  background: linear-gradient(180deg, #232428 0%, #1f2023 100%);
+}
+.rail.left {
+  border-right-color: var(--border-subtle);
+}
+.rail.right {
+  border-left-color: var(--border-subtle);
+}
+.rail-header {
+  color: var(--secondary-text);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+.hairline {
+  background: var(--border-subtle);
+}
+
+/* ----------------------------------------------------------- sections */
+
+.section-header {
+  transition: background var(--dur) var(--ease);
+}
+.section-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.section-header .title {
+  color: var(--secondary-text);
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+.section-header .trailing {
+  color: var(--dim);
+}
+.disclosure {
+  color: var(--dim);
+  transition: color var(--dur) var(--ease);
+}
+.section-header:hover .disclosure {
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- rows */
+
+.row {
+  border-radius: var(--radius-sm);
+  transition: background var(--dur) var(--ease);
+}
+.row:not(.disabled):not(.toggle-row):hover {
+  background: var(--row-hover);
+}
+.row-label {
+  color: var(--secondary-text);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+.row-label .sub {
+  color: var(--dim);
+  font-weight: 400;
+}
+.row.disabled .row-label,
+.row.disabled .row-label .sub {
+  color: var(--dim);
+}
+
+/* ------------------------------------------------------------- slider */
+
+.scrub .track {
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+.scrub .blocked {
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.10);
+}
+.scrub .zero {
+  width: 1px;
+  height: 7px;
+  margin-top: -3.5px;
+  background: rgba(255, 255, 255, 0.34);
+}
+.scrub .usable {
+  top: 3px;
+  height: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(227, 169, 97, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(227, 169, 97, 0.32);
+}
+.scrub .knob {
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.28);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.scrub:hover:not(.disabled) .knob {
+  transform: scale(1.12);
+}
+.scrub:active:not(.disabled) .knob {
+  transform: scale(1.24);
+  box-shadow: 0 0 0 4px rgba(227, 169, 97, 0.18), 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.value-field {
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.055);
+  font-weight: 500;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.value-field:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+.value-field:focus {
+  outline: none;
+  background: var(--field);
+  border-color: rgba(227, 169, 97, 0.55);
+  box-shadow: 0 0 0 2px rgba(227, 169, 97, 0.14);
+}
+
+/* ------------------------------------------------------------- switch */
+
+/* The port drew an On/Off control as a 10 px tick box, which reads as an
+   unset checkbox. Same element, unset/ set states only. */
+.checkbox {
+  width: 26px;
+  height: 15px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.10);
+  position: relative;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.checkbox::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e9e6df;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  transition: transform 0.16s var(--ease), background 0.16s var(--ease);
+}
+.checkbox:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+.checkbox.on {
+  background: var(--accent);
+  border-color: transparent;
+}
+.checkbox.on::after {
+  transform: translateX(11px);
+  background: #1d1c19;
+}
+
+/* ------------------------------------------------------------ buttons */
+
+.btn {
+  height: 26px;
+  padding: 0 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.05));
+  box-shadow: var(--shadow-1);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform 0.08s var(--ease);
+}
+.btn:hover:not(:disabled) {
+  filter: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn.primary {
+  background: linear-gradient(180deg, #eeb670, #de9f4f);
+  color: #1c1509;
+  border-color: rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.icon-btn {
+  border-radius: 5px;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ----------------------------------------------------- menus and pills */
+
+.menu {
+  background: #26272b;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  box-shadow: var(--shadow-3);
+  padding: 6px;
+}
+.menu-item {
+  border-radius: 6px;
+  transition: background var(--dur) var(--ease);
+}
+.menu-item:hover:not([data-disabled]),
+.menu-item[data-highlighted] {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+.menu-sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.pill-menu {
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.07);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.pill-menu:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.chip {
+  border-radius: 7px;
+  border-color: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.chip.selected {
+  background: var(--accent-soft);
+  border-color: rgba(227, 169, 97, 0.55);
+  color: #f3c88d;
+}
+.segmented button {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--dim);
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.segmented button:hover:not(.on):not(:disabled) {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.segmented button.on {
+  border-color: rgba(227, 169, 97, 0.6);
+  background: var(--accent-soft);
+  color: #f3c88d;
+}
+
+/* ------------------------------------------------------------- stocks */
+
+.stock-row {
+  border-radius: 5px;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.stock-row:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+.stock-row.selected {
+  background: var(--accent-soft);
+  color: #f5cd95;
+}
+.stock-group {
+  color: var(--dim);
+  letter-spacing: 0.06em;
+}
+.stock-search {
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.stock-search:focus-within {
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px rgba(227, 169, 97, 0.5);
+}
+
+/* ------------------------------------------------- canvas and empty state */
+
+.canvas-wrap {
+  background: radial-gradient(130% 110% at 50% 0%, #232427 0%, #191a1c 55%, #141517 100%);
+}
+.navigator {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: radial-gradient(120% 120% at 50% 0%, #161719, #0d0e10);
+  overflow: hidden;
+}
+.navigator-fit {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.5);
+}
+.canvas-empty {
+  gap: calc(18px * var(--ui-scale));
+}
+.canvas-empty > span {
+  color: var(--dim);
+  font-size: var(--fs-body);
+}
+.canvas-empty-actions {
+  gap: calc(12px * var(--ui-scale));
+}
+
+/* ------------------------------------------------------------- focus */
+
+:focus-visible {
+  outline: 2px solid rgba(227, 169, 97, 0.55);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Empty canvas: title above the actions so the bare viewport reads as a
+   deliberate start screen instead of a blank grey field. */
+.canvas-empty-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6px * var(--ui-scale));
+  margin-bottom: calc(4px * var(--ui-scale));
+}
+.canvas-empty-title {
+  color: var(--text);
+  font-size: var(--fs-action);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.canvas-empty-hint {
+  max-width: calc(360px * var(--ui-scale));
+  color: var(--dim);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* Plots read as recessed panels. The latitude figure draws nothing until a
+   reply arrives, and an empty <svg> on flat black looked like a hole in the
+   rail, so the recessed grid lives on the frame instead of the drawing. */
+.plot,
+.latitude-plot-wrap {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--plot);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.plot {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 42px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 34px);
+}
+.latitude-plot-wrap {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 42px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 34px);
+}
+
+/* Dialogs sit on the dark card scale: a slightly blurred scrim so the picture
+   behind does not compete with the settings, and a rule under the title. */
+.dialog-overlay {
+  background: rgba(5, 5, 6, 0.62);
+  backdrop-filter: blur(2px);
+}
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+}
+.dialog h2 {
+  padding-bottom: calc(12px * var(--ui-scale));
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.tabs button.on {
+  background: var(--accent-soft);
+  color: #f3c88d;
+}
+.settings-group h3 {
+  letter-spacing: 0.02em;
 }

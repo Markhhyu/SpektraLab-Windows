@@ -897,7 +897,7 @@ static void fit_long_edge(uint32_t w, uint32_t h, uint32_t long_edge, uint32_t& 
 static void shrink_rgb(std::vector<float>& rgb, uint32_t& w, uint32_t& h, uint32_t long_edge) {
     uint32_t dw, dh;
     fit_long_edge(w, h, long_edge, dw, dh);
-    if (dw == w && dh == h) return;
+    if (dw >= w && dh >= h) return;  // never pay to upscale an embedded preview
     std::vector<float> out;
     resize_area(rgb.data(), w, h, 3, dw, dh, out);
     rgb.swap(out);
@@ -924,7 +924,37 @@ bool thumbnail(const fs::path& path, uint32_t long_edge, Rgba8& out, std::string
         const int orientation = flip_to_orientation(raw->imgdata.sizes.flip);
         std::vector<float> rgb;
         uint32_t w = 0, h = 0;
-        if (raw->unpack_thumb() == LIBRAW_SUCCESS) {
+        // Pick the cheapest embedded preview that still covers the request:
+        // these bodies store a screen-size JPEG next to a full-resolution one,
+        // and decoding the full one with stb costs ~200 ms for a 320 px
+        // thumbnail (measured on an A7M4 ARW: 3 previews, 1616x1080 / 160x120 /
+        // 7008x4672, where the old code always unpacked the 7008 wide one).
+        // Accept up to a quarter short of the requested edge rather than paying
+        // for a 4x overshoot, and never upscale below.
+        int pick = 0;
+        const auto& list = raw->imgdata.thumbs_list;
+        if (list.thumbcount > 0) {
+            const int need = (int(long_edge) * 3) / 4;
+            int best = -1;
+            for (int i = 0; i < list.thumbcount; ++i) {
+                const int m = std::max<int>(list.thumblist[i].twidth, list.thumblist[i].theight);
+                if (m >= need &&
+                    (best < 0 || m < std::max<int>(list.thumblist[best].twidth, list.thumblist[best].theight))) {
+                    best = i;
+                }
+            }
+            if (best < 0) {
+                best = 0;
+                for (int i = 1; i < list.thumbcount; ++i) {
+                    if (std::max<int>(list.thumblist[i].twidth, list.thumblist[i].theight) >
+                        std::max<int>(list.thumblist[best].twidth, list.thumblist[best].theight)) {
+                        best = i;
+                    }
+                }
+            }
+            pick = best;
+        }
+        if (raw->unpack_thumb_ex(pick) == LIBRAW_SUCCESS) {
             const auto& th = raw->imgdata.thumbnail;
             if (th.tformat == LIBRAW_THUMBNAIL_JPEG && th.thumb) {
                 int iw, ih, comp;

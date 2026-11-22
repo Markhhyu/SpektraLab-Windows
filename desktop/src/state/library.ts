@@ -45,6 +45,7 @@ import type { ImageInfo, ProbeResult } from '@shared/protocol';
 import type { Transport } from '../host/transport';
 import { POOL_MAX_WORKERS, poolAvailable, poolEnsure, poolShutdown, poolTransport } from '../host/pool';
 import { openCollection } from './session';
+import { thumbs } from './thumbs';
 
 /** Long edge of the preview thumbnails the grid shows. */
 const THUMB_EDGE = 512;
@@ -91,6 +92,10 @@ const initial = (): LibraryState => ({
 });
 
 export const libraryStore = createStore<LibraryState>(() => initial());
+
+// Filmstrip thumbnails prefer the JPEG the catalog cached on import; the host
+// is only asked for frames the library has never seen.
+thumbs.setFallback((path) => libraryStore.getState().thumbs[path] ?? null);
 
 export function useLibrary<T>(selector: (s: LibraryState) => T): T {
   return useStore(libraryStore, selector);

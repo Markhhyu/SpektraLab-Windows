@@ -48,7 +48,7 @@
     "category": "Photography",
     "shortDescription": "Film and print emulation",
     "longDescription": "SpektraLab develops a photograph as film and prints it on paper, with spectral film and paper profiles.",
-    "homepage": "https://github.com/spektrafilm",
+    "homepage": "https://github.com/Markhhyu/SpektraLab-Windows",
     "license": "GPL-3.0-or-later",
     "icon": [
       "icons/32x32.png",

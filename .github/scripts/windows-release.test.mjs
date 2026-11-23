@@ -1,9 +1,33 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { test } from 'node:test';
 import { checkExistingRelease, releaseInfo } from './windows-release.mjs';
+import { collectWindowsInstaller } from '../../desktop/scripts/windows-package.mjs';
+
+test('collects only the current NSIS installer and writes a checksum naming the public file', () => {
+  const root = mkdtempSync(join(tmpdir(), 'spk-installer-'));
+  try {
+    const bundle = join(root, 'bundle'), output = join(root, 'release');
+    mkdirSync(join(bundle, 'nsis'), { recursive: true });
+    mkdirSync(output);
+    const config = { productName: 'SpektraLab', version: '1.9.5' };
+    writeFileSync(join(bundle, 'nsis/SpektraLab_1.9.4_x64-setup.exe'), 'older');
+    assert.throws(() => collectWindowsInstaller(bundle, output, config), { code: 'ENOENT' });
+    const bytes = Buffer.from([0x4d, 0x5a, 0xff, 0x00]);
+    writeFileSync(join(bundle, 'nsis/SpektraLab_1.9.5_x64-setup.exe'), bytes);
+    const name = collectWindowsInstaller(bundle, output, config);
+    assert.equal(name, 'SpektraLab-Windows-Markhhyu-1.9.5-x64-setup.exe');
+    assert.deepEqual(readdirSync(output).sort(), [name, name + '.sha256']);
+    assert.deepEqual(readFileSync(join(output, name)), bytes);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    assert.equal(readFileSync(join(output, name + '.sha256'), 'utf8'), digest + '  ' + name + '\n');
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
 
 test('independent Windows tag and short title require all application versions to agree', () => {
   const root = mkdtempSync(join(tmpdir(), 'spk-release-'));

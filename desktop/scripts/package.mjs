@@ -36,6 +36,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectWindowsInstaller } from './windows-package.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = resolve(here, '..');
@@ -184,21 +185,25 @@ function collect() {
   mkdirSync(release, { recursive: true });
   // A cross build lands under target/<triple>/; a native one under target/release/.
   const targetDir = env.CARGO_TARGET_DIR ? resolve(env.CARGO_TARGET_DIR) : join(tauriDir, 'target');
-  const roots = which === 'linux' ? [join(targetDir, 'release', 'bundle')] : [join(targetDir, t.triple, 'release', 'bundle')];
+  if (which === 'windows') {
+    const bundle = join(targetDir, t.triple, 'release', 'bundle');
+    const config = JSON.parse(readFileSync(join(tauriDir, 'tauri.conf.json'), 'utf8'));
+    const installer = collectWindowsInstaller(bundle, release, config);
+    console.log(`package: wrote ${join(release, installer)} and its SHA-256 checksum`);
+    return;
+  }
+  const root = join(targetDir, 'release', 'bundle');
   const found = [];
-  for (const root of roots) {
-    if (!existsSync(root)) continue;
-    for (const kind of readdirSync(root)) {
-      for (const f of readdirSync(join(root, kind))) {
-        const p = join(root, kind, f);
-        if (statSync(p).isFile() && /\.(deb|AppImage|exe|rpm)$/.test(f)) {
-          cpSync(p, join(release, f));
-          found.push(`${join('release', t.out, f)} (${(statSync(p).size / 1e6).toFixed(1)} MB)`);
-        }
+  for (const kind of readdirSync(root)) {
+    for (const f of readdirSync(join(root, kind))) {
+      const p = join(root, kind, f);
+      if (statSync(p).isFile() && /\.(deb|AppImage|rpm)$/.test(f)) {
+        cpSync(p, join(release, f));
+        found.push(`${join('release', t.out, f)} (${(statSync(p).size / 1e6).toFixed(1)} MB)`);
       }
     }
   }
-  if (!found.length) die(`the build finished but no installer was found under ${roots.join(', ')}`);
+  if (!found.length) die(`the build finished but no installer was found under ${root}`);
   console.log(`package: host from ${t.hostDir}`);
   console.log('package: wrote\n  ' + found.join('\n  '));
 }

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { windowsPackageStem } from '../../desktop/scripts/windows-package.mjs';
 
 export function releaseInfo(root) {
   const json = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
@@ -46,9 +47,10 @@ function main() {
   if (option < 0 || !process.argv[option + 1]) throw Error('--artifacts is required');
   const artifacts = resolve(process.argv[option + 1]);
   const files = readdirSync(artifacts);
-  const installers = files.filter((file) => file.endsWith('-setup.exe'));
-  const portables = files.filter((file) => file === 'SpektraLab-' + version + '-windows-x64-portable.zip');
-  if (installers.length !== 1 || portables.length !== 1) throw Error('Expected exactly one installer and the versioned portable ZIP');
+  const stem = windowsPackageStem(version);
+  const installer = stem + '-x64-setup.exe';
+  const portables = files.filter((file) => file === stem + '-x64-portable.zip');
+  if (!files.includes(installer) || portables.length !== 1) throw Error('Missing the versioned Windows installer or portable ZIP');
   const portableName = portables[0].slice(0, -4);
   const portableManifest = JSON.parse(execFileSync('unzip', ['-p', join(artifacts, portables[0]), portableName + '/BUILD-MANIFEST.json'], { encoding: 'utf8' }));
   if (portableManifest.commit !== commit || portableManifest.version !== version) throw Error('Portable ZIP belongs to another build');
@@ -62,18 +64,17 @@ function main() {
   const out = join(root, 'build/windows-release', version);
   if (existsSync(out)) throw Error('Release staging already exists');
   mkdirSync(out, { recursive: true });
-  const installer = 'SpektraLab-' + version + '-windows-x64-setup.exe';
-  cpSync(join(artifacts, installers[0]), join(out, installer));
+  cpSync(join(artifacts, installer), join(out, installer));
   cpSync(join(artifacts, portables[0]), join(out, portables[0]));
-  const source = 'SpektraLab-' + version + '-source.zip';
+  const source = stem + '-source.zip';
   execFileSync('git', ['archive', '--format=zip', '--prefix=SpektraLab/', '--output=' + join(out, source), commit], { cwd: root });
   const hashes = new Map();
   for (const name of [installer, portables[0], source]) hashes.set(name, createHash('sha256').update(readFileSync(join(out, name))).digest('hex'));
   const run = 'https://github.com/' + repository + '/actions/runs/' + process.env.GITHUB_RUN_ID;
-  const manifest = 'SpektraLab-' + version + '-BUILD.json';
+  const manifest = stem + '-BUILD.json';
   writeFileSync(join(out, manifest), JSON.stringify({ version, tag, title, commit, run, assets: Object.fromEntries(hashes) }, null, 2) + '\n');
   hashes.set(manifest, createHash('sha256').update(readFileSync(join(out, manifest))).digest('hex'));
-  const sums = 'SpektraLab-' + version + '-SHA256SUMS.txt';
+  const sums = stem + '-SHA256SUMS.txt';
   writeFileSync(join(out, sums), [...hashes].map(([name, hash]) => hash + '  ' + name).join('\n') + '\n');
   hashes.set(sums, createHash('sha256').update(readFileSync(join(out, sums))).digest('hex'));
   const notes = join(out, 'notes.md');

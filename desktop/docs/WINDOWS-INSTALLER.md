@@ -1,6 +1,6 @@
 # Building the Windows installer on a Mac
 
-The NSIS installer (`SpektraLab_<version>_x64-setup.exe`) cross-builds on macOS.
+The NSIS installer (`SpektraLab-Windows-Markhhyu-<version>-x64-setup.exe`) cross-builds on macOS.
 CI still builds it natively on `windows-latest` (MSVC) and installs it there;
 this document covers the Mac path.
 
@@ -27,7 +27,9 @@ node scripts/package.mjs windows --host-dir <dir with spektralab-host.exe + engi
 # with no host argument it reads ../build/host-win-x64 (engine/build-windows-cross.sh output)
 ```
 
-The output is `desktop/release/windows/SpektraLab_<version>_x64-setup.exe`.
+The output is `desktop/release/windows/SpektraLab-Windows-Markhhyu-<version>-x64-setup.exe`
+with a matching `.exe.sha256` file. The public filename identifies the maintainer.
+The installed product and its application identifier stay the same across upgrades.
 The script refuses to run without `spektralab-host.exe` and its `engine/`
 resources. It also refuses if any tool is missing (`makensis`,
 `x86_64-w64-mingw32-gcc`, `x86_64-w64-mingw32-windres`, or the rustup target)
@@ -77,7 +79,7 @@ larger).
 ## Checking the result without Windows
 
 ```bash
-I=release/windows/SpektraLab_*_x64-setup.exe
+I=release/windows/SpektraLab-Windows-Markhhyu-*-x64-setup.exe
 file $I                                  # PE32 ... Nullsoft Installer self-extracting archive
 7zz l $I                                 # Type = Nsis; spektralab.exe, spektralab-host.exe,
                                          # WebView2Loader.dll, host/engine/**, agents/node.exe

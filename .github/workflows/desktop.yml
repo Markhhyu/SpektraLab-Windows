@@ -436,8 +436,10 @@ jobs:
       - name: Install silently and check the installed app
         shell: pwsh
         run: |
-          $setup = Get-ChildItem desktop/release/windows/*-setup.exe | Select-Object -First 1
-          if (-not $setup) { throw "no installer in desktop/release/windows" }
+          $version = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
+          $setup = Get-Item -LiteralPath "desktop/release/windows/SpektraLab-Windows-Markhhyu-$version-x64-setup.exe" -ErrorAction Stop
+          $hash = (Get-FileHash -LiteralPath $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ((Get-Content -LiteralPath ($setup.FullName + '.sha256') -Raw).TrimEnd() -cne "$hash  $($setup.Name)") { throw "installer checksum mismatch" }
           "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
           $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru -WindowStyle Hidden
           if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode)" }
@@ -456,7 +458,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "installed host failed hello" }
           # Stable Windows releases ship the installed and verified NSIS binary.
           # The upstream portable bundle has a separate prerelease contract.
-          $version = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
           if ($version -match '^\d+\.\d+\.\d+$') { return }
           node .github/scripts/windows-portable.mjs --installed $app.DirectoryName
           if ($LASTEXITCODE -ne 0) { throw "portable staging failed" }
@@ -471,6 +472,7 @@ jobs:
           name: spektralab-windows-x64
           path: |
             desktop/release/windows/*-setup.exe
+            desktop/release/windows/*-setup.exe.sha256
             desktop/release/windows/*-portable.zip
           if-no-files-found: error
           retention-days: 14

@@ -1,65 +1,44 @@
-# Releases
+# Windows releases
 
-This repository ships Windows installers only. Release notes are written in
-**both Chinese and English** and list what changed in that build.
+Markhhyu maintains the stable Windows line in this repository. Stable tags use
+`v<major>.<minor>.<patch>`. The earliest tags (`v1.3.4-beta.3-win.1` and
+`-win.2`) remain available in the release history. Small changes can land on
+`main` between releases.
 
-**Cadence.** Small changes land as commits on `main`; do not cut a Release for
-each one. Build the installer and publish a Release when a batch of work is
-worth shipping, keeping the version bump and the asset name in step.
+## Publish a stable installer
 
-- Tag scheme: `v<major>.<minor>.<patch>` on this repository's own semantic
-  version line (the first release is `v1.0.0`). Builds published before the
-  switch used `v<upstream version>-win.<n>` (`v1.3.4-beta.3-win.1`, `-win.2`);
-  they stay online as history but are superseded by the new line.
-- Assets: the NSIS installer and a `.sha256` file next to it.
-
-## Release process (for the next update)
-
-1. **Build the host** (static runtime, so the shipped binary needs only system
-   DLLs):
-
-   ```powershell
-   cmake --build build/win-host -j
-   cmake --build build/win-tag -j
-   ctest --test-dir build/win-tag --output-on-failure
-   ```
-
-   Then run `engine/tests/parity_upstream.py` and the desktop suite
-   (`cd desktop && npx vitest run`) — a release does not go out on a red test.
-
-2. **Stage the bundle.** Copy `build/win-host/host/spektralab-host.exe` to
-   `desktop/src-tauri/binaries/spektralab-host-x86_64-pc-windows-gnu.exe`, copy
-   `build/win-host/resources` to `desktop/src-tauri/host-staging/engine`, then
-   `cd desktop && npm run build:web`.
-
-3. **Build the installer** (production: per-machine NSIS; a per-user
-   `tauri.test.json` exists only for install verification):
+1. Update the app version in `desktop/package.json`, both root version entries in
+   `desktop/package-lock.json`, `desktop/src-tauri/tauri.conf.json`, and the app
+   entries in the Tauri `Cargo.toml` and `Cargo.lock`. Add a Chinese and English entry
+   under **History** with a link to the full comparison.
+2. Run the desktop and engine checks on the release commit on `Windows_Linux`, including the
+   reference comparisons for changes to film simulation. The Windows package
+   job in [desktop.yml](.github/workflows/desktop.yml) builds the installer,
+   verifies its checksum, installs it silently and starts the installed host.
+   To package a staged host locally, run `npm ci` and `npm run package:windows`
+   in `desktop/`. See the [installer guide](desktop/docs/WINDOWS-INSTALLER.md).
+3. Download the `spektralab-windows-x64` Actions artifact from that commit, or
+   use the verified files in `desktop/release/windows/`. Publish the installer
+   and its matching checksum together. Both names include the maintainer so
+   files from the fork and upstream can be identified in a Downloads folder.
+4. From the repository root in Bash, set `version` to the app version and
+   `dist` to the directory containing the verified files. With a clean checkout
+   of the tested commit, verify the checksum and publish the bilingual notes:
 
    ```bash
-   npx tauri build --config src-tauri/tauri.bundle.json --bundles nsis
+   version=$(node -p "require('./desktop/package.json').version")
+   dist=desktop/release/windows
+   name="SpektraLab-Windows-Markhhyu-${version}-x64-setup.exe"
+   (cd "$dist" && sha256sum --check "$name.sha256") || exit 1
+   notes=$(mktemp)
+   python scripts/release_notes.py "$version" > "$notes" || exit 1
+   gh release create "v$version" --target "$(git rev-parse HEAD)" \
+       --title "SpektraLab Windows (Markhhyu) v$version" --notes-file "$notes" \
+       "$dist/$name" "$dist/$name.sha256"
    ```
 
-4. **Verify the installed layout.** Silent-install the per-user test build to a
-   scratch directory and check the host from it: `hello` lists `warm_up`, no
-   `unsupported_features`, `params_schema` contains the new fields, then open a
-   RAW and render one live frame.
-
-5. **Publish.** Add the new entry to `## History` below (Chinese and English
-   sections, one sentence per bullet, `Full Changelog` link), then compute the
-   checksum and attach both files:
-
-   ```bash
-   sha256sum SpektraLab_<version>_x64-setup.exe > SpektraLab_<version>_x64-setup.exe.sha256
-   python scripts/release_notes.py <version> > notes.md
-   gh release create v<version> \
-       --title "v<version> — <short title>" \
-       --notes-file notes.md \
-       <installer> <installer>.sha256
-   ```
-
-   The history entry *is* the release body: `scripts/release_notes.py` slices it
-   out of `RELEASES.md` and lowers the heading level for the standalone page, so
-   no per-release notes file is committed and the two cannot drift apart.
+The v1.9.5 release also keeps the earlier `SpektraLab_1.9.5_x64-setup.exe`
+link. Both installer names on that release contain the same bytes.
 
 ## History
 

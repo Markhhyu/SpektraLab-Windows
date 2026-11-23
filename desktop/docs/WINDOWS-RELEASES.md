@@ -1,4 +1,6 @@
-# Windows releases
+# Upstream Windows prerelease workflow
+
+For stable releases of Markhhyu’s Windows edition, use the [repository release guide](../../RELEASES.md).
 
 Windows has an independent prerelease line. For example:
 

@@ -7,7 +7,7 @@
   "author": {
     "name": "SpektraLab contributors"
   },
-  "homepage": "https://github.com/spektrafilm",
+  "homepage": "https://github.com/Markhhyu/SpektraLab-Windows",
   "private": true,
   "scripts": {
     "dev:web": "vite",

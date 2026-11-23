@@ -20,6 +20,12 @@ describe('Windows release identification', () => {
     expect(selectWindowsRelease(candidates.slice(2), '1.2.0-beta.2')).toMatchObject({ kind: 'available', version: '1.2.0-beta.10' });
     expect(selectWindowsRelease([...candidates.slice(2), windows('1.2.0')], '1.2.0-beta.10')).toMatchObject({ kind: 'available', version: '1.2.0' });
   });
+  it('recognizes the fork-branded installer alongside its checksum', () => {
+    const name = 'SpektraLab-Windows-Markhhyu-1.9.5-x64-setup.exe';
+    const next = release('v1.9.5', name);
+    next.assets.unshift(release('v1.9.5', name + '.sha256').assets[0]!);
+    expect(selectWindowsRelease([next], '1.9.4')).toMatchObject({ kind: 'available', version: '1.9.5', asset: name });
+  });
   it('keeps prereleases out of stable clients and rejects invalid version syntax', () => {
     expect(selectWindowsRelease([windows('1.1.0-beta.1')], '1.0.0').kind).toBe('unavailable');
     expect(selectWindowsRelease([release('v1.0.0.0')], '1.0.0').kind).toBe('unavailable');

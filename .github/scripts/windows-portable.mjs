@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { releaseInfo } from './windows-release.mjs';
+import { windowsPackageStem } from '../../desktop/scripts/windows-package.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const installed = process.argv.indexOf('--installed');
@@ -13,7 +14,7 @@ const source = resolve(process.argv[installed + 1]);
 const { version } = releaseInfo(repo);
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
 if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== commit) throw Error('Checkout does not match GITHUB_SHA');
-const name = 'SpektraLab-' + version + '-windows-x64-portable';
+const name = windowsPackageStem(version) + '-x64-portable';
 const target = join(repo, 'desktop/release/windows', name);
 if (existsSync(target)) throw Error('Portable destination already exists');
 const required = ['spektralab.exe', 'spektralab-host.exe', 'host/engine/spektrafilm_constants.bin',
@@ -44,7 +45,7 @@ writeFileSync(join(target, 'README.txt'), [
   'Portable means no installation; settings, caches and logs still use your Windows profile.',
   'Source commit: ' + commit,
   'Corresponding project source, dependency pins and build scripts accompany this release.',
-  'https://github.com/' + (process.env.GITHUB_REPOSITORY || 'JamesQiu2005/SpektraLab'),
+  'https://github.com/' + (process.env.GITHUB_REPOSITORY || 'Markhhyu/SpektraLab-Windows'),
   ''
 ].join('\r\n'));
 const files = [];

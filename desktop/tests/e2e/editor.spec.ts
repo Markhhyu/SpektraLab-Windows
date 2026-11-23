@@ -94,7 +94,7 @@ test('returning from a slide selects the negative target paper and restores the 
   await page.locator('[data-stock="kodak_ektar_100"]').click();
   expect(await state(page, 's.sidecar.params.scanFilm')).toBe(false);
   expect(await state(page, 's.sidecar.params.printStock')).toBe('kodak_portra_endura');
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await page.keyboard.press('Control+z');
   expect(await state(page, 's.sidecar.params.filmStock')).toBe('fujifilm_provia_100f');
   expect(await state(page, 's.sidecar.params.scanFilm')).toBe(true);

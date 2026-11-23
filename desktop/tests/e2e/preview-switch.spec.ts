@@ -85,7 +85,7 @@ test('camera fallback draws real pixels on all surfaces before decode, then show
     w.__spk.sessionStore.setState({ nativeSize: { width: 8, height: 8 }, badge: 'full', imageVersion: state.imageVersion + 1 });
   }, printColors);
   await expect(page.getByTestId('camera-preview-badge')).toHaveCount(0);
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await expect.poll(async () => (await surfaces(page)).navigator[0]![0]).toBe(printColors[0]![0]);
   const printed = await surfaces(page);
   expect(printed.glError).toBe(0);

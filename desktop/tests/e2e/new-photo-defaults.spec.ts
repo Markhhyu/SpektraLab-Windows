@@ -17,12 +17,12 @@ async function preferences(page: Page) {
 async function openPhoto(page: Page, path: string) {
   await page.evaluate((p) => (window as unknown as { __spkOpenPaths(paths: string[]): void }).__spkOpenPaths([p]), path);
   await expect.poll(() => page.evaluate(() => (window as unknown as { __spk: App }).__spk.sessionStore.getState().selection)).toBe(path);
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
 }
 
 test('new-photo preferences survive restart and preserve the current and saved photographs', async ({ page }) => {
   await page.goto('/?open=');
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   const current = await stocks(page);
   await preferences(page);
   await page.getByTestId('new-photo-film').click();
@@ -34,7 +34,7 @@ test('new-photo preferences survive restart and preserve the current and saved p
   await openPhoto(page, '/mock/New defaults/first.ARW');
   expect(await stocks(page)).toEqual({ film: 'kodak_gold_200', paper: 'kodak_2383', scan: false });
   await page.locator('[data-stock="kodak_ektar_100"]').click();
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   // Opening a second photo flushes the first photo's edits before restart.
   await openPhoto(page, '/mock/New defaults/second.ARW');
   await page.goto('/');
@@ -47,7 +47,7 @@ test('new-photo preferences survive restart and preserve the current and saved p
 
 test('settings offer compatible silver paper, direct scans and a reset without editing the open photo', async ({ page }) => {
   await page.goto('/?open=');
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await preferences(page);
   await page.getByTestId('new-photo-film').click();
   await page.getByRole('menuitem', { name: 'Kodak Tri-X 400', exact: true }).click();

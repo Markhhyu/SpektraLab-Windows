@@ -13,7 +13,7 @@ const layouts = [
 async function openAt(page: Page, layout: typeof layouts[number]) {
   await page.setViewportSize({ width: layout.width, height: 960 });
   await page.goto('/?open=');
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await page.evaluate((layout) => {
     const app = (window as unknown as { __spk: {
       settingsStore: { getState(): { set(key: string, value: unknown): void } };

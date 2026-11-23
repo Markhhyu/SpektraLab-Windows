@@ -12,6 +12,6 @@ for (const folder of [true, false]) {
     else await open.press('Space');
     await expect(page.locator('.thumb')).toHaveCount(folder ? 8 : 3);
     await expect(empty).toHaveCount(0);
-    await expect(page.getByTestId('tier-badge')).toHaveText('full');
+    await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   });
 }

@@ -1,0 +1,98 @@
+name: Publish verified Windows installer
+on:
+  push:
+    branches: ['release/publish-v1.9.5']
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency: publish-spektralab-v1.9.5
+
+jobs:
+  publish:
+    if: github.repository == 'Markhhyu/SpektraLab-Windows'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: 1.9.5
+      SOURCE: f06b22ec475f5e5d5744b8d9ede11b4e6d3a1d2c
+      DESKTOP_RUN: 45133247815
+      PARITY_RUN: 45127890907
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the release commit, tests and artifact provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          test "$(git rev-parse HEAD)" = "$SOURCE"
+          test "$(gh api "repos/$repo/git/ref/heads/main" --jq .object.sha)" = "$SOURCE"
+          test "$(jq -r .version desktop/package.json)" = "$VERSION"
+          run="$(gh api "repos/$repo/actions/runs/$DESKTOP_RUN")"
+          jq -e --arg sha "$SOURCE" --arg repo "$repo" '
+            .head_sha == $sha and .head_repository.full_name == $repo and
+            .path == ".github/workflows/desktop.yml" and .event == "push" and
+            .head_branch == "Windows_Linux"' <<< "$run"
+          jobs="$(gh api "repos/$repo/actions/runs/$DESKTOP_RUN/jobs?per_page=100")"
+          for job in "Engine + host (Linux, lavapipe)" "Engine + host (Windows x64, cross-built)" \
+            "Engine (Windows x64, MSVC, CTest)" "Frontend checks" "Package (Windows NSIS installer)"; do
+            jq -e --arg job "$job" '[.jobs[] | select(.name == $job) | .conclusion] == ["success"]' <<< "$jobs"
+          done
+          ref_run="$(gh api "repos/$repo/actions/runs/$PARITY_RUN")"
+          jq -e --arg repo "$repo" '.conclusion == "success" and .head_repository.full_name == $repo and .path == ".github/workflows/parity.yml"' <<< "$ref_run"
+          # Frontend harness updates can follow the parity run. Verify that
+          # its engine, inputs, CMake files and parity workflow are identical.
+          parity_sha="$(jq -r .head_sha <<< "$ref_run")"
+          git merge-base --is-ancestor "$parity_sha" "$SOURCE"
+          git diff --exit-code "$parity_sha" "$SOURCE" -- engine CMakeLists.txt .github/workflows/parity.yml
+          artifact="$(gh api "repos/$repo/actions/runs/$DESKTOP_RUN/artifacts?name=spektralab-windows-x64")"
+          jq -e --arg sha "$SOURCE" '[.artifacts[] | select(.expired == false and .workflow_run.head_sha == $sha)] | length == 1' <<< "$artifact"
+          id="$(jq -r '.artifacts[0].id' <<< "$artifact")"
+          digest="$(jq -r '.artifacts[0].digest' <<< "$artifact")"
+          gh api "repos/$repo/actions/artifacts/$id/zip" > "$RUNNER_TEMP/installer.zip"
+          echo "${digest#sha256:}  $RUNNER_TEMP/installer.zip" | sha256sum --check --status
+          mkdir dist
+          installer="SpektraLab_${VERSION}_x64-setup.exe"
+          unzip -j "$RUNNER_TEMP/installer.zip" "$installer" -d dist
+          file "dist/$installer" | grep -q 'PE32'
+          (cd dist && sha256sum "$installer" > "$installer.sha256" && sha256sum --check "$installer.sha256")
+          python scripts/release_notes.py "$VERSION" > "$RUNNER_TEMP/notes.md"
+
+      - name: Publish the installer and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          installer="SpektraLab_${VERSION}_x64-setup.exe"
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            test "$(git rev-parse "$tag^{commit}")" = "$SOURCE"
+          fi
+          releases="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100")"
+          id="$(jq -r --arg tag "$tag" '.[] | select(.tag_name == $tag) | .id' <<< "$releases")"
+          if [[ -z "$id" ]]; then
+            gh release create "$tag" --draft --target "$SOURCE" \
+              --title "$tag — 胶片曝光、高光与细节校准 / Film exposure, highlights and detail" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+            id="$(gh release view "$tag" --json databaseId --jq .databaseId)"
+          fi
+          release="$(gh api "repos/$GITHUB_REPOSITORY/releases/$id")"
+          jq -e --arg sha "$SOURCE" --arg n "$installer" \
+            '.draft and .target_commitish == $sha and all(.assets[]; .name == $n or .name == ($n + ".sha256"))' <<< "$release"
+          for asset in "$installer" "$installer.sha256"; do
+            digest="sha256:$(sha256sum "dist/$asset" | cut -d ' ' -f1)"
+            if ! jq -e --arg n "$asset" 'any(.assets[]; .name == $n)' <<< "$release" >/dev/null; then
+              gh release upload "$tag" "dist/$asset"
+            fi
+            release="$(gh api "repos/$GITHUB_REPOSITORY/releases/$id")"
+            jq -e --arg n "$asset" --arg d "$digest" \
+              '.draft and any(.assets[]; .name == $n and .digest == $d and .state == "uploaded")' <<< "$release"
+          done
+          jq -e '.assets | length == 2' <<< "$release"
+          gh release edit "$tag" --draft=false --latest

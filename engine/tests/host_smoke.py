@@ -337,13 +337,9 @@ def extras(host, sid, path, tmp, label, raw, probe):
     check(h["ok"] and h["result"].get("valid") is False, f"{label}: overscan_geometry (disabled -> invalid)")
     h, _ = host.call("progress", {"session": sid})
     check(h["ok"] and "pct" in h["result"], f"{label}: progress", h.get("error"))
-    # Mac's still-hidden contrast-mask experiment stays gated. Public migrated
-    # features must be accepted and return a usable preview before reset.
-    for field in ("contrast_mask_active",):
-        h, _ = host.call("set_params", {"session": sid, "delta": {field: True}})
-        check(not h["ok"] and h["error"]["code"] == "bad_request" and "not implemented" in h["error"]["message"],
-              f"{label}: {field} refused", h.get("error", {}).get("message", "accepted?!"))
-    for field in ("scene_latitude_active", "overscan_active", "date_imprint_active", "digital_intermediate"):
+    # Each supported editor feature must render a preview and reset cleanly.
+    for field in ("contrast_mask_active", "scene_latitude_active", "overscan_active",
+                  "date_imprint_active", "digital_intermediate"):
         h, _ = host.call("set_params", {"session": sid, "delta": {field: True}})
         if check(h["ok"], f"{label}: {field} enabled", h.get("error")):
             geometry = {}

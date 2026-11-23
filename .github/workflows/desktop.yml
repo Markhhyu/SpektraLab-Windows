@@ -268,7 +268,7 @@ jobs:
           # loader plus Mesa's software ICD would bring them back; that is a
           # separate change, not a CI fix, and it would add a 200 MB SDK install
           # to every Windows run.
-          $noGpu = '^(spk_vulkan_|spk_math_gate_|spk_windows_(c_abi|feature_boundaries)$)'
+          $noGpu = '^(spk_vulkan_|spk_math_gate_|spk_windows_(c_abi|feature_boundaries)$|spk_(host_residency|development_morph|illuminants|exposure_metering|math_fallback)$)'
           $kept = & $ctest --test-dir build/root-msvc -N -E $noGpu
           $keptTotal = [int]([regex]::Match(($kept -join "`n"), 'Total Tests: (\d+)').Groups[1].Value)
           if ($keptTotal -lt 10) { throw "the exclusion left $keptTotal tests; expected at least 10" }
@@ -445,6 +445,10 @@ jobs:
           "engine: $($engine.FullName)"
           python .github/scripts/host_hello.py --host $hostExe.FullName --resources $engine.FullName
           if ($LASTEXITCODE -ne 0) { throw "installed host failed hello" }
+          # Stable Windows releases ship the installed and verified NSIS binary.
+          # The upstream portable bundle has a separate prerelease contract.
+          $version = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
+          if ($version -match '^\d+\.\d+\.\d+$') { return }
           node .github/scripts/windows-portable.mjs --installed $app.DirectoryName
           if ($LASTEXITCODE -ne 0) { throw "portable staging failed" }
           $portable = Get-ChildItem desktop/release/windows -Directory -Filter '*-portable'

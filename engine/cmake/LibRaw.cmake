@@ -52,15 +52,15 @@ if(SPEKTRALAB_LIBRAW_OPENMP)
     endif()
     find_package(OpenMP REQUIRED COMPONENTS CXX)
     if(MINGW AND SPEKTRALAB_STATIC_RUNTIME AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        # The static libgomp.a chosen above resolves dlopen/dlerror through the
-        # MinGW libdl shim instead of importing them, so every executable that
-        # links this archive needs the shim on its link line. spektralab-host
-        # adds it for itself, but the RAW helper test executables do not, and a
-        # full `all` build failed on them with "undefined reference to dlerror".
-        # Attaching the shim to the archive's INTERFACE keeps it with the
-        # dependency rather than repeating it in every consumer.
+        # MSYS2's libgomp uses its static libdl shim. Debian's MinGW runtime
+        # uses Win32 APIs directly and ships no shim. Ask the target compiler.
         add_library(spk_openmp INTERFACE)
-        target_link_libraries(spk_openmp INTERFACE OpenMP::OpenMP_CXX dl)
+        target_link_libraries(spk_openmp INTERFACE OpenMP::OpenMP_CXX)
+        execute_process(COMMAND "${CMAKE_CXX_COMPILER}" -print-file-name=libdl.a
+            OUTPUT_VARIABLE spk_static_dl OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(IS_ABSOLUTE "${spk_static_dl}" AND EXISTS "${spk_static_dl}")
+            target_link_libraries(spk_openmp INTERFACE "${spk_static_dl}")
+        endif()
         target_link_libraries(spk_libraw PUBLIC spk_openmp)
     else()
         target_link_libraries(spk_libraw PUBLIC OpenMP::OpenMP_CXX)

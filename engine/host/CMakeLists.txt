@@ -110,9 +110,5 @@ if(SPEKTRALAB_STATIC_RUNTIME AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_options(spektralab-host PRIVATE -static-libstdc++ -static-libgcc)
     if(MINGW)
         target_link_options(spektralab-host PRIVATE -static)
-        # A fully static libgomp.a still resolves dlopen/dlclose through the
-        # MinGW libdl shim (used by GCC's OpenMP plugin hooks). Link it after
-        # the static OpenMP archive so the symbols resolve.
-        target_link_libraries(spektralab-host PRIVATE dl)
     endif()
 endif()

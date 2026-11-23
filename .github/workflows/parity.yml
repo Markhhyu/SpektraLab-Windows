@@ -85,7 +85,12 @@ jobs:
       - name: Install the reference's dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install meson==1.9.2 numpy scipy colour-science numba opt-einsum
+          # The reference imports its RAW helpers when its Python package is
+          # imported, even for synthetic scenes. Match its pinned runtime line.
+          python -m pip install meson==1.9.2 'numpy~=2.4' 'scipy~=1.17' \
+            'colour-science~=0.4.6' 'numba~=0.64' 'opt-einsum~=3.4.0' \
+            'rawpy~=0.26.1' 'exiv2~=0.18.1' 'lensfunpy~=1.18.0' \
+            'OpenImageIO~=3.1.11' 'pyfftw~=0.15.0' 'matplotlib~=3.10' 'scikit-image~=0.26'
 
       # LibRaw 0.22.2 + Vulkan-Headers, pinned and checksum-verified by the
       # script. Key matches desktop.yml's native job so the two share a cache.

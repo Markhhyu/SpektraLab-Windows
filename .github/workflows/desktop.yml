@@ -326,7 +326,7 @@ jobs:
       - name: Playwright (layout harness, in-page mock host)
         run: |
           npx playwright install --with-deps chromium
-          npm run test:e2e
+          npm run test:e2e -- --workers=2 --reporter=line
 
   package-linux:
     name: Package (Linux .deb + AppImage)
@@ -383,7 +383,7 @@ jobs:
 
   package-windows:
     name: Package (Windows NSIS installer)
-    needs: [engine-windows-cross, desktop-checks]
+    needs: [engine-windows-cross]
     runs-on: windows-latest
     timeout-minutes: 60
     steps:

@@ -51,12 +51,13 @@ for (const renderDelay of [0, 600]) {
     const source = page.locator('.thumb[data-path="/mock/Roll 01/DSC_0002.NEF"]');
     await expect(source).toHaveAttribute('draggable', 'false');
     await expect(source.locator('canvas')).toBeVisible();
-    // Earlier thumbnails determine this cell's position. A visible canvas
-    // can still have its default 300x150 size while its image is decoding.
-    await expect.poll(() => page.getByTestId('filmstrip').locator('.thumb').evaluateAll((cells) => cells.every((cell) => {
-      const canvas = cell.querySelector('canvas');
-      return canvas?.height === 104;
-    }))).toBe(true);
+    // Only the source and the tiles to its left affect the pointer origin.
+    // Off-screen tiles may still be waiting for their thumbnails.
+    await expect.poll(() => source.evaluate((cell) => {
+      const preceding = Array.from(cell.parentElement!.querySelectorAll('.thumb'));
+      return preceding.slice(0, preceding.indexOf(cell) + 1)
+        .every((tile) => tile.querySelector('canvas')?.height === 104);
+    }), { timeout: 25_000 }).toBe(true);
     await source.hover(); await page.mouse.down();
     const empty = (await gate.boundingBox())!;
     await page.mouse.move(empty.x + empty.width / 2, empty.y + empty.height / 2, { steps: 8 });

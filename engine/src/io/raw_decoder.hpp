@@ -92,6 +92,9 @@ struct DecodedRaw {
     // still use LibRaw's integer black subtraction and uint16 demosaicing;
     // neither recovers clipped sensor samples or below-black sensor values.
     std::vector<float> rgb;
+    // One bit per oriented output pixel. Empty if no supported Bayer cell
+    // reached the camera's white levels in every CFA component.
+    std::vector<std::uint32_t> clipped_pixels;
     RawMetadata metadata;
     RawDecodeTimings timings;
 };

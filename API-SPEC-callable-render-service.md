@@ -1164,18 +1164,17 @@ parity case for it.**
 
 | field | path | type | default | range | meaning |
 |---|---|---|---|---|---|
-| `halation_headroom_ev` | `film_render.halation.headroom_ev` | float | `4.0` | 0–8 | **back-reflection only.** The stops a *clipped* highlight is taken to have been above what the frame recorded. The negative's exposure has each pixel scaled by 2^(headroom · s), s the product of two smoothsteps of the pixel's brightest channel: within a stop of the frame's own maximum (full from a quarter stop under it), and +1.5 … +2.5 EV over mid-grey. A lamp clipped at +3.5 EV exposes the film as a +7.5 EV lamp would — its halo, and its core on the film's shoulder (a clipped red tube's core prints pink-white inside a red halo); a face auto-exposure lifted to +2.5 EV on a night frame, three stops under the lamps, is left alone. `0` is the recorded frame. Native-only, SHOOT, not live, after `camera_filter` |
+| `halation_headroom_ev` | `film_render.halation.headroom_ev` | float | `4.0` | 0–8 | Estimated missing EV above the sensor white level in a fully saturated cell. Active for a stock with back reflection, with halation enabled and positive amount. Zero disables extrapolation. Native SHOOT parameter. |
 
-`node_headroom` runs in the whole-frame `film_boost` stage, after `boost` (the frame's maximum is
-its statistic) and **before `film_overscan`**: the edge print, fog and date are exposures the engine
-knows exactly, and halate at what they are. Measured canvas against export (live 1200 px vs full
-downscaled): the halo's energy is 0.83–1.01 of the export's (the low end a frame of tiny lights), and the frame's mean difference is no
-larger than plain 500T's. The kernel `spk_highlight_headroom` runs on both backends: Metal
-(`nodes.metal`) and, since 2026-10-29, Vulkan (`shaders/vulkan/spk_highlight_headroom.comp`,
-the same formula). A back-reflection film is no longer refused on Windows/Linux. Graded against
-the 1.3.4 Metal engine on a Mac (MoltenVK, `engine/tests/parity_metal_vulkan.py`): CineStill 800T at
-headroom 0, 4 and 8, amount 4, its scan and its density tap agree to <= 0.01 of an 8-bit code;
-the wire is unchanged.
+`spk_open_raw(engine, input, clipped_words, word_count, params_delta_json, out_json)` accepts optional source clipping evidence for linear input. Pack one bit per oriented RGB pixel, least-significant bit first in each 32-bit word. Supply exactly `ceil(width*height/32)` words or a null pointer and zero. The call copies the evidence. The existing `spk_open` and `spk_open_device` accept measured scene energy directly.
+
+The Windows RAW decoder marks a conventional Bayer cell only when both greens, red and blue reach their camera white levels before white balance and demosaicing. Unsupported layouts have no mask. A tagged source pixel receives a common gain of `2^halation_headroom_ev` before tier resampling and film geometry. Metering, source picking and No Film read the original source. Both the film shoulder and the physical rear reflection see the estimated energy. Its magnitude is a user-controlled estimate.
+
+### Stock-specific protection and calibration
+
+The exposure solver reports the existing `protect_highlights` and `protect_shadows` fields. For VISION3 50D and EKTACHROME E100 it measures the distance from neutral grey to the first layer whose local contrast falls to half its mid-grey value. The reference is a 0.184 neutral in the active input colour space, with a half-stop-wide slope window on the developed profile. The original percentile ranks and maximum corrections still apply. The cached frame statistics can be used again after changing stock. Other film stocks retain the +2.5 / −3.5 EV protection bounds.
+
+With the default RGB spectral reconstruction, E100 uses two relative layer exposure offsets (red −0.18 EV and blue +0.38 EV) calibrated on Kodak's daylight neutral wedge. A D55 simulation and approximate Status A reading are compared with E-4000 page 3 at a common log-exposure origin of −0.8004. Exposures −2, 0, +2 EV were used for calibration. The held-out exposures are −3, −1, +1 EV. VISION3 50D uses its existing scatter model with stock-specific core radii and tail weights. The reference is the manufacturer's small-signal RGB modulation relative to 3 cycles/mm. The regression uses a 36 mm image, keeps DIR and film scatter active and reads density before print, scan and grain. [Kodak E100 data](https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/e4000_ektachrome_100.pdf) · [Kodak 50D curves](https://www.kodak.com/content/products-brochures/motion-picture/KODAK-VISION3-50D-5203-7203-brochure.pdf)
 
 ## 19. `no_film` — "Don't Apply Film Simulation" on the desktop host (2026-10-29, R4)
 

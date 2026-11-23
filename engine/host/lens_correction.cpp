@@ -3,6 +3,7 @@
 #include <lensfun/lensfun.h>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <future>
 #include <memory>
@@ -169,6 +170,7 @@ bool correct_lens(FloatImage& image,Probe& probe,std::string& error) {
             }
         });
         std::vector<float> output(image.rgb.size());
+        std::vector<uint32_t> clipped(image.clipped_pixels.size());
         parallel_rows(h,[&](uint32_t first,uint32_t last){
             std::vector<float> coordinates(size_t(w)*6);
             for(uint32_t y=first;y<last;++y) {
@@ -176,16 +178,23 @@ bool correct_lens(FloatImage& image,Probe& probe,std::string& error) {
                     for(uint32_t x=0;x<w;++x)for(int c=0;c<3;++c){coordinates[size_t(x)*6+c*2]=float(x);coordinates[size_t(x)*6+c*2+1]=float(y);}
                 for(uint32_t x=0;x<w;++x) {
                     std::array<float,3> v{};
+                    bool saturated = !clipped.empty();
                     for(int c=0;c<3;++c) {
                         const auto p=displayed(coordinates[size_t(x)*6+c*2],coordinates[size_t(x)*6+c*2+1],w,h,orientation);
                         v[c]=sample(image,p[0],p[1],c);
+                        saturated = saturated && image.clipped_at(p[0],p[1]);
                     }
                     const auto p=displayed(float(x),float(y),w,h,orientation);
                     float* pixel=output.data()+(size_t(uint32_t(p[1]))*image.width+uint32_t(p[0]))*3;
+                    if (saturated) {
+                        const size_t i=size_t(uint32_t(p[1]))*image.width+uint32_t(p[0]);
+                        std::atomic_ref<uint32_t>(clipped[i/32]).fetch_or(1u<<(i%32),std::memory_order_relaxed);
+                    }
                     for(int c=0;c<3;++c)pixel[c]=float(to_working[c*3]*v[0]+to_working[c*3+1]*v[1]+to_working[c*3+2]*v[2]);
                 }
             }
         });
+        image.clipped_pixels=std::move(clipped);
         image.rgb=std::move(output);correction.info.applied=true;probe.metadata.lens_correction=correction.info;return true;
     } catch(const std::exception& e){error=std::string(kUnsupportedPrefix)+"lens correction: "+e.what();return false;}
 }

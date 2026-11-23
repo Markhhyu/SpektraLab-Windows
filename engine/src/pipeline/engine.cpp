@@ -198,6 +198,9 @@ struct spk_session {
     // `spk_open` is documented not to retain the caller's pointer, so exactly
     // one copy is unavoidable; this makes that copy the upload.
     Image source;
+    // CPU-side so inactive tabs and stocks without back reflection do not
+    // hold a GPU allocation. Upload only while actually exposing a negative.
+    std::vector<uint32_t> clipped_pixels;
 
 #ifndef __APPLE__
     // No image buffer is retained here. The file owns the exact byte copy,
@@ -784,6 +787,8 @@ namespace {
 // Where `open`'s pixels are: a host array (`spk_open`) or a buffer already on
 // the device (`spk_open_device`). Exactly one of the two pointers is set.
 struct FrameIn {
+    const uint32_t* clipped = nullptr;
+    uint32_t clip_words = 0;
     const float* host = nullptr;
     void* device = nullptr;
     uint32_t width = 0, height = 0, channels = 0;
@@ -802,6 +807,11 @@ spk_session* open_frame(spk_engine* engine, const FrameIn& frame, const char* pa
     }
     if (frame.width == 0 || frame.height == 0) { g_error = "input image is empty"; return nullptr; }
     const uint64_t pixels = uint64_t(frame.width) * uint64_t(frame.height);
+    if ((frame.clip_words != 0 && frame.clip_words != (pixels + 31) / 32) ||
+        (frame.clipped != nullptr) != (frame.clip_words != 0)) {
+        g_error = "clipping mask dimensions disagree with the input";
+        return nullptr;
+    }
     if (pixels > kMaxFramePixels) {
         g_error = "frame is too large: " + std::to_string(pixels) + " px (" +
                   std::to_string(frame.width) + " x " + std::to_string(frame.height) +
@@ -885,6 +895,10 @@ spk_session* open_frame(spk_engine* engine, const FrameIn& frame, const char* pa
     }
 
     auto session = std::make_unique<spk_session>();
+    if (frame.clipped) {
+        try { session->clipped_pixels.assign(frame.clipped, frame.clipped + frame.clip_words); }
+        catch (const std::bad_alloc&) { g_error = "unable to retain RAW clipping mask"; return nullptr; }
+    }
     session->engine = engine;
     session->session_id = "s" + std::to_string(next_id());
 
@@ -1012,8 +1026,15 @@ spk_session* open_frame(spk_engine* engine, const FrameIn& frame, const char* pa
 
 spk_session* spk_open(spk_engine* engine, const spk_image* input, const char* params_delta_json,
                       char** out_json) {
+    return spk_open_raw(engine, input, nullptr, 0, params_delta_json, out_json);
+}
+
+spk_session* spk_open_raw(spk_engine* engine, const spk_image* input, const uint32_t* clipped,
+                          uint32_t word_count, const char* params_delta_json, char** out_json) {
     if (!engine || !input || !input->data) { g_error = "engine or image is null"; return nullptr; }
     FrameIn frame;
+    frame.clipped = clipped;
+    frame.clip_words = word_count;
     frame.host = input->data;
     frame.width = input->width;
     frame.height = input->height;
@@ -1098,7 +1119,10 @@ bool meter_frame(spk_session* session, Image& metered, std::string& error) {
 // it first -- and kept until an upstream field changes. Needs an open frame.
 bool ensure_meter(spk_session* session, std::string& error) {
     const std::string key = meter_key(session->params);
-    if (session->meter.valid && session->meter.key == key) return true;
+    if (session->meter.valid && session->meter.key == key) {
+        session->pipeline->update_protection(session->meter.evs);
+        return true;
+    }
     Image metered;
     ExposureEvs evs;
     if (!meter_frame(session, metered, error) ||
@@ -1220,6 +1244,29 @@ bool run_print_for(spk_session* session, const Image& negative, Image& rgb,
     return trace.success = session->pipeline->run_print(negative, rgb, progress, error);
 }
 
+// Restore only tagged source cells before tier resampling and geometry. The
+// original tier remains available for auto-exposure, No Film and picking.
+bool film_source_at_tier(spk_session* session, const Tier& tier, Image& out, std::string& error) {
+    const auto& hal = session->params.film_render.halation;
+    if (session->clipped_pixels.empty() || !hal.active || !hal.back_reflection ||
+        hal.halation_amount <= 0 || hal.headroom_ev <= 0 || session->params.io.input_cctf_decoding)
+        return tier_image(session, tier, out, error);
+    auto* gpu = session->engine->gpu;
+    const Image& source = session->source;
+    const auto& bits = session->clipped_pixels;
+    auto mask = gpu->upload(bits.data(), bits.size()*sizeof(uint32_t), error);
+    if (!mask) return false;
+    Image corrected = source;
+    corrected.buf = gpu->alloc(source.bytes(), error);
+    const uint32_t count = uint32_t(source.pixels());
+    const float gain = float(std::exp2(hal.headroom_ev));
+    if (!corrected.buf || !gpu->dispatch("spk_highlight_headroom",
+        {gpu::Arg::buf(source.buf), gpu::Arg::buf(mask),
+         gpu::Arg::inline_bytes(&count, 1), gpu::Arg::inline_bytes(&gain, 1),
+         gpu::Arg::buf(corrected.buf)}, source.pixels(), error)) return false;
+    return downscale(gpu, corrected, tier_long_edge(session->params,tier), out, error);
+}
+
 bool negative_for(spk_session* session, const Tier& tier, Progress* progress, Image& out,
                   std::string& error) {
     const auto negative_started = std::chrono::steady_clock::now();
@@ -1237,7 +1284,7 @@ bool negative_for(spk_session* session, const Tier& tier, Progress* progress, Im
         return true;
     }
     Image source;
-    if (!tier_image(session, tier, source, error)) return false;
+    if (!film_source_at_tier(session, tier, source, error)) return false;
     // Every tier's node applies the frame's one EV (RFC-015 P.1).
     if (!ensure_meter(session, error)) return false;
     negative_stamp("meter");

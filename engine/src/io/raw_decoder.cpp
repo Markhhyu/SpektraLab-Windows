@@ -102,6 +102,7 @@ bool supported_compression(LibRaw& raw, std::string& error) {
     return true;
 }
 
+
 void configure_compatible(libraw_output_params_t& params, bool half_size = false) {
     params.user_qual = 3;  // AHD (LibRaw still selects its native X-Trans path).
     params.half_size = half_size ? 1 : 0;
@@ -228,6 +229,51 @@ bool supported_headroom_source(LibRaw& raw, std::string& error) {
     return true;
 }
 
+// Work in unpacked sensor codes before white balance, demosaicing or RGB
+// conversion can clip independently. Single-channel clipping retains colour
+// information, so it does not justify extrapolating every channel.
+void collect_clipped_pixels(LibRaw& raw, DecodedRaw& decoded, bool half_size) {
+    const auto& data = raw.imgdata;
+    const auto& s = data.sizes;
+    std::string reason;
+    if (!data.rawdata.raw_image || !supported_headroom_source(raw, reason) ||
+        s.flip < 0 || s.flip > 7 || s.raw_pitch % sizeof(uint16_t) != 0 ||
+        s.left_margin + s.width > s.raw_width || s.top_margin + s.height > s.raw_height ||
+        s.raw_pitch < size_t(s.raw_width) * sizeof(uint16_t)) return;
+    const auto& meta = decoded.metadata;
+    const unsigned stride = s.raw_pitch / sizeof(uint16_t);
+    const unsigned w = half_size ? (s.width + 1u) / 2 : s.width;
+    const unsigned h = half_size ? (s.height + 1u) / 2 : s.height;
+    decoded.width = (s.flip & 4) ? h : w;
+    decoded.height = (s.flip & 4) ? w : h;
+    uint32_t white[4];
+    for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx) {
+        const int c = raw.FC(dy, dx);
+        uint32_t level = meta.camera_white_level_per_channel[c];
+        if (!level && c == 3) level = meta.camera_white_level_per_channel[1];
+        if (!level) level = meta.white_level;
+        if (level <= meta.black_level_per_channel[c] || level > 65535) return;
+        white[2*dy+dx] = level;
+    }
+    auto mark = [&](unsigned x, unsigned y) {
+        if (s.flip & 1) x = w-1-x;
+        if (s.flip & 2) y = h-1-y;
+        if (s.flip & 4) std::swap(x, y);
+        const size_t i = size_t(y) * decoded.width + x;
+        decoded.clipped_pixels[i/32] |= uint32_t(1) << (i%32);
+    };
+    for (unsigned y = 0; y+1 < s.height; y += 2) {
+        const auto* row = data.rawdata.raw_image + size_t(y+s.top_margin)*stride + s.left_margin;
+        for (unsigned x = 0; x+1 < s.width; x += 2) {
+            if (row[x] < white[0] || row[x+1] < white[1] ||
+                row[stride+x] < white[2] || row[stride+x+1] < white[3]) continue;
+            if (decoded.clipped_pixels.empty()) decoded.clipped_pixels.resize((size_t(w)*h+31)/32);
+            if (half_size) mark(x/2, y/2);
+            else { mark(x,y); mark(x+1,y); mark(x,y+1); mark(x+1,y+1); }
+        }
+    }
+}
+
 class CompatibleLibRaw final : public detail::CameraLibRaw {
 public:
     CompatibleLibRaw() = default;
@@ -339,6 +385,7 @@ bool decode_raw_compatible(const std::filesystem::path& source, const std::array
             return false;
         }
         if (!capture_source_metadata(*raw, decoded.metadata, error)) return false;
+        collect_clipped_pixels(*raw, decoded, half_size);
         if (const char* name = raw->unpack_function_name()) decoded.metadata.decoder_name = name;
 
         start = Clock::now();
@@ -394,6 +441,8 @@ bool decode_raw_compatible(const std::filesystem::path& source, const std::array
             error = "RAW output: inconsistent image byte count or unsupported dimensions";
             return false;
         }
+        if (decoded.width != image->width || decoded.height != image->height)
+            decoded.clipped_pixels.clear();
         decoded.width = image->width;
         decoded.height = image->height;
         // The oriented RGB16 output owns its allocation independently of
@@ -495,6 +544,7 @@ bool decode_raw_headroom(const std::filesystem::path& source, const std::array<f
         }
         if (!capture_source_metadata(*raw, decoded.metadata, error) ||
             !supported_headroom_source(*raw, error)) return false;
+        collect_clipped_pixels(*raw, decoded, half_size);
         if (const char* name = raw->unpack_function_name()) decoded.metadata.decoder_name = name;
 
         start = Clock::now();
@@ -528,6 +578,8 @@ bool decode_raw_headroom(const std::filesystem::path& source, const std::array<f
         decoded.metadata.headroom_enabled = true;
         decoded.metadata.white_balance_exposure_restore = raw->exposure_restore;
         decoded.metadata.camera_to_output = raw->matrix;
+        if (decoded.width != raw->converted_width || decoded.height != raw->converted_height)
+            decoded.clipped_pixels.clear();
         decoded.width = raw->converted_width;
         decoded.height = raw->converted_height;
         decoded.rgb = std::move(raw->converted);

@@ -67,11 +67,4 @@ constexpr double kBackReflectionWeight[kBackReflectionComponents][3] = {
 // red-orange.
 constexpr double kBackReflectionStrength[3] = {0.30, 0.03, 0.003};
 
-// The headroom gate's clip band, in stops under the frame's own maximum: full
-// headroom from a quarter stop under it, none a stop under. Core Image's RAW
-// decode reconstructs a clipped lamp into a soft dome rather than a plateau,
-// so "clipped" is a band near the maximum, not a value.
-constexpr double kHeadroomClipFromEv = -1.0;
-constexpr double kHeadroomClipToEv = -0.25;
-
 }  // namespace spk

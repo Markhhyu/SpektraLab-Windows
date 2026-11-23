@@ -111,19 +111,9 @@ struct HalationParams {
     /// 120 um is a 35 mm acetate base, and what a CineStill 800T scan measures:
     /// the flat orange band beside a tube light ends at r_c = 1.83 d = 0.21 mm.
     double base_thickness_um = 120.0;
-    /// Native-only, **back-reflection only**: how far above what the frame
-    /// recorded a highlight is taken to have been, in stops. A digital frame
-    /// clips a lamp at +3..+4 EV over mid-grey where the scene had +8..+12, and
-    /// the halo is the source's *energy* times a few tenths of a percent, so a
-    /// clipped lamp throws almost none. The negative's exposure is lifted by
-    /// 2^(headroom * s) before the film edge is laid out (`node_headroom`), s
-    /// the product of two smoothsteps of the pixel's brightest channel: within
-    /// a stop of the frame's own maximum (`kHeadroomClipFromEv`), and at least
-    /// `headroom_from_ev` .. `headroom_to_ev` over mid-grey. The halo and the
-    /// film's shoulder both see it. 0 is the recorded frame as it is.
+    /// Estimated missing scene exposure at fully saturated Bayer cells, in EV.
+    /// Only used for a back-reflecting stock and a source with clipping evidence.
     double headroom_ev = 4.0;
-    double headroom_from_ev = 1.5;
-    double headroom_to_ev = 2.5;
 };
 
 struct DirCouplersParams {

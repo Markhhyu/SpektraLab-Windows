@@ -310,6 +310,18 @@ bool build_tc_lut(const Colour& colour, const Blob& blob, const Profile& film,
             }
     }
 
+    // Align the default digital reconstruction with E-4000's E100 daylight
+    // neutral wedge. One common green exposure anchor, two relative gains.
+    // The published film sensitivity, dye spectra and characteristic curves
+    // remain the inputs to spectral exposures.
+    if (film.info.stock == "kodak_ektachrome_100" && settings.apply_hanatos2025_adaptation_window &&
+        !settings.apply_hanatos2025_adaptation_surface) {
+        const double red = std::exp2(-0.18), blue = std::exp2(0.38);
+        for (size_t i = 0; i < out.size(); i += 3) {
+            out[i] *= red;
+            out[i + 2] *= blue;
+        }
+    }
     if (!compress.active) return true;
 
     // new_lut[xy] = old_lut[compress(xy)], so the per-pixel path stays

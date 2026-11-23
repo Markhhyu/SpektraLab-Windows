@@ -53,10 +53,7 @@ uint32_t cctf_mode_for(const std::string& cs) {
 namespace {
 
 constexpr double kMidgray = 0.184;
-// RFC-015 §2.3's four intents. `s_hi` and `s_lo` are how far past mid-grey a
-// frame may sit before the protect modes act; §2.4 would take them from the
-// stock's own shoulder and toe, which needs a calibration set this RFC does
-// not have, so v1 uses fixed stops.
+// Fallback for stocks outside the two calibrated metering profiles.
 constexpr double kProtectHighlightsStops = 2.5;
 constexpr double kProtectShadowsStops = 3.5;
 constexpr double kProtectHighlightsClampEv = 3.0;   // EV_h is at least EV_b - 3
@@ -69,6 +66,42 @@ constexpr double kMeterFloor = kMidgray / 4096.0;
 constexpr double kMinEffectiveBlurSigma = 0.4;
 
 void fill3(double dst[3], double v) { dst[0] = dst[1] = dst[2] = v; }
+
+// Estimate usable neutral exposure from the same developed characteristic
+// curves as the renderer. The first layer to lose half its mid-grey contrast
+// limits the neutral range. This threshold is a metering policy.
+double curve_room(const InterpTables& t, const double grey_raw[3], int direction,
+                  double fallback) {
+    constexpr double step = 1.0 / 16.0;
+    const double log_two = std::log10(2.0);
+    double room = 16.0;
+    for (size_t c = 0; c < 3; ++c) {
+        if (!(grey_raw[c] > 0.0) || t.k < 2) return fallback;
+        Vec x(t.k), y(t.k);
+        for (size_t i = 0; i < t.k; ++i) {
+            x[i] = t.x[3*i+c];
+            y[i] = t.y[3*i+c];
+        }
+        auto contrast = [&](double ev) {
+            const double centre = std::log10(grey_raw[c]) + ev * log_two;
+            return std::abs(interp(centre+0.25*log_two, x.data(), y.data(), t.k) -
+                            interp(centre-0.25*log_two, x.data(), y.data(), t.k));
+        };
+        double previous = contrast(0);
+        if (!(previous > 1e-6)) return fallback;
+        const double threshold = previous * 0.5;
+        for (double distance = step; distance <= 16.0; distance += step) {
+            const double response = contrast(direction * distance);
+            if (!std::isfinite(response)) return fallback;
+            if (response <= threshold) {
+                room = std::min(room, distance-step + step*(previous-threshold)/(previous-response));
+                break;
+            }
+            previous = response;
+        }
+    }
+    return room;
+}
 
 // The (K, 3) axis and its reciprocal steps, for an axis that is *not* a scaled
 // log-exposure -- grain's density axis. `interp_tables`'s `1/dx` with 0 where
@@ -246,6 +279,14 @@ bool Pipeline::build(const Params& params, std::string& error) {
     {
         InterpTables t;
         build_interp_tables_development(film.data.log_exposure, gamma, film.normalized_curves, dev, t);
+        highlight_stops_ = kProtectHighlightsStops;
+        shadow_stops_ = kProtectShadowsStops;
+        if (film.info.stock == "kodak_vision3_50d" || film.info.stock == "kodak_ektachrome_100") {
+            double grey[3];
+            neutral_film_exposure(tc_b_host_, tc_lut_host_, baked_.tc_lut_side, kMidgray, grey);
+            highlight_stops_ = curve_room(t, grey, 1, highlight_stops_);
+            shadow_stops_ = curve_room(t, grey, -1, shadow_stops_);
+        }
         baked_.film_curve_k = t.k;
         baked_.film_curve_x = gpu_->upload_persistent_f32(t.x.data(), t.x.size(), error);
         baked_.film_curve_inv = gpu_->upload_persistent_f32(t.inv.data(), t.inv.size(), error);
@@ -850,7 +891,7 @@ bool Pipeline::legacy_exposure_ev(const std::vector<double>& Y, uint32_t sh, uin
     return true;
 }
 
-ExposureEvs Pipeline::exposure_evs_from(const std::vector<double>& raw, uint32_t sh, uint32_t sw) {
+ExposureEvs Pipeline::exposure_evs_from(const std::vector<double>& raw, uint32_t sh, uint32_t sw) const {
     const size_t n = raw.size();
     // `n - 1` below is unsigned; an empty sample has no exposure to report,
     // and the reference's own all-black answer is 0 EV.
@@ -908,13 +949,20 @@ ExposureEvs Pipeline::exposure_evs_from(const std::vector<double>& raw, uint32_t
     // clamps stop one specular highlight, or one black border, from deciding
     // the exposure. Their percentiles are over every sample — protection is
     // never trimmed and never centre-weighted (RFC-015 §2.3).
+    out.p995 = p995;
+    out.p5 = p5;
+    update_protection(out);
+    return out;
+}
+
+void Pipeline::update_protection(ExposureEvs& out) const {
+    if (!(out.p995 > 0.0 && out.p5 > 0.0)) return;
     out.protect_highlights = std::clamp(
-        std::log2(kMidgray * std::pow(2.0, kProtectHighlightsStops) / p995),
+        std::log2(kMidgray * std::exp2(highlight_stops_) / out.p995),
         out.balanced - kProtectHighlightsClampEv, out.balanced);
     out.protect_shadows = std::clamp(
-        std::log2(kMidgray * std::pow(2.0, -kProtectShadowsStops) / p5),
+        std::log2(kMidgray * std::exp2(-shadow_stops_) / out.p5),
         out.balanced, out.balanced + kProtectShadowsClampEv);
-    return out;
 }
 
 bool Pipeline::measure_exposure_ev(const Image& in, double& ev, std::string& error, bool stride) {
@@ -1115,47 +1163,6 @@ bool Pipeline::node_boost(const Image& in, Image& out, std::string& error) {
                           {gpu::Arg::buf(in.buf), gpu::Arg::buf(p_buf), gpu::Arg::inline_bytes(n, 1),
                            gpu::Arg::buf(out.buf)},
                           in.elements(), error);
-}
-
-// **The headroom a digital frame clipped off, given back to the negative.** A
-// film with no anti-halation layer halates in proportion to the *scene's*
-// light, and a lamp a camera clipped at +3.5 EV was +8 or more: its halo is
-// that energy times a few tenths of a percent, so a clipped lamp throws almost
-// none. Each pixel is scaled by 2^(headroom * s), s the product of two
-// smoothsteps of its brightest channel -- within a stop of the frame's own
-// maximum (a digital frame's clip is its brightest exposure; Core Image's RAW
-// decode rounds a clipped lamp into a dome, so the clip is a band, not a
-// value), and over a floor above mid-grey (a dim frame's brightest pixel is not
-// a lamp). A face auto-exposure lifted to +2.5 EV on a night frame is three
-// stops under the lamps and is left alone.
-//
-// Here, in the whole-frame stage, because the maximum is a statistic of the
-// frame; and before `film_overscan`, because the edge print, fog and date are
-// exposures the engine knows exactly and must halate at what they are. Only
-// for a film with no layer: every other film is what it always was.
-bool Pipeline::node_headroom(const Image& in, Image& out, std::string& error) {
-    const HalationParams& hal = params_.film_render.halation;
-    if (!(hal.active && hal.back_reflection && hal.headroom_ev > 0.0 && hal.halation_amount > 0.0 &&
-          hal.headroom_to_ev > hal.headroom_from_ev)) {
-        out = in;
-        return true;
-    }
-    Timer t(this, "filming.expose.headroom");
-    double clip = 0.0;
-    if (!device_max(in, clip, error)) return false;
-    if (!(clip > 0.0)) { out = in; return true; }
-    const float p[7] = {float(1.0 / clip), float(kHeadroomClipFromEv),
-                        float(1.0 / (kHeadroomClipToEv - kHeadroomClipFromEv)),
-                        float(hal.headroom_ev), float(1.0 / kMidgray), float(hal.headroom_from_ev),
-                        float(1.0 / (hal.headroom_to_ev - hal.headroom_from_ev))};
-    gpu::BufferRef p_buf = gpu_->upload(p, sizeof p, error);
-    if (!p_buf) return false;
-    if (!alloc_like(in, out, error)) return false;
-    const uint32_t n[1] = {uint32_t(in.pixels())};
-    return gpu_->dispatch("spk_highlight_headroom",
-                          {gpu::Arg::buf(in.buf), gpu::Arg::buf(p_buf), gpu::Arg::inline_bytes(n, 1),
-                           gpu::Arg::buf(out.buf)},
-                          in.pixels(), error);
 }
 
 // --- the sigmas, in one place, because a demand must agree with its node ----
@@ -2146,7 +2153,6 @@ bool Pipeline::film_boost(Chain in, Chain& out, std::string& error) {
     // side stay contiguous.
     Image cur = std::move(in.cur), next;
     SPK_NODE(advance_if_ok(node_boost(cur, next, error), cur, next));
-    SPK_NODE(advance_if_ok(node_headroom(cur, next, error), cur, next));
     out = std::move(in);
     out.cur = std::move(cur);
     return true;

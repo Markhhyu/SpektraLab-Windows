@@ -103,6 +103,11 @@ class Engine:
         lib.spk_open.argtypes = [ctypes.c_void_p, ctypes.POINTER(SpkImage), ctypes.c_char_p,
                                  ctypes.POINTER(ctypes.c_char_p)]
         lib.spk_set_params.restype = ctypes.c_int32
+        if hasattr(lib, "spk_open_raw"):
+            lib.spk_open_raw.restype = ctypes.c_void_p
+            lib.spk_open_raw.argtypes = [ctypes.c_void_p, ctypes.POINTER(SpkImage),
+                                         ctypes.POINTER(ctypes.c_uint32), ctypes.c_uint32,
+                                         ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p)]
         lib.spk_set_params.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
                                        ctypes.POINTER(ctypes.c_char_p)]
         lib.spk_get_params.restype = ctypes.c_int32
@@ -196,15 +201,24 @@ class Engine:
         flat = np.ctypeslib.as_array(table, shape=(n,))
         return np.array(flat.reshape(size.value, size.value, size.value, 3), copy=True)
 
-    def open(self, image: np.ndarray, delta: dict | None = None) -> "Session":
+    def open(self, image: np.ndarray, delta: dict | None = None, *, clipped=None) -> "Session":
         array = np.ascontiguousarray(np.asarray(image, dtype=np.float32))
         if array.ndim != 3 or array.shape[2] not in (3, 4):
             raise ValueError(f"expected (H, W, 3 or 4), got {array.shape}")
         spk_image = SpkImage(array.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
                              array.shape[1], array.shape[0], array.shape[2])
         out = ctypes.c_char_p()
-        handle = self._lib.spk_open(self._handle, ctypes.byref(spk_image),
-                                    json.dumps(delta or {}).encode(), ctypes.byref(out))
+        args = (json.dumps(delta or {}).encode(), ctypes.byref(out))
+        if clipped is None:
+            handle = self._lib.spk_open(self._handle, ctypes.byref(spk_image), *args)
+        else:
+            mask = np.asarray(clipped, dtype=bool)
+            if mask.shape != array.shape[:2]:
+                raise ValueError("clipping mask must match the source dimensions")
+            bits = np.packbits(mask.ravel(), bitorder="little")
+            words = np.pad(bits, (0, (-bits.size) % 4)).view("<u4").astype(np.uint32, copy=False)
+            handle = self._lib.spk_open_raw(self._handle, ctypes.byref(spk_image),
+                         words.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)), words.size, *args)
         if not handle:
             raise EngineError(self._last_error())
         return Session(self, handle, self._take_json(out), array)

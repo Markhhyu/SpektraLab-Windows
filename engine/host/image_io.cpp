@@ -807,6 +807,7 @@ bool probe_file(const fs::path& path, Probe& out, std::string& error) {
 bool decode_linear_prophoto(const fs::path& path, const DecodeOptions& options, FloatImage& out,
                             Probe& probe, std::string& error) {
     if (!probe_file(path, probe, error)) return false;
+    if (probe.kind != FileKind::Raw) out.clipped_pixels.clear();
     const bool custom_wb = options.temperature_k.has_value();
     if (custom_wb && probe.kind != FileKind::Raw) {
         error = std::string(kUnsupportedPrefix) + "white balance at decode applies to RAW files only";
@@ -841,6 +842,7 @@ bool decode_linear_prophoto(const fs::path& path, const DecodeOptions& options, 
         out.width = decoded.width;
         out.height = decoded.height;
         out.rgb = std::move(decoded.rgb);   // LibRaw already applied the flip
+        out.clipped_pixels = std::move(decoded.clipped_pixels);
         out.raw_timings = decoded.timings;
         out.raw_metadata = std::move(decoded.metadata);
         if(options.lens_correction && !correct_lens(out,probe,error))return false;

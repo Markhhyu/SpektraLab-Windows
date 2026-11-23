@@ -196,6 +196,14 @@ spk_status spk_warm_up(spk_engine* engine, const char* film_stock,
 spk_session* spk_open(spk_engine* engine, const spk_image* input,
                       const char* params_delta_json, char** out_json);
 
+/* Optional evidence for scene-linear RGB. One bit per oriented input pixel,
+ * low bit first, set only for a fully saturated sensor cell. Supply exactly
+ * ceil(width*height/32) words or NULL and zero for uncharacterised sources.
+ * Borrowed for this call only. Measurement and No Film use the original RGB. */
+spk_session* spk_open_raw(spk_engine* engine, const spk_image* input,
+                          const uint32_t* clipped, uint32_t word_count,
+                          const char* params_delta_json, char** out_json);
+
 /* `spk_open` with the pixels already on the device (see `spk_device_image`).
  * Same reply, same session, same source: the two differ only in how the
  * frame reaches the GPU, and share every line after that. */

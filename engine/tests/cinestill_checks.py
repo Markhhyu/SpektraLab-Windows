@@ -41,8 +41,8 @@ def overlay(tmp):
     return res
 
 
-def render(e, img, extra):
-    s = e.open(np.ascontiguousarray(img, np.float32), {**BASE, **extra})
+def render(e, img, extra, clipped=None):
+    s = e.open(np.ascontiguousarray(img, np.float32), {**BASE, **extra}, clipped=clipped)
     try:
         rgba, _ = s.render("full")
     finally:
@@ -77,7 +77,7 @@ def main():
     bg = 0.184 / 16                    # a night: four stops under mid-grey
     with tempfile.TemporaryDirectory() as tmp, spk.Engine(dylib=a.dylib, resources=overlay(tmp)) as e:
         # 1. the alias renders, and is not its base: same film, different halo
-        lamp = disc(np.full((H, W, 3), bg, np.float32), W // 2, H // 2, 1.5, 0.184 * 2 ** 3.5)
+        lamp = disc(np.full((H, W, 3), bg, np.float32), W // 2, H // 2, 1.5, 0.184 * 2 ** 7.5)
         cs = render(e, lamp, {"film_stock": "cinestill_800t"})
         v3 = render(e, lamp, {"film_stock": "kodak_vision3_500t"})
         far = (slice(0, 200), slice(0, 200))
@@ -143,7 +143,19 @@ def main():
         scene = disc(scene, 500, H // 2, 3, 0.184 * 2 ** 5.5)
         scene[H // 2 - 80:H // 2 + 80, 1300:1460] = 0.184 * 2 ** 2.5
         h0 = render(e, scene, {"film_stock": "cinestill_800t", "halation_headroom_ev": 0.0})
-        h4 = render(e, scene, {"film_stock": "cinestill_800t", "halation_headroom_ev": 4.0})
+        mask = scene[..., 0] > 0.184 * 2 ** 5
+        h4 = render(e, scene, {"film_stock": "cinestill_800t", "halation_headroom_ev": 4.0}, mask)
+        check(np.array_equal(h0, render(e, scene, {"film_stock": "cinestill_800t"})),
+              "measured HDR exposure is preserved without clipping evidence")
+        two_lamps = disc(scene.copy(), 1800, H // 2, 3, 0.184 * 2 ** 6.5)
+        two = render(e, two_lamps, {"film_stock": "cinestill_800t"}, mask)
+        for c in range(3):
+            # Isolate the first lamp's core and the radial halo out to 60 px.
+            roi = (slice(H // 2 - 64, H // 2 + 65), slice(436, 565), c)
+            _, single = radial(h4[roi], 64, 64, 60)
+            _, paired = radial(two[roi], 64, 64, 60)
+            check(np.max(np.abs(single - paired)) < 1 / 255,
+                  f"remote brighter HDR lamp preserves the first lamp's radial profile, channel {c}")
         patch_halo = (slice(H // 2 - 80, H // 2 + 80), slice(1460 + 4, 1460 + 30))   # just right of the patch
         lamp_halo = (slice(H // 2 - 30, H // 2 + 30), slice(500 + 8, 500 + 30))
         dp = np.abs(h4[patch_halo] - h0[patch_halo]).mean() * 255
@@ -152,7 +164,7 @@ def main():
               f"beside the patch {dp:.2f}/255, beside the lamp +{dl:.1f}/255 red")
 
         # 5. the top of the range against the default, where the user drags it
-        h8 = render(e, scene, {"film_stock": "cinestill_800t", "halation_headroom_ev": 8.0})
+        h8 = render(e, scene, {"film_stock": "cinestill_800t", "halation_headroom_ev": 8.0}, mask)
         d84 = (h8[lamp_halo] - h4[lamp_halo])[..., 0].mean() * 255
         moved = (np.abs(h8 - h4).max(2) > 2 / 255).mean() * 100
         check(d84 > 5 and moved > 0.5, "halation_headroom_ev 8 is visibly more than 4",

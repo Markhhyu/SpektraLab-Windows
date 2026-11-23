@@ -285,50 +285,24 @@ bool check_decode(Gpu* gpu, std::string& error) {
 // 1.3.4's node_headroom (CineStill 800T): a float64 oracle of the Metal
 // kernel's formula on RGB triples spanning both smoothstep ramps, zero and
 // negative maxima, and a clipped single channel.
-bool check_headroom_at(Gpu* gpu, double clip, std::string& error);
 bool check_headroom(Gpu* gpu, std::string& error) {
-    // 3.7: a lit frame, the clip ramp entirely above the mid-grey floor.
-    // 0.75: a dim frame, where both ramps overlap and the floor gates the
-    // clip -- without it, dropping the floor term passed (shown 2026-10-29).
-    return check_headroom_at(gpu, 3.7, error) && check_headroom_at(gpu, 0.75, error);
-}
-bool check_headroom_at(Gpu* gpu, double clip, std::string& error) {
-    const double from = -1.0, to = -0.25, headroom = 4.0, mid = 0.184, f0 = 1.5, f1 = 2.5;
-    const float p[7] = {float(1.0 / clip), float(from), float(1.0 / (to - from)), float(headroom),
-                        float(1.0 / mid), float(f0), float(1.0 / (f1 - f0))};
-    auto p_buf = gpu->upload(p, sizeof p, error);
-    if (!p_buf) return false;
-    const uint32_t pixels = 1031;
-    std::vector<float> x(3 * pixels);
-    for (uint32_t i = 0; i < pixels; ++i) {
-        // brightest channel from 2^-6 to past the clip, in fine steps of log2
-        const double m = std::exp2(-6.0 + 8.0 * double(i) / double(pixels - 1));
-        const int lead = int(i % 3);
-        for (int c = 0; c < 3; ++c) x[3 * i + c] = float(c == lead ? m : m * (0.2 + 0.3 * c));
+    // Either member of the pair can be the brightest pixel. Evidence stays
+    // attached to the same local source samples across the two exposures.
+    const uint32_t count=2, mask=1;
+    const float gain=16;
+    for (float other : {0.5f, 4.0f}) {
+        const float lamp=0.184f*8;
+        const float rgb[]={lamp,lamp,lamp,other,other,other};
+        auto src=gpu->upload(rgb,sizeof rgb,error);
+        auto bits=gpu->upload(&mask,sizeof mask,error);
+        auto out=output_buffer(gpu,6,error);
+        std::vector<double> expected={lamp*gain,lamp*gain,lamp*gain,other,other,other};
+        if (!src || !bits || !out ||
+            !gpu->dispatch("spk_highlight_headroom",{Arg::buf(src),Arg::buf(bits),
+                Arg::inline_bytes(&count,1),Arg::inline_bytes(&gain,1),Arg::buf(out)},count,error) ||
+            !check_values(gpu,out,expected,"highlight_headroom",1e-6,2e-5,error)) return false;
     }
-    x[0] = x[1] = x[2] = 0.0f;
-    x[3] = -1.0f; x[4] = -2.0f; x[5] = -0.5f;
-    x[6] = float(clip); x[7] = 0.01f; x[8] = 0.02f;   // a red-only clip
-    auto in = gpu->upload(x.data(), x.size() * sizeof(float), error);
-    auto out = output_buffer(gpu, x.size(), error);
-    if (!in || !out) return false;
-    std::vector<double> expected(x.size());
-    auto ss = [](double t) { t = std::clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); };
-    for (uint32_t i = 0; i < pixels; ++i) {
-        const double r = x[3 * i], g = x[3 * i + 1], b = x[3 * i + 2];
-        const double m = std::max(r, std::max(g, b));
-        double gain = 1.0;
-        if (m > 0.0) {
-            const double lm = std::log2(m);
-            gain = std::exp2(double(p[3]) * ss((lm + std::log2(double(p[0])) - p[1]) * p[2]) *
-                             ss((lm + std::log2(double(p[4])) - p[5]) * p[6]));
-        }
-        expected[3 * i] = r * gain; expected[3 * i + 1] = g * gain; expected[3 * i + 2] = b * gain;
-    }
-    const uint32_t n[] = {pixels};
-    return gpu->dispatch("spk_highlight_headroom", {Arg::buf(in), Arg::buf(p_buf), Arg::inline_bytes(n, 1),
-                         Arg::buf(out)}, pixels, error) &&
-           check_values(gpu, out, expected, "highlight_headroom", 1e-6, 2e-5, error);
+    return true;
 }
 
 }  // namespace

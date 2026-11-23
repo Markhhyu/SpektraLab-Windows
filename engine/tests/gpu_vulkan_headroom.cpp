@@ -1,4 +1,4 @@
-// Independent headless probe for Vulkan highlight headroom compression kernel.
+// Independent headless probe for Vulkan highlight headroom extrapolation kernel.
 // Validates spk_highlight_headroom against an independent float64 reference.
 #include "gpu/gpu.hpp"
 #include "gpu_vulkan_read.hpp"
@@ -20,35 +20,14 @@ constexpr float kGuard = -12345.25f;
 constexpr size_t kGuardCount = 16;
 constexpr double kTolerance = 1e-5;
 
-void headroom_reference(const std::vector<float>& in, const float p[7], size_t n, std::vector<double>& expected) {
-    expected.resize(n * 3);
-    auto smoothstep01 = [](double t) {
-        t = std::clamp(t, 0.0, 1.0);
-        return t * t * (3.0 - 2.0 * t);
-    };
-    for (size_t i = 0; i < n; ++i) {
-        double vx = double(in[3 * i]);
-        double vy = double(in[3 * i + 1]);
-        double vz = double(in[3 * i + 2]);
-        double m = std::max(vx, std::max(vy, vz));
-        double g = 1.0;
-        if (m > 0.0) {
-            double lm = std::log2(m);
-            double near_clip = smoothstep01((lm + std::log2(double(p[0])) - double(p[1])) * double(p[2]));
-            double over_floor = smoothstep01((lm + std::log2(double(p[4])) - double(p[5])) * double(p[6]));
-            g = std::exp2(double(p[3]) * near_clip * over_floor);
-        }
-        expected[3 * i] = vx * g;
-        expected[3 * i + 1] = vy * g;
-        expected[3 * i + 2] = vz * g;
-    }
-}
-
-bool check_case(Gpu* gpu, const std::string& case_name, const float p[7],
+bool check_case(Gpu* gpu, const std::string& case_name, float gain,
                 const std::vector<float>& input, size_t n, double& max_error,
                 std::string& error) {
-    auto p_buf = gpu->upload(p, 7 * sizeof(float), error);
-    if (!p_buf) return false;
+    std::vector<uint32_t> mask((n+31)/32);
+    for (size_t i=0; i<n; ++i)
+        if (i%3==0) mask[i/32] |= 1u << (i%32);
+    auto mask_buf = gpu->upload(mask.data(), mask.size()*sizeof(uint32_t), error);
+    if (!mask_buf) return false;
     auto in_buf = gpu->upload(input.data(), input.size() * sizeof(float), error);
     if (!in_buf) return false;
 
@@ -59,8 +38,8 @@ bool check_case(Gpu* gpu, const std::string& case_name, const float p[7],
 
     const uint32_t count_arg[1] = {uint32_t(n)};
     if (!gpu->dispatch("spk_highlight_headroom",
-                       {Arg::buf(in_buf), Arg::buf(p_buf),
-                        Arg::inline_bytes(count_arg, 1), Arg::buf(out_buf)},
+                       {Arg::buf(in_buf), Arg::buf(mask_buf),
+                        Arg::inline_bytes(count_arg, 1), Arg::inline_bytes(&gain,1), Arg::buf(out_buf)},
                        std::max(n, size_t(1)), error)) {
         return false;
     }
@@ -69,8 +48,9 @@ bool check_case(Gpu* gpu, const std::string& case_name, const float p[7],
     std::vector<float> actual;
     if (!read_test_buffer(gpu, out_buf, actual, error)) return false;
 
-    std::vector<double> expected;
-    headroom_reference(input, p, n, expected);
+    std::vector<double> expected(input.begin(), input.end());
+    for (size_t i=0; i<n; i+=3)
+        for (unsigned c=0; c<3; ++c) expected[3*i+c] *= gain;
 
     for (size_t i = 0; i < expected.size(); ++i) {
         const double delta = std::abs(double(actual[i]) - expected[i]);
@@ -112,24 +92,7 @@ int main(int argc, char** argv) {
     }
     std::printf("Vulkan headroom device: %s\n", gpu->device_name().c_str());
 
-    constexpr double kHeadroomClipFromEv = -1.0;
-    constexpr double kHeadroomClipToEv = -0.25;
-    constexpr double kMidgray = 0.184;
-    const double clip = 4.0;
-    const double headroom_ev = 1.5;
-    const double headroom_from_ev = 0.5;
-    const double headroom_to_ev = 2.0;
-
-    const float p[7] = {
-        float(1.0 / clip),
-        float(kHeadroomClipFromEv),
-        float(1.0 / (kHeadroomClipToEv - kHeadroomClipFromEv)),
-        float(headroom_ev),
-        float(1.0 / kMidgray),
-        float(headroom_from_ev),
-        float(1.0 / (headroom_to_ev - headroom_from_ev))
-    };
-
+    constexpr float gain = 16.0f;
     double max_error = 0.0;
     size_t passed = 0;
 
@@ -146,7 +109,7 @@ int main(int argc, char** argv) {
             input[3 * i + 2] = float(val * 1.1 - 0.05);
         }
 
-        if (!check_case(gpu.get(), "headroom-n" + std::to_string(n), p, input, n, max_error, error)) {
+        if (!check_case(gpu.get(), "headroom-n" + std::to_string(n), gain, input, n, max_error, error)) {
             std::fprintf(stderr, "headroom gate failed: %s\n", error.c_str());
             return 1;
         }
@@ -161,14 +124,14 @@ int main(int argc, char** argv) {
         edge_input[3] = 0.0f;  edge_input[4] = 0.0f;  edge_input[5] = 0.0f;
         edge_input[6] = 0.184f; // exactly midgray
         edge_input[9] = 4.0f;   // exactly clip
-        if (!check_case(gpu.get(), "headroom-edge", p, edge_input, n, max_error, error)) {
+        if (!check_case(gpu.get(), "headroom-edge", gain, edge_input, n, max_error, error)) {
             std::fprintf(stderr, "headroom edge case failed: %s\n", error.c_str());
             return 1;
         }
         ++passed;
     }
 
-    std::printf("headroom: %zu GPU cases passed; float64 headroom compression reference; max delta %.9g\n",
+    std::printf("headroom: %zu GPU cases passed; sensor-mask reference; max delta %.9g\n",
                 passed, max_error);
     return 0;
 }

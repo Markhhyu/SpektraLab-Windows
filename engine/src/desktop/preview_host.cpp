@@ -166,7 +166,9 @@ SessionPtr open_session(spk_engine* engine, const io::DecodedRaw& decoded,
     const auto params = opening_params(settings, scan_film).dump();
     // No reply is needed here; the host has no allocator or JSON lifetime to
     // share with the UI, and the C API validates the complete delta itself.
-    SessionPtr session(spk_open(engine, &input, params.c_str(), nullptr), &spk_session_release);
+    SessionPtr session(spk_open_raw(engine, &input,
+        decoded.clipped_pixels.empty() ? nullptr : decoded.clipped_pixels.data(),
+        uint32_t(decoded.clipped_pixels.size()), params.c_str(), nullptr), &spk_session_release);
     require(bool(session), "Open image: " + std::string(spk_last_error(engine)));
     return session;
 }

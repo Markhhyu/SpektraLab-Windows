@@ -630,6 +630,12 @@ void apply_film_specifics(Params& p) {
         set2(dc.gamma_interlayer_b_to_rg, 0.168, 0.226);
     }
     apply_halation_preset(p);
+    if (p.film.info.stock == "kodak_vision3_50d") {
+        // Fitted to the 50D MTF in developed density, including DIR and the
+        // existing back reflection. Keep the existing exponential tail radii.
+        set3(p.film_render.halation.scatter_core_um, 5.27, 3.99, 2.00);
+        set3(p.film_render.halation.scatter_tail_weight, 0.301, 0.497, 0.760);
+    }
     if (p.film.info.stock == "fujifilm_velvia_100") {
         set3(dc.gamma_samelayer_rgb, 0.108, 0.072, 0.054);
         set2(dc.gamma_interlayer_r_to_gb, 0.108, 0.054);

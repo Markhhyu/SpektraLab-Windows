@@ -681,7 +681,9 @@ spk_session* engine_open(const FloatImage& frame, const std::string& delta, Json
     const auto t1 = Clock::now();
     spk_image image{frame.rgb.data(), frame.width, frame.height, 3};
     char* reply = nullptr;
-    spk_session* handle = spk_open(g.engine, &image, delta.empty() ? nullptr : delta.c_str(), &reply);
+    spk_session* handle = spk_open_raw(g.engine, &image,
+        frame.clipped_pixels.empty() ? nullptr : frame.clipped_pixels.data(),
+        uint32_t(frame.clipped_pixels.size()), delta.empty() ? nullptr : delta.c_str(), &reply);
     if (!handle) {
         if (reply) spk_string_free(reply);
         throw HostError{"engine_error", std::string("open: ") + spk_last_error(g.engine)};

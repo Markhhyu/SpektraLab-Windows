@@ -18,6 +18,7 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -66,6 +67,19 @@ struct FloatImage {
     std::vector<float> rgb;
     std::optional<spk::io::RawDecodeTimings> raw_timings;
     std::optional<spk::io::RawMetadata> raw_metadata;
+    std::vector<std::uint32_t> clipped_pixels;
+
+    // Require evidence on both sides of a fractional sampling coordinate.
+    bool clipped_at(double x, double y) const {
+        if (clipped_pixels.empty() || !(x>=0 && y>=0 && x<=width-1 && y<=height-1)) return false;
+        auto bit = [&](uint32_t xx, uint32_t yy) {
+            const size_t i = size_t(yy)*width + xx;
+            return (clipped_pixels[i/32] & (1u << (i%32))) != 0;
+        };
+        const auto x0=uint32_t(x), y0=uint32_t(y);
+        const auto x1=uint32_t(std::ceil(x)), y1=uint32_t(std::ceil(y));
+        return bit(x0,y0) && bit(x0,y1) && bit(x1,y0) && bit(x1,y1);
+    }
 };
 
 struct Rgba8 {

@@ -155,11 +155,31 @@ void rejection() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     try {
         orientations();
         colour_and_scale();
         rejection();
+        if (argc == 2) {
+            // The fixture is 128x96, displayed 90 degrees clockwise. Only
+            // the 2x2 cell at source (12,20) was saturated in all colours.
+            for (bool expanded : {false,true}) for (bool half : {false,true}) {
+                spk::io::DecodedRaw image;
+                std::string error;
+                bool ok = expanded ? spk::io::decode_raw_headroom(argv[1],image,error,half)
+                                   : spk::io::decode_raw_compatible(argv[1],image,error,half);
+                if (!ok) throw std::runtime_error(error);
+                const unsigned scale=half ? 2 : 1;
+                require(image.width==96/scale && image.height==128/scale,"rotated RAW dimensions");
+                require(image.clipped_pixels.size()==(size_t(image.width)*image.height+31)/32,"mask length");
+                for (unsigned y=0;y<image.height;++y) for (unsigned x=0;x<image.width;++x) {
+                    const size_t i=size_t(y)*image.width+x;
+                    const bool bit=bool(image.clipped_pixels[i/32] & (1u<<(i%32)));
+                    const bool expected=x>=74/scale && x<76/scale && y>=12/scale && y<14/scale;
+                    require(bit==expected,"RAW clipping mask coordinates or white levels");
+                }
+            }
+        }
         std::cout << "RAW headroom mathematical contract: " << checked << " checks passed\n";
         return 0;
     } catch (const std::exception& exception) {

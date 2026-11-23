@@ -219,6 +219,7 @@ struct ExposureEvs {
     double center = 0.0;
     double protect_highlights = 0.0;
     double protect_shadows = 0.0;
+    double p5 = 0.0, p995 = 0.0;
     // The three legacy meters, from the same sample (RFC-015 P.1): a session
     // caches all seven, so a method change does not re-meter.
     double center_weighted = 0.0;
@@ -358,6 +359,7 @@ public:
     // it (input_cast, decode_input, geometry), reads the whole image back and
     // returns all seven methods' EVs. Leaves the pipeline's pitch as it was.
     bool measure_meter_evs(const Image& in, ExposureEvs& out, std::string& error);
+    void update_protection(ExposureEvs& evs) const;
 
     // RFC-024: the mask this print would apply, as the delta in stops at each
     // cell of its analysis grid (`gw` x `gh`, row-major, the frame's own
@@ -582,7 +584,8 @@ private:
     static bool legacy_exposure_ev(const std::vector<double>& Y, uint32_t sh, uint32_t sw,
                                    const std::string& method, double& ev, std::string& error);
     // RFC-015 §2.3's four intents, from one sample.
-    static ExposureEvs exposure_evs_from(const std::vector<double>& Y, uint32_t sh, uint32_t sw);
+    ExposureEvs exposure_evs_from(const std::vector<double>& Y, uint32_t sh, uint32_t sw) const;
+    double highlight_stops_ = 2.5, shadow_stops_ = 3.5;
 
     /// The film side split at the one place the strips can cut it. The prefix
     /// is everything that must see the whole plane -- `geometry` changes the
@@ -649,7 +652,6 @@ private:
     bool node_upsample(const Image& in, Image& out, std::string& error);
     bool node_exposure(const Image& in, Image& out, std::string& error);
     bool node_boost(const Image& in, Image& out, std::string& error);
-    bool node_headroom(const Image& in, Image& out, std::string& error);
     // RFC-032 §27 / RFC-031 (`overscan.cpp`): the film canvas, its imprints,
     // and the no-film mask at the start of the print side. Not in the graph
     // while off.

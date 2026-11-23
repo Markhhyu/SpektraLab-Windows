@@ -171,7 +171,9 @@ int run(int argc,wchar_t** argv) {
     spk_image input{decoded.rgb.data(),decoded.width,decoded.height,3};
     auto delta=params.dump();char* reply=nullptr;
     t=Clock::now();
-    std::unique_ptr<spk_session,decltype(&spk_session_release)> session(spk_open(engine.get(),&input,delta.c_str(),&reply),&spk_session_release);
+    std::unique_ptr<spk_session,decltype(&spk_session_release)> session(spk_open_raw(engine.get(),&input,
+        decoded.clipped_pixels.empty() ? nullptr : decoded.clipped_pixels.data(),
+        uint32_t(decoded.clipped_pixels.size()), delta.c_str(),&reply),&spk_session_release);
     if(!session) {if(reply) spk_string_free(reply);throw std::runtime_error(spk_last_error(engine.get()));}
     auto opened=parse_reply(reply);timings.set("open",Json(ms(t)));
     Result result;t=Clock::now();

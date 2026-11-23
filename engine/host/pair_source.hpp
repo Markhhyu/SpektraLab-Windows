@@ -39,6 +39,8 @@ private:
     struct Picture {
         uint32_t width, height;
         std::vector<uint16_t> rgb;
+        std::vector<uint32_t> clipped;
+        size_t bytes() const { return rgb.size()*sizeof(uint16_t) + clipped.size()*sizeof(uint32_t); }
         Probe probe;
         std::optional<spk::io::RawMetadata> raw_metadata;
     };

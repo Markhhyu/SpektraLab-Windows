@@ -93,7 +93,16 @@ std::string method(const Json& hole, const Json& params) {
     return m.empty() ? "balanced" : m;
 }
 std::string meter_key(const Json& hole, const Json& params) {
-    return stamp(hole.at("path").as_string()) + "|" + hole.at("decode").dump() + "|" + hole.at("geometry").dump() + "|" + method(hole,params);
+    const auto intent=method(hole,params);
+    std::string key=stamp(hole.at("path").as_string()) + "|" + hole.at("decode").dump() + "|" + hole.at("geometry").dump() + "|" + intent;
+    const auto stock=params.at("film_stock").as_string();
+    if ((intent=="protect_highlights" || intent=="protect_shadows") &&
+        (stock=="kodak_vision3_50d" || stock=="kodak_ektachrome_100")) {
+        for (const char* field : {"film_stock","density_curve_gamma","camera_filter","development_active",
+                                  "development_push_stops","development_temperature_c","input_color_space"})
+            key+="|"+params.at(field).dump();
+    }
+    return key;
 }
 std::optional<double> saved_meter(const Json& hole, const Json& params) {
     const auto& value=hole.at("meteredEV");
@@ -186,13 +195,13 @@ std::string PairSource::signature(const Json& input, const Json& params, const J
         Json h = Json::object(); h.set("file", Json(stamp(hole.at("path").as_string())));
         for (const char* name : {"decode", "geometry", "placement", "exposureEV", "exposureBaselineEV", "autoExposure"}) h.set(name,hole.at(name));
         if (const auto reading=saved_meter(hole,params)) h.set("meteredEV",Json(*reading));
-        h.set("method", Json(method(hole, params))); key.set(side, std::move(h));
+        h.set("meterKey", Json(meter_key(hole, params))); key.set(side, std::move(h));
     }
     return key.dump();
 }
 
 size_t PairSource::cached_bytes() const {
-    size_t bytes = 0; for (const auto& e : images_) bytes += e.picture->rgb.size()*sizeof(uint16_t); return bytes;
+    size_t bytes = 0; for (const auto& e : images_) bytes += e.picture->bytes(); return bytes;
 }
 
 bool PairSource::compose(const Json& pair, const Json& params, FloatImage& out, Description& d,
@@ -240,12 +249,17 @@ bool PairSource::compose(const Json& pair, const Json& params, FloatImage& out, 
                     const double u=geom.x+geom.width/2+(px*ca-py*sa)/source.width;
                     const double v=geom.y+geom.height/2+(px*sa+py*ca)/source.height;
                     for(unsigned c=0;c<3;++c)picture->rgb[(size_t(y)*d.hole_width+x)*3+c]=half(bilinear(source,u,v,c));
+                    if (source.clipped_at(u*source.width-.5,v*source.height-.5)) {
+                        if (picture->clipped.empty()) picture->clipped.resize((size_t(d.hole_width)*d.hole_height+31)/32);
+                        const size_t i=size_t(y)*d.hole_width+x;
+                        picture->clipped[i/32] |= 1u<<(i%32);
+                    }
                 }
             }
             // The full decode dies before composition/meter upload. Oversized
             // holes use the exact same quantized buffer but are not retained.
-            if(picture->rgb.size()*2<=cache_budget) {
-                while(!images_.empty()&&(images_.size()>=3||cached_bytes()+picture->rgb.size()*2>cache_budget))images_.pop_back();
+            if(picture->bytes()<=cache_budget) {
+                while(!images_.empty()&&(images_.size()>=3||cached_bytes()+picture->bytes()>cache_budget))images_.pop_back();
                 images_.push_front({key,picture});
             }
         }
@@ -282,8 +296,14 @@ bool PairSource::compose(const Json& pair, const Json& params, FloatImage& out, 
         const float gain=float(std::exp2(ev));const uint32_t ox=turned?0:uint32_t(side)*d.advance,oy=turned?uint32_t(side)*d.advance:0;
         if (!std::isfinite(gain)) { error="pair exposure is outside the finite float range"; return false; }
         d.gains[side]=gain;
+        if (!picture->clipped.empty() && result.clipped_pixels.empty())
+            result.clipped_pixels.resize((size_t(d.width)*d.height+31)/32);
         for(uint32_t y=0;y<picture->height;++y) {
             if(!(y%64))checkpoint();
+            if (!picture->clipped.empty()) for(uint32_t x=0;x<picture->width;++x) {
+                const size_t src=size_t(y)*picture->width+x, dst=size_t(y+oy)*d.width+x+ox;
+                if (picture->clipped[src/32] & (1u<<(src%32))) result.clipped_pixels[dst/32] |= 1u<<(dst%32);
+            }
             for(uint32_t x=0;x<picture->width;++x)for(unsigned c=0;c<3;++c)
                 result.rgb[(size_t(y+oy)*d.width+x+ox)*3+c]=from_half(picture->rgb[(size_t(y)*picture->width+x)*3+c])*gain;
         }

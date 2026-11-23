@@ -131,7 +131,7 @@ def tiff_info(path):
     return tags
 
 
-def write_dng_without_preview(path, w=128, h=96):
+def write_dng_without_preview(path, w=128, h=96, sample=None, orientation=1):
     """Small valid uncompressed Bayer DNG; only the raw IFD, no preview IFD."""
     tags = {}
     def tag(number, kind, count, value):
@@ -142,6 +142,7 @@ def write_dng_without_preview(path, w=128, h=96):
         tag(number, 4, len(values), struct.pack("<" + "I" * len(values), *values))
     long(254, 0); long(256, w); long(257, h)
     short(258, 16); short(259, 1); short(262, 32803)
+    short(274, orientation)
     long(273, 0); short(277, 1); long(278, h); long(279, w * h * 2)
     short(33421, 2, 2); tag(33422, 1, 4, bytes([0, 1, 1, 2]))
     tag(50706, 1, 4, bytes([1, 4, 0, 0])); tag(50707, 1, 4, bytes([1, 1, 0, 0]))
@@ -162,7 +163,9 @@ def write_dng_without_preview(path, w=128, h=96):
         entries.append((number, struct.pack("<HHI", number, kind, count) + field))
     pixels_at = extra_at + len(extra)
     entries = [struct.pack("<HHII", 273, 4, 1, pixels_at) if number == 273 else entry for number, entry in entries]
-    pixels = b"".join(struct.pack("<H", 8000 + 32 * x + 16 * y) for y in range(h) for x in range(w))
+    if sample is None:
+        sample = lambda x, y: 8000 + 32 * x + 16 * y
+    pixels = b"".join(struct.pack("<H", sample(x, y)) for y in range(h) for x in range(w))
     with open(path, "wb") as f:
         f.write(b"II*\0" + struct.pack("<IH", 8, len(tags)) + b"".join(entries) + struct.pack("<I", 0) + extra + pixels)
 

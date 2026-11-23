@@ -278,6 +278,11 @@ if(SPEKTRALAB_PORTABLE_BACKEND)
                 add_executable(spk_raw_headroom tests/raw_headroom.cpp)
                 target_link_libraries(spk_raw_headroom PRIVATE spk_image_io)
                 add_test(NAME spk_raw_headroom COMMAND spk_raw_headroom)
+                find_package(Python3 QUIET COMPONENTS Interpreter)
+                if(Python3_Interpreter_FOUND)
+                    add_test(NAME spk_raw_sensor_clipping COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/raw_sensor_clipping.py" "$<TARGET_FILE:spk_raw_headroom>")
+                endif()
                 add_executable(spk_raw_threads tests/raw_threads.cpp)
                 target_link_libraries(spk_raw_threads PRIVATE spk_image_io spk_libraw)
                 add_test(NAME spk_raw_threads COMMAND spk_raw_threads)
@@ -315,7 +320,7 @@ if(SPEKTRALAB_PORTABLE_BACKEND)
             add_test(NAME spk_vulkan_smoke
                 COMMAND spk_vulkan_smoke "${vulkan_resource_dir}")
 
-            foreach(probe grain pointwise resample transfer device_lost geometry lut_di view no_film bw scene_latitude overscan pair di_encode headroom mask)
+            foreach(probe film_response stock_exposure grain pointwise resample transfer device_lost geometry lut_di view no_film bw scene_latitude overscan pair di_encode headroom mask)
                 add_executable(spk_vulkan_${probe} tests/gpu_vulkan_${probe}.cpp)
                 target_include_directories(spk_vulkan_${probe} PRIVATE
                     "${CMAKE_CURRENT_SOURCE_DIR}/include"

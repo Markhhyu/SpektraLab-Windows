@@ -63,6 +63,26 @@ worth shipping, keeping the version bump and the asset name in step.
 
 ## History
 
+### v1.9.5 — 胶片曝光、高光与细节校准 / Film exposure, highlights and detail
+
+<h4 id="cn-1.9.5">胶片模拟</h4>
+
+- 50D 和 E100 的自动曝光保护按各自胶片曲线计算。校准 E100 色层曝光后，在未参与拟合的日光灰阶上，蓝通道 Status A 密度均方根误差从 0.170 D 降至 0.041 D。
+- CineStill 800T 根据白平衡前的 Bayer RAW 饱和信息判断哪些灯芯需要补偿，减少对仍保留细节的明亮光源的误判。
+- VISION3 50D 按柯达公布的分通道调制传递函数（MTF）校准乳剂散射。红通道在 20 周期/毫米的对比度传递从约 58% 提高到 86%，蓝通道在 40 周期/毫米从约 62% 调整到 47%。
+
+以上数值来自模拟测试图与原厂资料的对照，本版尚无同场景实拍胶片对照。
+
+<h4 id="en-1.9.5">Film simulation</h4>
+
+- The 50D and E100 auto-exposure guards now follow each stock's characteristic curve. After adjusting E100 layer exposure, blue-channel Status A density RMS error on held-out daylight wedge samples fell from 0.170 D to 0.041 D.
+- CineStill 800T uses pre-white-balance Bayer RAW saturation to identify clipped light cores, reducing false positives on bright sources that still retain detail.
+- VISION3 50D emulsion scatter now follows Kodak's per-channel modulation transfer curves. Red contrast transfer at 20 cycles/mm rose from about 58% to 86%, and blue at 40 cycles/mm moved from about 62% to 47%.
+
+These measurements compare synthetic targets with published film data. A matched-scene comparison with physical film is still pending.
+
+Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.9.4...v1.9.5
+
 ### v1.9.4 — 界面重做、缩略图快十倍 / Interface rebuilt, thumbnails ten times faster
 
 <h4 id="cn-1.9.4">新增功能</h4>

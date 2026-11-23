@@ -72,6 +72,19 @@ void lut2d_cubic_host(const Vec& lut, size_t L, const double tc[2], double out[3
 }
 
 
+void neutral_film_exposure(const Mat3& matrix, const Vec& lut, size_t side,
+                           double grey, double raw[3]) {
+    const double rgb[3] = {grey, grey, grey};
+    double xyz[3], tc[2];
+    matrix.apply(rgb, xyz);
+    const double b = xyz[0] + xyz[1] + xyz[2];
+    const double denom = b > 1e-10 ? b : 1e-10;
+    const double xy[2] = {xyz[0] / denom, xyz[1] / denom};
+    tri2quad(xy, tc);
+    lut2d_cubic_host(lut, side, tc, raw);
+    for (int c = 0; c < 3; ++c) raw[c] *= is_nan(b) ? 0.0 : b;
+}
+
 bool print_constants(const Colour& colour, const Blob& blob, const Params& params,
                      const Vec& tc_lut, size_t tc_lut_side,
                      PrintConstants& out, std::string& error) {
@@ -111,17 +124,8 @@ bool print_constants(const Colour& colour, const Blob& blob, const Params& param
     // One pixel of 0.184 grey through the film model: RGB -> (tc, b) -> the
     // tc_lut -> log -> the film's own density curves -> a spectral density.
     auto density_spectral_for = [&](double grey, Vec& dst) {
-        const double rgb[3] = {grey, grey, grey};
-        double xyz[3];
-        tc_b.apply(rgb, xyz);
-        const double b = xyz[0] + xyz[1] + xyz[2];
-        const double denom = b > 1e-10 ? b : 1e-10;
-        const double xy[2] = {xyz[0] / denom, xyz[1] / denom};
-        double tc[2];
-        tri2quad(xy, tc);
         double raw[3];
-        lut2d_cubic_host(tc_lut, tc_lut_side, tc, raw);
-        for (int c = 0; c < 3; ++c) raw[c] *= is_nan(b) ? 0.0 : b;
+        neutral_film_exposure(tc_b, tc_lut, tc_lut_side, grey, raw);
 
         // `develop_simple` on the film's *raw* density curves -- not the
         // normalised ones the image path uses. The reference is explicit that

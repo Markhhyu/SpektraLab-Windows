@@ -88,7 +88,7 @@ commits.
 | `spk_di_encode` (Cineon DI) | same | tested (Windows) | tested (`export_di` on a full 32.95 MP RAW) |
 | `spk_mask_reduce`, `spk_mask_epilogue` (contrast mask) | same | tested (Windows) | tested (`spk_vulkan_mask`: float64 oracle, striped band, exact bypass) |
 | `spk_scene_latitude` | same | tested (Windows) | tested (`spk_windows_feature_boundaries`: mapping on/off) |
-| `spk_highlight_headroom` (1.3.4, CineStill 800T) | `spk_highlight_headroom.comp` (2026-10-29) | — | tested (`spk_vulkan_pointwise`, float64 oracle; Metal parity on a Mac) |
+| `spk_highlight_headroom` (1.3.4, CineStill 800T) | `spk_highlight_headroom.comp` (2026-10-29) | — | tested (`spk_vulkan_pointwise`, source clipping mask and fixed lamp gain) |
 | `spk_overscan_canvas`, `spk_overscan_add_mask`, `spk_overscan_film_present`, `spk_overscan_light` | same | tested (Windows) | tested (`spk_windows_feature_boundaries` canvas; host probe 135 frame) |
 
 Host-side (C++) dependencies of the remaining unported features: `overscan.cpp`
@@ -164,7 +164,7 @@ port's fork (`afd2bae6`) and 1.3.4, checked against the Vulkan side:
 | `film_sensitivity_edge_` (the edge never sees the lens filter) | `pipeline.cpp`, `overscan.cpp` | portable |
 | alias profiles (`derived_from`), CineStill 800T | `profile.cpp`, `params.cpp` | portable; Metal parity tested |
 | the back-reflection halo (per-layer four-Gaussian kernel) | `halation_psf.hpp`, `pipeline.cpp` `halation_blurs` | portable (shared Blur components); Metal parity tested |
-| `halation_headroom_ev`, `node_headroom` | `pipeline.cpp`, kernel `spk_highlight_headroom` | **was refused at dispatch**; now `spk_highlight_headroom.comp` |
+| `halation_headroom_ev`, sensor clipping mask | `engine.cpp`, kernel `spk_highlight_headroom` | Windows RAW source evidence applied before tier resampling |
 | CineStill's 135 and 120 edge (Menlo-Bold, ArialNarrow) | `overscan.cpp` | portable layout; faces mapped to DejaVu Sans Mono Bold / Liberation Sans x0.82 (`resources_product/fonts/README.md`) |
 
 Found and fixed by grading against Metal: the BT.709 decode breakpoint

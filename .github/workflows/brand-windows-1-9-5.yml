@@ -1,0 +1,41 @@
+name: Add the fork-branded v1.9.5 download
+on:
+  push:
+    branches: [release/name-v1.9.5]
+permissions:
+  contents: write
+concurrency: add-branded-windows-1-9-5
+jobs:
+  link-installer:
+    if: github.repository == 'Markhhyu/SpektraLab-Windows'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: v1.9.5
+      SOURCE: f06b22ec475f5e5d5744b8d9ede11b4e6d3a1d2c
+      EXPECTED: b9b33889b9a7f330cf0dfd528597f6b15f83e042ec23978cb43302e76c8ab1a9
+    steps:
+      - name: Publish additional names for the verified installer and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          old=SpektraLab_1.9.5_x64-setup.exe
+          name=SpektraLab-Windows-Markhhyu-1.9.5-x64-setup.exe
+          test "$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)" = "$SOURCE"
+          release="$(gh api "repos/$GH_REPO/releases/tags/$TAG")"
+          jq -e --arg d "sha256:$EXPECTED" --arg n "$old" '.draft == false and .prerelease == false and any(.assets[]; .name == $n and .digest == $d and .state == "uploaded")' <<< "$release"
+          gh release download "$TAG" -p "$old" -p "$old.sha256"
+          sha256sum --check "$old.sha256"
+          cp "$old" "$name"
+          echo "$EXPECTED  $name" > "$name.sha256"
+          sha256sum --check "$name.sha256"
+          for file in "$name" "$name.sha256"; do
+            digest="sha256:$(sha256sum "$file" | cut -d ' ' -f1)"
+            if ! jq -e --arg n "$file" 'any(.assets[]; .name == $n)' <<< "$release" >/dev/null; then
+              gh release upload "$TAG" "$file"
+            fi
+            release="$(gh api "repos/$GH_REPO/releases/tags/$TAG")"
+            jq -e --arg n "$file" --arg d "$digest" 'any(.assets[]; .name == $n and .digest == $d and .state == "uploaded")' <<< "$release"
+          done

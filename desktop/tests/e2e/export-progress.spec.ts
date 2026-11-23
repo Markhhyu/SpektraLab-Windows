@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 
 test('export shows the host’s progress and announces the finished batch', async ({ page }) => {
   const dialogs: string[] = [];
-  page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.accept(); });
+  page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
   await page.goto('/?open=&renderDelay=300');
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 20_000 });
   await page.getByTestId('export-button').click();
@@ -15,7 +15,8 @@ test('export shows the host’s progress and announces the finished batch', asyn
   await expect.poll(async () => Number(await bar.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
   await expect(bar).toHaveAttribute('aria-valuenow', '100', { timeout: 20_000 });
   await expect(page.getByTestId('export-status')).toContainText('1 of 1 processed');
-  await expect.poll(() => dialogs.length).toBe(1);
+  await expect.poll(() => dialogs.length).toBe(2);
+  expect(dialogs[1]).toContain('Back to the Library?');
   expect(dialogs[0]).toContain('Export finished');
   expect(dialogs[0]).toContain('1 written, 0 skipped, 0 failed.');
   // The page is usable again: the Export button is back.

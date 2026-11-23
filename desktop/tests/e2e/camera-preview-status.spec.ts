@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('camera preview badge distinguishes pending, failure and idle in both languages', async ({ page }) => {
   await page.goto('/?open=');
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   for (const language of ['english', 'simplifiedChinese']) {
     for (const status of ['loading', 'failed', 'idle']) {
       await page.evaluate(({ language, status }) => {

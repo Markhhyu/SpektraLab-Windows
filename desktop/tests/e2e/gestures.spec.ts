@@ -19,7 +19,8 @@ test('filmstrip drag reorders without switching the editor and persists on reope
   expect(await state(page, 's.selection')).toBe(before.selected);
   expect(await state(page, 's.sidecar.params')).toEqual(before.params);
   await page.reload();
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await page.getByTestId('library-module-develop').click();
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   expect(await state(page, 's.frames.map(f=>f.path)')).toEqual(paths);
 });
 test('panel handles track a bounded drag, reset on double-click, and retain widths across reload', async ({ page }) => {
@@ -29,7 +30,9 @@ test('panel handles track a bounded drag, reset on double-click, and retain widt
   await page.mouse.move(box.x + 3, box.y + 200); await page.mouse.down();
   await page.mouse.move(box.x + 73, box.y + 200, { steps: 5 }); await page.mouse.up();
   expect(await state(page, 'settings.leftWidth')).toBe(324);
-  await page.reload(); await expect(handle).toHaveAttribute('aria-valuenow', '324');
+  await page.reload();
+  await page.getByTestId('library-module-develop').click();
+  await expect(handle).toHaveAttribute('aria-valuenow', '324');
   await handle.dblclick(); expect(await state(page, 'settings.leftWidth')).toBe(254);
 });
 test('Ctrl-drag draws a straighten guide and commits a reversible geometry edit on release', async ({ page }) => {

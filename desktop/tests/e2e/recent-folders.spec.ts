@@ -14,6 +14,9 @@ test('a folder opened at launch is offered under Open Recent, survives a restart
   // A restart without a roll: nothing opens by itself, the folder is still offered.
   await page.goto('/');
   await expect.poll(() => page.locator('.thumb').count()).toBe(0);
+  // A populated catalog opens the Library. Open one image to reach the
+  // editor toolbar before reopening the original folder from its menu.
+  await page.getByTestId('library-cell').first().dblclick();
   await page.getByTestId('recent-button').click();
   await page.getByTestId('recent-menu').getByRole('menuitem', { name: 'Roll 01' }).click();
   await expect(page.locator('.thumb')).toHaveCount(8);

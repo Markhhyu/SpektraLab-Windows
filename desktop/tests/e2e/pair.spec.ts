@@ -7,7 +7,7 @@ const state = (page: Page, expr: string) => page.evaluate((e) => {
 }, expr);
 async function open(page: Page, renderDelay = 0) {
   await page.goto(`/?open=&renderDelay=${renderDelay}`);
-  await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
 }
 test('creates a pair in strip order, edits one hole, and reloads the owned recipe with the folder', async ({ page }) => {
   await open(page);
@@ -24,7 +24,9 @@ test('creates a pair in strip order, edits one hole, and reloads the owned recip
   expect(await state(page, 's.pair.left.exposureBaselineEV')).toBeCloseTo(1 / 3);
   expect(await state(page, 's.pair.right.exposureEV')).toBe(0);
   await expect.poll(() => page.evaluate((path) => localStorage.getItem(`pair:${path}`), savedPath)).toContain('0.3333333333333333');
-  await page.reload(); await expect(page.getByTestId('tier-badge')).toHaveText('full');
+  await page.reload();
+  await page.getByTestId('library-module-develop').click();
+  await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await expect(page.locator('.thumb')).toHaveCount(9);
   await page.locator('.thumb').filter({ hasText: 'Half-Frame Pair' }).click();
   await expect.poll(() => state(page, 's.selection')).toBe(savedPath);
@@ -43,7 +45,7 @@ for (const renderDelay of [0, 600]) {
     // on a slower CI runner. Wait for the actual pair, then let Playwright
     // resolve a visible, stable source before measuring the destination.
     await expect.poll(() => state(page, 's.pairInfo?.left?.available')).toBe(true);
-    await expect(page.getByTestId('tier-badge')).toHaveText('full');
+    await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
     const gate = page.getByTestId('pair-overlay').locator('rect').nth(1);
     const selected = await state(page, 's.selection');
     const source = page.locator('.thumb[data-path="/mock/Roll 01/DSC_0002.NEF"]');

@@ -328,6 +328,15 @@ jobs:
           npx playwright install --with-deps chromium
           npm run test:e2e -- --workers=2 --reporter=line
 
+      - name: Keep the visible UI state for failed browser checks
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-ui-failures
+          path: desktop/test-results/**/error-context.md
+          if-no-files-found: ignore
+          retention-days: 7
+
   package-linux:
     name: Package (Linux .deb + AppImage)
     needs: [engine-linux, desktop-checks]

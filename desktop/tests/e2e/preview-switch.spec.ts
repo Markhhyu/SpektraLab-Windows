@@ -23,7 +23,7 @@ async function surfaces(page: Page) {
     const nav = document.querySelector<HTMLCanvasElement>('[data-testid="navigator"] canvas')!;
     const ctx = nav.getContext('2d')!;
     const navigator = positions.map(([x, y]) => Array.from(ctx.getImageData(Math.floor(nav.width * x!), Math.floor(nav.height * y!), 1, 1).data));
-    const histogram = Array.from(document.querySelectorAll('[data-testid="histogram"] path')).map((path) => path.getAttribute('d')!);
+    const histogram = Array.from(document.querySelectorAll('[data-testid="histogram"] :is(.hist-luma, .hist-channel)')).map((path) => path.getAttribute('d')!);
     return { main, navigator, histogram, navSize: [nav.width, nav.height], canvasSize: [canvas.width, canvas.height], lost: gl.isContextLost(), glError: gl.getError() };
   });
 }
@@ -67,7 +67,10 @@ test('camera fallback draws real pixels on all surfaces before decode, then show
   expect(original.histogram).toHaveLength(4);
   // Histogram paths must have populated bins above their baseline, not merely
   // a visible empty SVG. Each channel has its own coloured input distribution.
-  for (const path of original.histogram) expect(path).toMatch(/L[\d.]+ 0\.0/);
+  for (const path of original.histogram) {
+    const samples = Array.from(path.matchAll(/L[\d.]+ ([\d.]+)/g), (match) => Number(match[1]));
+    expect(Math.min(...samples)).toBeLessThan(Math.max(...samples));
+  }
 
   await page.evaluate((colors) => {
     const w = window as unknown as { __spk: {

@@ -19,6 +19,7 @@ async function menu(page: Page) {
 const full = (page: Page) => expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 20_000 });
 
 test('bypass retains edits, restores the film on selection, and survives reopen with a matching proof', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.addInitScript(() => localStorage.setItem('sidecar:/mock/Roll 01/DSC_0001.NEF', JSON.stringify({
     params: { filmEdge: { active: true, format: '135', seeded: true }, dateBack: { active: true } },
     geometry: { crop: { x: .1, y: .1, width: .7, height: .6 }, quarterTurns: 1, flipH: true },

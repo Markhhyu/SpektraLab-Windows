@@ -34,9 +34,11 @@
 #include "cam16.hpp"
 #include "colour.hpp"
 #include "curves.hpp"
+#include "diffusion_psf.hpp"
 #include "digital_intermediate.hpp"
 #include "hanatos.hpp"
 #include "image.hpp"
+#include "negative_hue.hpp"
 #include "params.hpp"
 #include "printing.hpp"
 #include "strip.hpp"
@@ -275,6 +277,11 @@ struct OverscanLayout {
     double fog_rgb[3] = {1, 1, 1}, date_rgb[3] = {1, 1, 0}, edge_rgb[3] = {1, 1, 0};
     double hole_cmy[3] = {0, 0, 0};
     double flare_amp = 0, flare_width = 0.05;
+    // API-SPEC §21.4, macOS 2.x: the picture's cos^n falloff over the gate.
+    // `falloff` is the amount (0 = off), `falloff_f` the format's normal lens
+    // (mm, the axis the angle is taken from), `falloff_n` the camera's own
+    // exponent, drawn from the camera seed (3.8-4.2, about cos^4).
+    double falloff = 0.0, falloff_f = 50.0, falloff_n = 4.0;
     // RFC-032 §29: the gate's own shape -- corner radii (s-,t-), (s+,t-),
     // (s+,t+), (s-,t+); convex quads added to (+1) or cut from (-1) the
     // opening, film mm; the machined edge's roughness.
@@ -670,6 +677,9 @@ private:
     bool node_grain(const Image& in, Image& out, std::string& error);
     /// The grain model itself; `node_grain` is this plus RFC-025's strength.
     bool grain_realise(const Image& in, Image& out, std::string& error);
+    /// The grain's spatial scale: `dens - in` blurred with
+    /// `clump_sigma_um / pixel_size_um_` and added back (see `GrainParams`).
+    bool grain_spatial_scale(const Image& in, const Image& dens, Image& out, std::string& error);
     bool node_enlarger_spectral(const Image& in, Image& out, std::string& error);
     bool node_print_exposure(const Image& in, Image& out, std::string& error);
     bool node_print_curves(const Image& in, Image& out, std::string& error);
@@ -678,6 +688,12 @@ private:
     // before `node_upsample`, and not dispatched at all while it is off.
     bool scene_latitude_wanted() const;
     bool node_scene_latitude(const Image& in, Image& out, std::string& error);
+    // The Decode curve (API-SPEC §17, macOS 2.x): a tone curve on the scene
+    // before the film, on Scene Latitude's axis (stops about the metered
+    // mid-grey), so it composes with placement and ignores Film Exposure by
+    // reading its table at E + c.
+    bool scene_curve_wanted() const;
+    bool node_scene_curve(const Image& in, Image& out, std::string& error);
 
     // RFC-024's virtual contrast mask (`contrast_mask.cpp`). `prepare` runs
     // once per print run on the whole negative, after `print_prefix`; the
@@ -689,6 +705,34 @@ private:
     void release_contrast_mask();
     bool node_contrast_mask_epilogue(const Image& in, Image& out, std::string& error);
     bool node_scan_spectral(const Image& in, Image& out, std::string& error);
+    // The print's hue, from the negative (core/negative_hue.hpp, ported from the
+    // macOS 2.x line): every colour negative on a colour paper no table covers.
+    bool node_negative_hue(const Image& negative, const Image& in, Image& out, std::string& error);
+    // The camera's diffusion filter (柔光镜, API-SPEC §21.5, macOS 2.x, ported):
+    // a pass on the tier's source in linear light, before the film chain.
+    bool node_diffusion_filter(const Image& in, double um_per_px, Image& out, std::string& error);
+    bool diffusion_components(double um_per_px, double& p_s,
+                              std::vector<Blur::Component>& comps, std::string& error) const;
+    // The taking lens's aberrations (API-SPEC §21.6, macOS 2.x, ported): the
+    // spherical glow, lateral CA, LoCA and the field's curvature/astigmatism/
+    // coma gathers. All on the tier's source, in linear light, before the film.
+    struct LensFieldPx {
+        double sfc = 0.0, sast = 0.0, coma = 0.0;
+        double var_t1 = 0.0, var_r1 = 0.0;
+        bool tangential = false, radial = false;
+        int lmax = 0;
+    };
+    bool lens_aberrations_wanted(double um_per_px) const;
+    LensFieldPx lens_field_px(double um_per_px) const;
+    bool lens_glow(double um_per_px, double& weight, double& sigma) const;
+    bool node_lens_glow(const Image& in, double um_per_px, Image& out, std::string& error);
+    bool node_lens_aberrations(const Image& in, double um_per_px, Image& out, std::string& error);
+    bool lens_pyramid(const Image& base, int lmax, std::vector<Image>& levels, std::string& error);
+    bool lens_line(const std::vector<Image>& levels, double pcx, double pcy, double inv_hd,
+                   const LensFieldPx& F, uint32_t mode, Image& out, std::string& error);
+    // The minilab print (core/minilab.hpp, macOS 2.x): the pair-specific
+    // log-positive -> paper-CMY table for the catalogued pairs.
+    bool node_minilab(const Image& in, Image& out, std::string& error);
     // RFC-028: the Digital Intermediate, in place of the whole paper and scan.
     bool node_digital_intermediate(const Image& in, Image& out, std::string& error);
     bool node_bw_correction(const Image& in, Image& out, std::string& error);
@@ -713,6 +757,9 @@ private:
     bool device_max(const Image& img, double& out, std::string& error);
     bool read_back(const Image& img, std::vector<float>& out, std::string& error);
     uint32_t fresh_seed();
+    /// The run's film seed: `grain_seed` when set (settings.film_seed > 0),
+    /// else the historic fresh/pinned draw.
+    uint32_t draw_film_seed();
 
     // The black/white scanner references, and the two exposure corrections
     // that fall out of them (`runtime/services/color_reference.py`). All of it
@@ -811,6 +858,23 @@ private:
     // node's own mix so every sampler path sees the same push. 1 = the film's
     // measured grain, exactly.
     double dev_grain_scale_ = 1.0;
+    // The print's hue, from the negative (core/negative_hue.hpp, ported from the
+    // macOS 2.x line). Built with the pipeline; the enlarger's filter offsets
+    // are per print run because the live shifts change what the negative's
+    // reading sees.
+    NegativeHue negative_hue_;
+    bool negative_hue_active_ = false;
+    gpu::BufferRef negative_hue_layers_, negative_hue_gamut_, negative_hue_map_;
+    bool negative_hue_offsets(double out[3], std::string& error);
+    bool negative_hue_params(float p[60], std::string& error);
+    // The minilab print (core/minilab.hpp, macOS 2.x): a catalogued pair's table
+    // replaces the optical printing stage; the enlarger's live controls act on
+    // the light through the negative, before the table (the kernel's epilogue).
+    gpu::BufferRef minilab_table_;
+    uint32_t minilab_side_ = 0;
+    float minilab_lo_[3]{}, minilab_inv_[3]{};
+    bool minilab_active_ = false;
+    bool minilab_enlarger(float ep[6], std::string& error);
 
     // print side, per run
     gpu::BufferRef print_chd_, print_base_, print_ixs_;

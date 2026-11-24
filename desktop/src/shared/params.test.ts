@@ -46,6 +46,40 @@ describe('the wire', () => {
     expect(names.has('film_stock')).toBe(true);
   });
 
+  it('sends the Decode curve as one five-row table, and nothing when it is the identity', () => {
+    const rows = new Map(wire(FILM_PARAMS_DEFAULT).map((f) => [f.name, f]));
+    expect(rows.get('scene_curve')?.value).toBe('');
+    expect(rows.get('scene_curve')?.layer).toBe('shoot');
+    const table = Array.from({ length: 5 }, () => '0,1').join(',');
+    const w = new Map(wire({ ...FILM_PARAMS_DEFAULT, decodeCurveText: table }).map((f) => [f.name, f]));
+    expect(w.get('scene_curve')?.value).toBe(table);
+  });
+
+  it('drops a Decode-curve table the host would refuse', () => {
+    expect(decodeFilmParams({ filmStock: 'x', decodeCurveText: '1,2,3' }).decodeCurveText).toBe('');
+    expect(decodeFilmParams({ filmStock: 'x', decodeCurveText: '0,2' }).decodeCurveText).toBe('');
+    const good = Array.from({ length: 5 }, () => '0,1').join(',');
+    expect(decodeFilmParams({ filmStock: 'x', decodeCurveText: good }).decodeCurveText).toBe(good);
+  });
+
+  it('sends the film edge\'s lens falloff with the edge', () => {
+    const p = {
+      ...FILM_PARAMS_DEFAULT,
+      filmEdge: { ...FILM_PARAMS_DEFAULT.filmEdge, active: true, format: '135', falloff: 0.8 },
+    };
+    const rows = new Map(wire(p, ALL_FEATURES).map((f) => [f.name, f]));
+    expect(rows.get('overscan_falloff')?.value).toBe(0.8);
+    expect(rows.get('overscan_falloff')?.layer).toBe('shoot');
+  });
+
+  it('sends grain_seed as a shoot-layer int, and 0 by default', () => {
+    const rows = new Map(wire(FILM_PARAMS_DEFAULT).map((f) => [f.name, f]));
+    expect(rows.get('grain_seed')?.value).toBe(0);
+    expect(rows.get('grain_seed')?.layer).toBe('shoot');
+    const fixed = new Map(wire({ ...FILM_PARAMS_DEFAULT, filmSeed: 12345 }).map((f) => [f.name, f]));
+    expect(fixed.get('grain_seed')?.value).toBe(12345);
+  });
+
   it('a print-side edit is a print-layer delta; a film change touches both layers', () => {
     const a = FILM_PARAMS_DEFAULT;
     const b = { ...a, printBrightnessStops: 1 };
@@ -107,4 +141,24 @@ describe('the wire', () => {
     const p = decodeFilmParams({ ...FILM_PARAMS_DEFAULT, cameraFilter: 'w99', overscanCarrier: 'cardboard' });
     expect([p.cameraFilter, p.overscanCarrier]).toEqual(['', 'none']);
   });
+  it('sends the scan unsharp mask under the print layer, off by default', () => {
+    const rows = new Map(wire(FILM_PARAMS_DEFAULT).map((f) => [f.name, f]));
+    expect(rows.get('scanner_unsharp_amount')?.value).toBe(0);
+    expect(rows.get('scanner_unsharp_sigma')?.value).toBe(0.7);
+    expect(rows.get('scanner_unsharp_amount')?.layer).toBe('print');
+    const raised = new Map(wire({ ...FILM_PARAMS_DEFAULT, scanUnsharpAmount: 0.5,
+      scanUnsharpSigma: 1.2 }).map((f) => [f.name, f]));
+    expect(raised.get('scanner_unsharp_amount')?.value).toBe(0.5);
+    expect(raised.get('scanner_unsharp_sigma')?.value).toBe(1.2);
+  });
+
+  it('sends the halation renormalise under the shoot layer, off in the product', () => {
+    const rows = new Map(wire(FILM_PARAMS_DEFAULT).map((f) => [f.name, f]));
+    expect(rows.get('halation_renormalize')?.value).toBe(false);
+    expect(rows.get('halation_renormalize')?.layer).toBe('shoot');
+    const on = new Map(wire({ ...FILM_PARAMS_DEFAULT, halationRenormalize: true })
+      .map((f) => [f.name, f]));
+    expect(on.get('halation_renormalize')?.value).toBe(true);
+  });
+
 });

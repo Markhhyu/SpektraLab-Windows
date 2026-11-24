@@ -1,9 +1,13 @@
 // CurveEditor.tsx — `Controls/CurveEditor.swift`: click to add a point, drag
 // to move it, double-click (or drag off the plot) to remove it. The output
 // histogram sits behind the curve.
+//
+// It edits Layer 2's curves by default (`value`/`onChange` omitted). The Decode
+// curve (Imaging path) reuses the same drawing with its own five curves and no
+// histogram, so both curves are one component and one arithmetic.
 
 import { useRef, useState } from 'react';
-import { type CurveChannel, evaluateCurve, insertPoint, movePoint, removePoint } from '@shared/adjustments';
+import { type Curve, type CurveChannel, evaluateCurve, insertPoint, movePoint, removePoint } from '@shared/adjustments';
 import { beginGesture, setAdjustments, shownAdjustments, useSession } from '../state/session';
 import { useOutput } from '../canvas/output';
 import { computeHistogram } from '../canvas/histogram';
@@ -18,8 +22,16 @@ const STROKE: Record<CurveChannel, string> = {
   blue: 'var(--hist-b)',
 };
 
-export function CurveEditor({ channel }: { channel: CurveChannel }) {
-  const curve = useSession((s) => shownAdjustments(s).curves[channel]);
+export function CurveEditor({ channel, value, onChange, histogram = true }: {
+  channel: CurveChannel;
+  /** Controlled mode: the curve to draw (the Decode curve's). Omit for Layer 2. */
+  value?: Curve;
+  onChange?: (c: Curve) => void;
+  /** Draw the output histogram behind the plot (Layer 2 only). */
+  histogram?: boolean;
+}) {
+  const sessionCurve = useSession((s) => shownAdjustments(s).curves[channel]);
+  const curve = value ?? sessionCurve;
   const out = useOutput();
   const ref = useRef<SVGSVGElement>(null);
   const drag = useRef<number | null>(null);
@@ -29,7 +41,13 @@ export function CurveEditor({ channel }: { channel: CurveChannel }) {
     const r = ref.current!.getBoundingClientRect();
     return { x: (e.clientX - r.left) / r.width, y: 1 - (e.clientY - r.top) / r.height };
   };
-  const set = (fn: (c: typeof curve) => typeof curve) => setAdjustments((a) => ({ ...a, curves: { ...a.curves, [channel]: fn(a.curves[channel]) } }));
+  const set = (fn: (c: Curve) => Curve) => {
+    if (onChange) {
+      onChange(fn(curve));
+      return;
+    }
+    setAdjustments((a) => ({ ...a, curves: { ...a.curves, [channel]: fn(a.curves[channel]) } }));
+  };
 
   const near = (p: { x: number; y: number }) => {
     let best = -1;
@@ -45,7 +63,7 @@ export function CurveEditor({ channel }: { channel: CurveChannel }) {
   };
 
   let hist = '';
-  if (out) {
+  if (out && histogram) {
     const h = computeHistogram(out.data);
     const bins = channel === 'red' ? h.r : channel === 'green' ? h.g : channel === 'blue' ? h.b : h.y;
     const peak = Math.max(1, ...Array.from(bins).sort((a, b) => a - b).slice(-3, -2));

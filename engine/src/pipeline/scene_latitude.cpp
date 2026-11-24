@@ -118,4 +118,36 @@ bool Pipeline::scene_latitude_sample(const Image& in, double ev, std::vector<dou
     return true;
 }
 
+// The Decode curve (API-SPEC §17, macOS 2.x, ported). Its axis is this node's
+// -- stops about the metered mid-grey, `slm::kMidgray` -- moved by Film
+// Exposure (stop 0 is what lands on mid-grey on the film), so the two compose:
+// Scene Latitude's placement first, then the curve the person drew on what it
+// placed, as the film will be exposed to it.
+bool Pipeline::scene_curve_wanted() const {
+    return !params_.camera.scene_curve.empty() && !params_.debug.lut_mode;
+}
+
+bool Pipeline::node_scene_curve(const Image& in, Image& out, std::string& error) {
+    Timer t(this, "filming.expose.scene_curve");
+    std::vector<float> table;
+    size_t n = 0;
+    if (!parse_scene_curve(params_.camera.scene_curve, table, n, error)) return false;
+    // p[6]: Film Exposure, which `node_exposure` applies after this node. The
+    // table is read at E + c, so the curve the person drew is on the scene as
+    // exposed onto the film, and a +1 EV Film Exposure moves the scene along
+    // the curve rather than the curve along the scene.
+    const float p[7] = {float(n), float(kSceneCurveStops), float(slm::kMidgray),
+                        float(rgb_to_xyz_ae_.m[1][0]), float(rgb_to_xyz_ae_.m[1][1]),
+                        float(rgb_to_xyz_ae_.m[1][2]),
+                        float(params_.camera.exposure_compensation_ev)};
+    gpu::BufferRef p_buf = gpu_->upload(p, sizeof p, error);
+    gpu::BufferRef t_buf = gpu_->upload(table.data(), table.size() * sizeof(float), error);
+    if (!p_buf || !t_buf || !alloc_like(in, out, error)) return false;
+    const uint32_t count[1] = {uint32_t(in.pixels())};
+    return gpu_->dispatch("spk_scene_curve",
+                          {gpu::Arg::buf(in.buf), gpu::Arg::buf(p_buf), gpu::Arg::buf(t_buf),
+                           gpu::Arg::inline_bytes(count, 1), gpu::Arg::buf(out.buf)},
+                          in.pixels(), error);
+}
+
 }  // namespace spk

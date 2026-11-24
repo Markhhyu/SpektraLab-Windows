@@ -173,11 +173,12 @@ export function evaluateCurve(c: Curve, x: number): number {
 
 export const CURVE_TABLE_SIZE = 256;
 
-/** Five rows of 256: rgb, luma, red, green, blue (the shader's layout). */
-export function curveTables(s: CurveSet): Float32Array {
-  const out = new Float32Array(CURVE_TABLE_SIZE * 5);
+/** Five rows: rgb, luma, red, green, blue (the shader's layout, and the Decode
+ *  curve's wire order). `size` defaults to the Layer 2 kernel's table. */
+export function curveTables(s: CurveSet, size = CURVE_TABLE_SIZE): Float32Array {
+  const out = new Float32Array(size * 5);
   CURVE_CHANNELS.forEach((ch, row) => {
-    for (let i = 0; i < CURVE_TABLE_SIZE; i++) out[row * CURVE_TABLE_SIZE + i] = evaluateCurve(s[ch], i / (CURVE_TABLE_SIZE - 1));
+    for (let i = 0; i < size; i++) out[row * size + i] = evaluateCurve(s[ch], i / (size - 1));
   });
   return out;
 }

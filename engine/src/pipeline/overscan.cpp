@@ -64,9 +64,22 @@ enum OsP : int {
     P_CARRIER = 199,
     P_LEAKS = 200,          // up to kMaxLeaks x (s, side, amp, sigma_s, sigma_t)
     P_PAIR_ADV = 260,       // > 0: the same gate exposed again this far along (a half-frame pair)
-    P_COUNT = 261
+    // API-SPEC §21.4, macOS 2.x: the picture's own cos^n falloff (amount, the
+    // format's natural lens in mm, n). Appended, so every existing index holds.
+    P_FALLOFF = 261, P_FALLOFF_F, P_FALLOFF_N,
+    P_COUNT = 264
 };
 constexpr int kMaxLeaks = 12;
+// API-SPEC §21.4: the format's normal lens, mm -- the falloff's axis.
+double normal_lens_mm(const std::string& name) {
+    static const struct { const char* n; double f; } k[] = {
+        {"135", 50.0}, {"135_half", 30.0}, {"135_xpan", 45.0}, {"135_sprocket", 30.0},
+        {"120_645", 75.0}, {"120_6x6", 80.0}, {"120_6x7", 90.0}, {"120_6x8", 105.0},
+        {"120_6x9", 105.0}, {"120_6x12", 90.0}, {"120_6x17", 90.0},
+    };
+    for (const auto& e : k) if (name == e.n) return e.f;
+    return 50.0;
+}
 // How far past each long edge of the film a strip scan reaches, mm.
 constexpr double kCarrierMM = 0.40;
 // A half-frame camera advances 4 perforations between exposures.
@@ -634,6 +647,16 @@ bool Pipeline::overscan_layout(uint32_t frame_w, uint32_t frame_h, std::string& 
     L.carrier_open = o.carrier == "open";
     L.carrier_none = o.carrier == "none";
 
+    // API-SPEC §21.4: the lens's falloff over the picture, cos^n with n the
+    // camera's (3.8-4.2, about cos^4), times `falloff`. Its axis is the gate's
+    // centre and the format's normal lens; picture only, never the rebate.
+    if (o.falloff > 0.0) {
+        Rng rn(stream(cam, kCamera, 25));
+        L.falloff = std::clamp(o.falloff, 0.0, 1.5);
+        L.falloff_f = normal_lens_mm(fmt->name);
+        L.falloff_n = rn.uni(3.8, 4.2);
+    }
+
     // --- perforations (135): the frame's place on the grid is the camera's,
     // the advance error is the frame's; sprocket-locked, so it is small.
     L.perforated = fmt->perforated;
@@ -862,6 +885,8 @@ void Pipeline::overscan_params_block(std::vector<float>& P) const {
     P[P_HOLES_LIGHT] = L.holes_light ? 1.0f : 0.0f;
     P[P_CARRIER] = L.carrier_none ? 2.0f : (L.carrier_open ? 1.0f : 0.0f);   // 2: no carrier, the film runs on
     P[P_PAIR_ADV] = float(L.pair_adv);
+    P[P_FALLOFF] = float(L.falloff); P[P_FALLOFF_F] = float(L.falloff_f);
+    P[P_FALLOFF_N] = float(L.falloff_n);
     for (int c = 0; c < 3; ++c) P[P_LIGHT_R + c] = float(L.light_rgb[c]);
     P[P_PERF_SEED] = float(L.perf_seed); P[P_LIGHT_FALL] = float(L.light_fall); P[P_LIGHT_DIR] = float(L.light_dir);
     P[P_WALL_T] = float(L.wall_t); P[P_WALL_VS] = float(L.wall_tilt[0]); P[P_WALL_VT] = float(L.wall_tilt[1]);

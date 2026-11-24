@@ -628,6 +628,10 @@ spk_engine* spk_engine_create(const char* resources_dir, void* device) {
     }
 
     if (!engine->print_luts.init(engine->resources_dir, error)) { g_error = error; return nullptr; }
+    if (!engine->setup_cache.set_resources_dir(engine->resources_dir, error)) {
+        g_error = error;
+        return nullptr;
+    }
 
 #ifndef __APPLE__
     if (device) { g_error = "Windows device-buffer input is not implemented yet; pass null"; return nullptr; }

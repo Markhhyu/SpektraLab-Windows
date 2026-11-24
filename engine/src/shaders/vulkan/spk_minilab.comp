@@ -1,0 +1,119 @@
+#version 450
+
+// spk_minilab.comp -- the pair-specific minilab print (core/minilab.hpp, ported
+// from the macOS 2.x line). Port of src/shaders/minilab.metal: the recovered
+// log-positive reading of the negative (the DI's spectral read and reversal
+// curve, kept in registers), the enlarger's live epilogue, and a 65^3 paper-CMY
+// table, trilinear.
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer Cmy { float value[]; } cmy_data;
+layout(set = 0, binding = 1, std430) readonly buffer ChannelDensity { float value[]; } chd_data;
+layout(set = 0, binding = 2, std430) readonly buffer BaseDensity { float value[]; } base_data;
+layout(set = 0, binding = 3, std430) readonly buffer IllumSens { float value[]; } ixs_data;
+layout(set = 0, binding = 4, std430) readonly buffer Epilogue { float value[]; } ep_data;
+layout(set = 0, binding = 5, std430) readonly buffer Meta { uint value[]; } meta_data;
+layout(set = 0, binding = 6, std430) readonly buffer XAxis { float value[]; } x_axis;
+layout(set = 0, binding = 7, std430) readonly buffer InverseSteps { float value[]; } inverse_steps;
+layout(set = 0, binding = 8, std430) readonly buffer YAxis { float value[]; } y_axis;
+layout(set = 0, binding = 9, std430) readonly buffer Lut { float value[]; } lut_data;
+layout(set = 0, binding = 10, std430) readonly buffer Lo { float value[]; } lo_data;
+layout(set = 0, binding = 11, std430) readonly buffer InvSpan { float value[]; } inv_span_data;
+layout(set = 0, binding = 12, std430) writeonly buffer Output { float value[]; } output_data;
+
+// vulkan_gpu.cpp folds a dispatch past maxComputeWorkGroupCount[0] (65535 on
+// lavapipe and Intel) into rows of workgroups; this is the 1D index it means.
+uint spk_global_index() {
+    return gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) + gl_GlobalInvocationID.x;
+}
+
+// Per-channel fast_interp, with the same right-biased binary search as
+// spk_common.h (identical to spk_curves.comp). The baked x/y tables are
+// interleaved (K,3).
+float interpolate(uint count, uint channel, float value) {
+    float x0 = x_axis.value[channel];
+    float x_last = x_axis.value[(count - 1u) * 3u + channel];
+    if (value <= x0) return y_axis.value[channel];
+    if (value >= x_last) return y_axis.value[(count - 1u) * 3u + channel];
+    uint lo = 0u, hi = count;
+    while (lo < hi) {
+        uint mid = lo + ((hi - lo) >> 1u);
+        if (x_axis.value[mid * 3u + channel] <= value) lo = mid + 1u;
+        else hi = mid;
+    }
+    uint low = lo - 1u;
+    float fraction = (value - x_axis.value[low * 3u + channel]) *
+                     inverse_steps.value[low * 3u + channel];
+    float y0 = y_axis.value[low * 3u + channel];
+    float y1 = y_axis.value[(low + 1u) * 3u + channel];
+    return y0 + fraction * (y1 - y0);
+}
+
+// GLSL has no log10 (same helper as spk_di_encode).
+float log10v(float x) { return log(x) / log(10.0); }
+
+void main() {
+    uint i = spk_global_index();
+    uint n = meta_data.value[0];
+    uint nl = meta_data.value[1];
+    uint K = meta_data.value[2];
+    uint S = meta_data.value[3];
+    if (i >= n) return;
+
+    float c0 = cmy_data.value[3u * i];
+    float c1 = cmy_data.value[3u * i + 1u];
+    float c2 = cmy_data.value[3u * i + 2u];
+    float a0 = 0.0, a1 = 0.0, a2 = 0.0;
+    for (uint l = 0u; l < nl; ++l) {
+        float d = c0 * chd_data.value[3u * l] + c1 * chd_data.value[3u * l + 1u]
+                + c2 * chd_data.value[3u * l + 2u] + base_data.value[l];
+        float t = exp2(-d * 3.321928094887362);
+        a0 += t * ixs_data.value[3u * l];
+        a1 += t * ixs_data.value[3u * l + 1u];
+        a2 += t * ixs_data.value[3u * l + 2u];
+    }
+    // The epilogue: v = a * gain + offset; log10 of the positive (the DI reading).
+    float v0 = log10v(max(a0 * ep_data.value[0] + ep_data.value[3], 0.0) + 1e-10);
+    float v1 = log10v(max(a1 * ep_data.value[1] + ep_data.value[4], 0.0) + 1e-10);
+    float v2 = log10v(max(a2 * ep_data.value[2] + ep_data.value[5], 0.0) + 1e-10);
+
+    float positive[3];
+    positive[0] = interpolate(K, 0u, v0);
+    positive[1] = interpolate(K, 1u, v1);
+    positive[2] = interpolate(K, 2u, v2);
+
+    // The table's domain is the recovered log-positive, per channel; trilinear
+    // over the row-major (S,S,S,3) payload.
+    float fS = float(S - 1u);
+    float q0 = clamp((positive[0] - lo_data.value[0]) * inv_span_data.value[0], 0.0, 1.0) * fS;
+    float q1 = clamp((positive[1] - lo_data.value[1]) * inv_span_data.value[1], 0.0, 1.0) * fS;
+    float q2 = clamp((positive[2] - lo_data.value[2]) * inv_span_data.value[2], 0.0, 1.0) * fS;
+
+    uint i0 = uint(floor(q0)), j0 = uint(floor(q1)), k0 = uint(floor(q2));
+    float fx = q0 - float(i0), fy = q1 - float(j0), fz = q2 - float(k0);
+    uint i1 = min(i0 + 1u, S - 1u);
+    uint j1 = min(j0 + 1u, S - 1u);
+    uint k1 = min(k0 + 1u, S - 1u);
+
+    uint b00 = ((i0 * S + j0) * S) * 3u;
+    uint b01 = ((i0 * S + j1) * S) * 3u;
+    uint b10 = ((i1 * S + j0) * S) * 3u;
+    uint b11 = ((i1 * S + j1) * S) * 3u;
+    uint k0o = k0 * 3u, k1o = k1 * 3u;
+
+    float w0 = 1.0 - fx, w1 = fx;
+    float vv0 = 1.0 - fy, vv1 = fy;
+    float u0 = 1.0 - fz, u1 = fz;
+
+    for (uint ch = 0u; ch < 3u; ++ch) {
+        float c000 = lut_data.value[b00 + k0o + ch], c001 = lut_data.value[b00 + k1o + ch];
+        float c010 = lut_data.value[b01 + k0o + ch], c011 = lut_data.value[b01 + k1o + ch];
+        float c100 = lut_data.value[b10 + k0o + ch], c101 = lut_data.value[b10 + k1o + ch];
+        float c110 = lut_data.value[b11 + k0o + ch], c111 = lut_data.value[b11 + k1o + ch];
+        float c00 = c000 * u0 + c001 * u1;
+        float c01 = c010 * u0 + c011 * u1;
+        float c10 = c100 * u0 + c101 * u1;
+        float c11 = c110 * u0 + c111 * u1;
+        output_data.value[3u * i + ch] = (c00 * vv0 + c01 * vv1) * w0
+                                       + (c10 * vv0 + c11 * vv1) * w1;
+    }
+}

@@ -1,0 +1,187 @@
+#version 450
+
+// spk_negative_hue.comp -- the print's hue, taken from the negative
+// (core/negative_hue.hpp, ported from the macOS 2.x line). Port of the node
+// kernel in src/shaders/negative_hue.metal; the fused print variant there is
+// macOS-only and is not ported (this engine prints node by node).
+//
+// One pass over the scanned optical print. Lightness and chroma stay the print's
+// own; the hue turns toward the negative's reading by a weight that is zero for
+// a near-neutral and falls where a layer has left the straight part of its
+// curve; chroma is then held inside the paper's own gamut. A pixel whose weight
+// is zero is copied, so greys and everything the reading cannot vouch for are
+// the optical print to the bit.
+//
+// The tables are core/negative_hue.cpp's; the arithmetic is here and only here.
+// engine/tests/negative_hue_checks.py holds it to its bars end to end.
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer Negative { float value[]; } negative_data;
+layout(set = 0, binding = 1, std430) readonly buffer Optical { float value[]; } optical_data;
+layout(set = 0, binding = 2, std430) readonly buffer Layers { float value[]; } layer_data;
+layout(set = 0, binding = 3, std430) readonly buffer Params { float value[]; } param_data;
+layout(set = 0, binding = 4, std430) readonly buffer Gamut { float value[]; } gamut_data;
+layout(set = 0, binding = 5, std430) readonly buffer Map { float value[]; } map_data;
+layout(set = 0, binding = 6, std430) readonly buffer Meta { uint value[]; } meta_data;
+layout(set = 0, binding = 7, std430) writeonly buffer Output { float value[]; } output_data;
+
+// vulkan_gpu.cpp folds a dispatch past maxComputeWorkGroupCount[0] (65535 on
+// lavapipe and Intel) into rows of workgroups; this is the 1D index it means.
+uint spk_global_index() {
+    return gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) + gl_GlobalInvocationID.x;
+}
+
+// One layer: density -> (log10 exposure, unreliability), by index into the even
+// table (samples, 3, 2). `read_layer` in core/negative_hue.cpp.
+vec2 spk_read_layer(uint c, float lo, float scale, float v, uint N) {
+    float f = clamp((v - lo) * scale, 0.0, float(N - 1u));
+    uint j = min(uint(f), N - 2u);
+    float t = f - float(j);
+    uint a = (j * 3u + c) * 2u, b = a + 6u;
+    return vec2(layer_data.value[a] + t * (layer_data.value[b] - layer_data.value[a]),
+                layer_data.value[a + 1u] + t * (layer_data.value[b + 1u] - layer_data.value[a + 1u]));
+}
+
+vec3 spk_oklab_from_xyz(vec3 xyz) {
+    float l = 0.8189330101 * xyz.x + 0.3618667424 * xyz.y - 0.1288597137 * xyz.z;
+    float m = 0.0329845436 * xyz.x + 0.9293118715 * xyz.y + 0.0361456387 * xyz.z;
+    float s = 0.0482003018 * xyz.x + 0.2643662691 * xyz.y + 0.6338517070 * xyz.z;
+    l = pow(max(l, 0.0), 1.0 / 3.0);
+    m = pow(max(m, 0.0), 1.0 / 3.0);
+    s = pow(max(s, 0.0), 1.0 / 3.0);
+    return vec3(0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+                1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+                0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s);
+}
+
+vec3 spk_xyz_from_oklab(vec3 lab) {
+    float l = lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z;
+    float m = lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z;
+    float s = lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z;
+    l = l * l * l;
+    m = m * m * m;
+    s = s * s * s;
+    return vec3(1.2270138511 * l - 0.5577999807 * m + 0.2812561490 * s,
+                -0.0405801784 * l + 1.1122568696 * m - 0.0716766787 * s,
+                -0.0763812845 * l - 0.4214819784 * m + 1.5861632204 * s);
+}
+
+// Row-major 3x3 at `base` in the parameter block (`spk_mul3(p + base, v)` in MSL).
+vec3 spk_mul3(uint base, vec3 v) {
+    return vec3(param_data.value[base] * v.x + param_data.value[base + 1u] * v.y + param_data.value[base + 2u] * v.z,
+                param_data.value[base + 3u] * v.x + param_data.value[base + 4u] * v.y + param_data.value[base + 5u] * v.z,
+                param_data.value[base + 6u] * v.x + param_data.value[base + 7u] * v.y + param_data.value[base + 8u] * v.z);
+}
+
+// p: [0..2] 1 / a grey's layer exposures; [3] 1 / the map's lightness; [4..6] each layer's least
+//    density; [7] the weight's floor; [9..17] scan XYZ -> D65; [18..26] D65 -> scan XYZ; [27..29] log10 exposure offsets
+//    (the enlarger's filters, as the negative sees them); [30] chroma lo; [31] 1 / (chroma hi -
+//    lo); [32] unreliability k; [33] gamut knee; [34] gamut L lo; [35] (levels - 1) / (L hi -
+//    L lo); [36..38] each layer's index scale; [40] a film-edge canvas: [41] its width, [42] this
+//    band's first row, [43] mm per pixel, [44..47] canvas mm -> film mm, [48..49] its offset in
+//    film mm, [50..51] the canvas centre, [52..55] the gate (s0, t0, along, across), [56] a pair's advance
+//
+// One pixel: the negative's three layer densities and the optical print's scanned XYZ in, the
+// print's XYZ out.
+vec3 spk_negative_hue_pixel(uint i, vec3 negative, vec3 optical, uint N, uint nh, uint nl, uint S) {
+    if (param_data.value[40] != 0.0) {
+        // A film-edge canvas: outside the picture's gate the print is the optical one.
+        // `canvas_to_film` (overscan.metal), on the gate's rectangle.
+        uint cw = uint(param_data.value[41]);
+        float px = param_data.value[43];
+        float u = (float(i % cw) + 0.5) * px - param_data.value[50];
+        float v = (float(i / cw) + param_data.value[42] + 0.5) * px - param_data.value[51];
+        float s = param_data.value[44] * u + param_data.value[45] * v + param_data.value[48];
+        float t = param_data.value[46] * u + param_data.value[47] * v + param_data.value[49];
+        bool inside = t >= param_data.value[53] &&
+                      t <= param_data.value[53] + param_data.value[55] &&
+                      ((s >= param_data.value[52] && s <= param_data.value[52] + param_data.value[54]) ||
+                       (param_data.value[56] > 0.0 &&
+                        s >= param_data.value[52] + param_data.value[56] &&
+                        s <= param_data.value[52] + param_data.value[56] + param_data.value[54]));
+        if (!inside) return optical;
+    }
+    vec2 r0 = spk_read_layer(0u, param_data.value[4], param_data.value[36], negative.x, N);
+    vec2 r1 = spk_read_layer(1u, param_data.value[5], param_data.value[37], negative.y, N);
+    vec2 r2 = spk_read_layer(2u, param_data.value[6], param_data.value[38], negative.z, N);
+    vec3 e = vec3(exp2((r0.x + param_data.value[27]) * 3.321928094887362) * param_data.value[0],
+                  exp2((r1.x + param_data.value[28]) * 3.321928094887362) * param_data.value[1],
+                  exp2((r2.x + param_data.value[29]) * 3.321928094887362) * param_data.value[2]);
+    float esum = e.x + e.y + e.z;
+    vec3 x65 = spk_mul3(9u, optical);
+    vec3 lab_o = spk_oklab_from_xyz(x65);
+    if (!(esum > 0.0)) return optical;
+
+    // The film's exposure map, inverted: (red share, green share) -> the colour's Oklab (a, b).
+    float fx = clamp(e.x / esum, 0.0, 1.0) * float(S - 1u);
+    float fy = clamp(e.y / esum, 0.0, 1.0) * float(S - 1u);
+    uint mx = min(uint(fx), S - 2u), my = min(uint(fy), S - 2u);
+    float tx = fx - float(mx), ty = fy - float(my);
+    uint m00 = (mx * S + my) * 2u, m10 = ((mx + 1u) * S + my) * 2u;
+    vec2 q00 = vec2(map_data.value[m00], map_data.value[m00 + 1u]);
+    vec2 q01 = vec2(map_data.value[m00 + 2u], map_data.value[m00 + 3u]);
+    vec2 q10 = vec2(map_data.value[m10], map_data.value[m10 + 1u]);
+    vec2 q11 = vec2(map_data.value[m10 + 2u], map_data.value[m10 + 3u]);
+    vec2 qa = q00 + (q01 - q00) * ty;
+    vec2 qb = q10 + (q11 - q10) * ty;
+    vec2 lab_r = qa + (qb - qa) * tx;
+    float c_o = length(lab_o.yz);
+    float c_r = length(lab_r);
+    if (!(c_o > 1e-7) || !(c_r > 1e-9)) return optical;
+
+    float c_at_print = c_r * lab_o.x * param_data.value[3];
+    float t = clamp((c_at_print - param_data.value[30]) * param_data.value[31], 0.0, 1.0);
+    float ubar = (e.x * r0.y + e.y * r1.y + e.z * r2.y) / esum;
+    float ku = param_data.value[32] * ubar;
+    float w = (t * t * (3.0 - 2.0 * t) / (1.0 + ku * ku) - param_data.value[7]) /
+              (1.0 - param_data.value[7]);
+    if (!(w > 0.0)) return optical;
+
+    // The turn toward the reading: a blend of the two directions, renormalised.
+    vec2 od = lab_o.yz / c_o;
+    vec2 vd = od + w * (lab_r / c_r - od);
+    float vlen = length(vd);
+    if (!(vlen > 1e-6)) return optical;
+    float a = c_o * vd.x / vlen;
+    float b = c_o * vd.y / vlen;
+
+    // The paper's gamut at this lightness and hue, bilinear, hue wrapping.
+    float fl = clamp((lab_o.x - param_data.value[34]) * param_data.value[35], 0.0, float(nl - 1u));
+    uint l0 = min(uint(fl), nl - 2u);
+    float tl = fl - float(l0);
+    float fh = atan(b, a) * (float(nh) / 6.283185307179586);
+    fh -= floor(fh / float(nh)) * float(nh);
+    uint h0 = uint(fh) % nh;
+    uint h1 = (h0 + 1u) % nh;
+    float th = fh - floor(fh);
+    float g00 = gamut_data.value[l0 * nh + h0];
+    float g01 = gamut_data.value[l0 * nh + h1];
+    float g10 = gamut_data.value[(l0 + 1u) * nh + h0];
+    float g11 = gamut_data.value[(l0 + 1u) * nh + h1];
+    float ga = g00 + (g01 - g00) * th;
+    float gb = g10 + (g11 - g10) * th;
+    float cmax = max(ga + (gb - ga) * tl, 1e-4);
+    float un = c_o / cmax;
+    float knee = param_data.value[33];
+    if (un > knee) {
+        float x = (un - knee) / (1.0 - knee);
+        float kn = knee + (1.0 - knee) * x / sqrt(1.0 + x * x);
+        float scale = 1.0 - w * (1.0 - kn / un);
+        a *= scale;
+        b *= scale;
+    }
+    return max(spk_mul3(18u, spk_xyz_from_oklab(vec3(lab_o.x, a, b))), vec3(1e-10));
+}
+
+void main() {
+    uint i = spk_global_index();
+    if (i >= meta_data.value[0]) return;
+    vec3 negative = vec3(negative_data.value[3u * i], negative_data.value[3u * i + 1u],
+                         negative_data.value[3u * i + 2u]);
+    vec3 optical = vec3(optical_data.value[3u * i], optical_data.value[3u * i + 1u],
+                        optical_data.value[3u * i + 2u]);
+    vec3 o = spk_negative_hue_pixel(i, negative, optical, meta_data.value[1], meta_data.value[2],
+                                    meta_data.value[3], meta_data.value[4]);
+    output_data.value[3u * i] = o.x;
+    output_data.value[3u * i + 1u] = o.y;
+    output_data.value[3u * i + 2u] = o.z;
+}

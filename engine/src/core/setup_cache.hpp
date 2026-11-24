@@ -35,6 +35,7 @@
 #include "cam16.hpp"
 #include "colour.hpp"
 #include "hanatos.hpp"
+#include "minilab.hpp"
 #include "params.hpp"
 #include "profile.hpp"
 
@@ -42,6 +43,13 @@ namespace spk {
 
 class SetupCache {
 public:
+    // Set once before this engine is published to callers. The minilab catalog
+    // (macOS 2.x's pair-specific print tables, ported) is read here: a missing
+    // or invalid index is an error, never a silent optical fallback.
+    bool set_resources_dir(const std::string& dir, std::string& error) {
+        return minilab_.init(dir, error);
+    }
+    const MinilabCatalog& minilab() const { return minilab_; }
     // The CAM16-UCS setup for one output colourspace, table included. Depends
     // on the colourspace and nothing else -- the knee and the lightness
     // compression are per-render constants the kernel reads separately.
@@ -74,6 +82,7 @@ private:
     mutable std::mutex lock_;
     std::unordered_map<std::string, Cam16Setup> cam16_;
     std::vector<LutEntry> luts_;      // most recently used first
+    MinilabCatalog minilab_;
     mutable size_t hits_ = 0, misses_ = 0;
 };
 

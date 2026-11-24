@@ -84,6 +84,9 @@ const uint P_WALL_SCATTER = 198u;
 const uint P_CARRIER = 199u;
 const uint P_LEAKS = 200u;
 const uint P_PAIR_ADV = 260u;
+const uint P_FALLOFF = 261u;
+const uint P_FALLOFF_F = 262u;
+const uint P_FALLOFF_N = 263u;
 const uint P_COUNT = 261u;
 const uint kQStride = 10u;
 
@@ -176,6 +179,18 @@ float penumbra(float d, float r) {
     return 0.5f + (u * sqrt(max(1.0f - u * u, 0.0f)) + asin(u)) * (1.0f / 3.14159265358979323846);
 }
 
+// API-SPEC §21.4: the lens's falloff at gate position `sg`: cos^(n * amount) of
+// the angle off axis, the axis at the gate's centre, f the format's lens.
+float lens_falloff(vec2 sg) {
+    const vec2 c = vec2(params.v[P_GS0] + 0.5f * params.v[P_GW],
+                        params.v[P_GT0] + 0.5f * params.v[P_GH]);
+    const float fl = max(params.v[P_FALLOFF_F], 1.0f);
+    const vec2 d = sg - c;
+    const float r2 = dot(d, d);
+    const float cos_t = fl * inversesqrt(fl * fl + r2);
+    return pow(cos_t, params.v[P_FALLOFF_N] * params.v[P_FALLOFF]);
+}
+
 vec3 sample_frame(float fx, float fy, uint fw, uint fh) {
     fx = clamp(fx, 0.0f, float(fw) - 1.0f);
     fy = clamp(fy, 0.0f, float(fh) - 1.0f);
@@ -211,7 +226,10 @@ void main() {
             float fx, fy;
             if (params.v[P_VERTICAL] < 0.5f) { fx = (st.x - params.v[P_GS0]) / px - 0.5f; fy = (st.y - params.v[P_GT0]) / px - 0.5f; }
             else                      { fx = (params.v[P_GT0] + params.v[P_GH] - st.y) / px - 0.5f; fy = (st.x - params.v[P_GS0]) / px - 0.5f; }
-            e += cov * sample_frame(fx, fy, uint(params.v[P_FW]), uint(params.v[P_FH]));
+            if (params.v[P_FALLOFF] > 0.0f)
+                e += (cov * lens_falloff(sg)) * sample_frame(fx, fy, uint(params.v[P_FW]), uint(params.v[P_FH]));
+            else
+                e += cov * sample_frame(fx, fy, uint(params.v[P_FW]), uint(params.v[P_FH]));
         }
         // Gate flare: the gate's bevelled edge reflects scene light onto the
         // film just outside the frame -- a thin line that follows the scene's

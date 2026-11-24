@@ -170,7 +170,7 @@ void di_linear(const DiConstants& k, const double log_t[3], double lin[3]) {
 
 bool di_constants(const Colour& colour, const Blob& blob, const Params& params,
                   const Vec& tc_lut, size_t side, const Mat3& tc_b, const Vec& film_sensitivity,
-                  DiConstants& out, std::string& error) {
+                  DiConstants& out, std::string& error, bool log_positive_only) {
     const Profile& film = params.film;
     const Profile& paper = params.di_paper;
     out = DiConstants{};
@@ -266,6 +266,12 @@ bool di_constants(const Colour& colour, const Blob& blob, const Params& params,
     // the same on all three. Subtracted, it makes the base black -- Cineon's
     // code 95 -- as the black offset of every Cineon decoder assumes.
     out.positive_floor = std::pow(10.0, out.curve.y[3 * (n - 1) + 1]);
+
+    // The minilab print (macOS 2.x, ported) needs the recovered log-positive
+    // reading and nothing else: the colour step below is the DI's Cineon
+    // output transform, which a paper CMY table does not use. Skipping it is
+    // the oracle's own flag, not a shortcut with a different answer.
+    if (log_positive_only) return true;
 
     // --- the colour step: film RGB -> working RGB --------------------------
     // Least squares over the upsampler's own spectra inside Pointer's gamut,
@@ -424,6 +430,21 @@ void di_live_offsets(const Params& params, double out[3]) {
     const double cc = params.enlarger.filter_shift_scale;
     out[1] = k + params.enlarger.m_filter_shift * cc * 0.03 * stop;
     out[2] = k + params.enlarger.y_filter_shift * cc * 0.05 * stop;
+}
+
+// `FilmHost` for a caller outside this file (`negative_hue.cpp`, ported from the
+// macOS 2.x line): the same flat-field chain, many patches. The hue's exposure
+// map builds ~10k of them at setup, so this is the one outside caller that pays
+// the class's per-call interp allocation; the setup cache in `negative_hue.cpp`
+// makes that a once-per-film cost rather than a per-edit one.
+void film_host_develop(const Params& params, const Vec& tc_lut, size_t side, const Mat3& tc_b,
+                       const double* rgb, size_t n, double* cmy) {
+    const FilmHost host(params, tc_lut, side, tc_b);
+    for (size_t i = 0; i < n; ++i) {
+        double raw[3];
+        host.raw(rgb + 3 * i, raw);
+        host.develop(raw, cmy + 3 * i);
+    }
 }
 
 }  // namespace spk

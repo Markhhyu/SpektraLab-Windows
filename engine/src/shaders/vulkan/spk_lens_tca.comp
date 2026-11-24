@@ -1,0 +1,54 @@
+#version 450
+
+// spk_lens_tca.comp -- the taking lens's lateral chromatic aberration (API-SPEC
+// §21.6, macOS 2.x, ported; a literal port of src/shaders/lens.metal's kernel).
+//
+// The R and B images are magnified against G by k(h) = 1 + a h (lensfun's poly3
+// with only its linear term, run in reverse to add the aberration): the output at
+// radius r_d reads the input at r_u, r_d = r_u (1 + a r_u / hd), and is scaled by
+// the map's Jacobian so a point keeps its energy.
+// p: {pcx, pcy, inv_hd, a_r, a_b}; meta: {H, W, row0}
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer Img { float value[]; } img;
+layout(set = 0, binding = 1, std430) readonly buffer Params { float value[]; } p;
+layout(set = 0, binding = 2, std430) readonly buffer Meta { uint value[]; } meta;
+layout(set = 0, binding = 3, std430) writeonly buffer Out { float value[]; } out_data;
+
+uint spk_global_index() {
+    return gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) + gl_GlobalInvocationID.x;
+}
+
+// One channel at plane position (qx, qY), bilinear; rows stored are the image's
+// [0, H) and plane row = image row + row0.
+float bl_sample(uint H, uint W, uint row0, uint c, float qx, float qY) {
+    float xf = floor(qx), yf = floor(qY);
+    float fx = qx - xf, fy = qY - yf;
+    int x0 = clamp(int(xf), 0, int(W) - 1), x1 = clamp(int(xf) + 1, 0, int(W) - 1);
+    int y0 = clamp(int(yf) - int(row0), 0, int(H) - 1), y1 = clamp(int(yf) + 1 - int(row0), 0, int(H) - 1);
+    float v00 = img.value[3u * (uint(y0) * W + uint(x0)) + c];
+    float v01 = img.value[3u * (uint(y0) * W + uint(x1)) + c];
+    float v10 = img.value[3u * (uint(y1) * W + uint(x0)) + c];
+    float v11 = img.value[3u * (uint(y1) * W + uint(x1)) + c];
+    return (1.0 - fy) * ((1.0 - fx) * v00 + fx * v01) + fy * ((1.0 - fx) * v10 + fx * v11);
+}
+
+void main() {
+    uint i = spk_global_index();
+    uint H = meta.value[0], W = meta.value[1], row0 = meta.value[2];
+    if (i >= H * W) return;
+    uint y = i / W, x = i % W;
+    float X = float(x), Y = float(y + row0);
+    float dx = X - p.value[0], dy = Y - p.value[1];
+    float rd = sqrt(dx * dx + dy * dy);
+    float hd = rd * p.value[2];
+    out_data.value[3u * i + 1u] = img.value[3u * i + 1u];
+    for (uint k = 0u; k < 2u; ++k) {
+        uint c = k == 0u ? 0u : 2u;
+        float a = p.value[3u + k];
+        if (a == 0.0 || rd <= 0.0) { out_data.value[3u * i + c] = img.value[3u * i + c]; continue; }
+        float ru = 2.0 * rd / (1.0 + sqrt(max(1.0 + 4.0 * a * hd, 1e-6)));
+        float s = ru / rd, hu = ru * p.value[2];
+        float jac = 1.0 / ((1.0 + 2.0 * a * hu) * (1.0 + a * hu));
+        out_data.value[3u * i + c] = jac * bl_sample(H, W, row0, c, p.value[0] + dx * s, p.value[1] + dy * s);
+    }
+}

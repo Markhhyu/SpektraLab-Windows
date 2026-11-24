@@ -53,6 +53,12 @@ const SchemaField kFields[] = {
     {"halation_active",          "film_render.halation.active",           B, SHOOT, false, 0, 0, false},
     {"halation_amount",          "film_render.halation.halation_amount",  F, SHOOT, true, 0.0, 4.0, false},
     {"halation_boost_ev",        "film_render.halation.boost_ev",         F, SHOOT, true, 0.0, 8.0, false},
+    // The audit's H-2: with renormalize on (the reference default), the halo
+    // is `(raw + a*halo)/(1+a)` and the source's highlights are darkened --
+    // measured 23 % on CineStill's red at the default strength, against about
+    // 6 % on a real RAW. Exposed so the product can turn the darkening off
+    // while the engine keeps the reference default (parity unchanged).
+    {"halation_renormalize",     "film_render.halation.halation_renormalize", B, SHOOT, false, 0, 0, false},
     {"grain_active",             "film_render.grain.active",              B, SHOOT, false, 0, 0, false},
     {"grain_sublayers_active",   "film_render.grain.sublayers_active",    B, SHOOT, false, 0, 0, false},
     {"dir_couplers_active",      "film_render.dir_couplers.active",       B, SHOOT, false, 0, 0, false},
@@ -80,6 +86,12 @@ const SchemaField kFields[] = {
     {"scanner_white_correction", "scanner.white_correction",              B, PRINT, false, 0, 0, false},
     {"scanner_black_correction", "scanner.black_correction",              B, PRINT, false, 0, 0, false},
     {"scanner_lens_blur",        "scanner.lens_blur",                     F, PRINT, true, 0.0, 20.0, false},
+    // The scan's unsharp mask, made visible (the audit's M-3). The engine keeps
+    // the reference's defaults (0.7 px, 0.7), so parity is unchanged; the
+    // product sends 0 by default (no hidden digital sharpening) and the UI
+    // raises it. Native extension: the reference has no such fields.
+    {"scanner_unsharp_sigma",    "scanner.unsharp_mask.sigma",             F, PRINT, true, 0.0, 5.0, false},
+    {"scanner_unsharp_amount",   "scanner.unsharp_mask.amount",            F, PRINT, true, 0.0, 2.0, false},
     {"output_color_space",       "io.output_color_space",                 S, PRINT, false, 0, 0, false},
     {"output_cctf_encoding",     "io.output_cctf_encoding",               B, PRINT, false, 0, 0, false},
     {"scan_film",                "io.scan_film",                          B, PRINT, false, 0, 0, false},
@@ -122,6 +134,9 @@ const SchemaField kFields[] = {
     // pull-backs -- and a room of 0 turns that side off exactly.
     {"scene_latitude_active",         "camera.scene_latitude.active",         B, SHOOT, false, 0, 0, false},
     {"scene_latitude_norm",           "camera.scene_latitude.norm",           S, SHOOT, false, 0, 0, false},
+    // macOS 2.x (ported), API-SPEC §17: the Decode curve's table, 5n numbers in
+    // 0..1 (rgb, luma, r, g, b), "" = off. SHOOT: it shapes what the film sees.
+    {"scene_curve",              "camera.scene_curve",                    S, SHOOT, false, 0, 0, false},
     {"scene_latitude_highlight_knee", "camera.scene_latitude.highlight_knee", F, SHOOT, true, -24.0, 24.0, false},
     {"scene_latitude_highlight_room", "camera.scene_latitude.highlight_room", F, SHOOT, true, 0.0, 24.0, false},
     {"scene_latitude_shadow_knee",    "camera.scene_latitude.shadow_knee",    F, SHOOT, true, -24.0, 24.0, false},
@@ -135,6 +150,9 @@ const SchemaField kFields[] = {
     // only way to turn off -- and it is a mix weight, so above 1 it sharpens.
     {"halation_scatter_amount",  "film_render.halation.scatter_amount",   F, SHOOT, true, 0.0, 1.0, false},
     {"grain_amount",             "film_render.grain.amount",              F, SHOOT, true, 0.0, 2.0, false},
+    // macOS 2.x (ported), the audit's G-4: 0 = a fresh grain per render, a
+    // positive value holds one realisation across renders.
+    {"grain_seed",               "settings.film_seed",                    I, SHOOT, true, 0.0, 2147483647.0, false},
     // RFC-034: the range is the *veil's* range, not halation's. The paper's own
     // glare is 0.03 percent of the illuminant before the field's own /100 --
     // the reference's calibration sweep never asks for more than 0.4 percent --
@@ -156,6 +174,7 @@ const SchemaField kFields[] = {
     {"overscan_camera_seed",     "film_render.overscan.camera_seed",      I, SHOOT, true, 0.0, 2147483647.0, false},
     {"overscan_frame_seed",      "film_render.overscan.frame_seed",       I, SHOOT, true, 0.0, 2147483647.0, false},
     {"overscan_fog",             "film_render.overscan.fog",              F, SHOOT, true, 0.0, 4.0, false},
+    {"overscan_falloff",         "film_render.overscan.falloff",          F, SHOOT, true, 0.0, 1.5, false},
     {"overscan_leaks",           "film_render.overscan.leaks",            F, SHOOT, true, 0.0, 4.0, false},
     {"overscan_edge_text",       "film_render.overscan.edge_text",        S, SHOOT, false, 0, 0, false},
     {"overscan_f_number",        "film_render.overscan.f_number",         F, SHOOT, true, 0.0, 64.0, false},
@@ -207,6 +226,36 @@ const SchemaField kFields[] = {
     // The lens's colour filter (B&W research, 2026-10-07). Native only. SHOOT:
     // it changes the light the negative is made of.
     {"camera_filter",            "camera.filter",                         S, SHOOT, false, 0, 0, false},
+    // API-SPEC §21.5, macOS 2.x (ported): the diffusion filter (柔光镜) in front
+    // of the lens. Four families (glimmerglass, black_pro_mist, pro_mist,
+    // cinebloom), strength 0..2 in commercial filter stops, and the energy-
+    // conserving per-channel "halo warmth" the oracle redistributes the halo's
+    // sub-components with. SHOOT: it changes the light the film is made of.
+    {"diffusion_filter_active",          "camera.diffusion_filter.active",          B, SHOOT, false, 0, 0, false},
+    {"diffusion_filter_family",          "camera.diffusion_filter.filter_family",   S, SHOOT, false, 0, 0, false},
+    {"diffusion_filter_strength",        "camera.diffusion_filter.strength",        F, SHOOT, true, 0.0, 2.0, false},
+    {"diffusion_filter_spatial_scale",   "camera.diffusion_filter.spatial_scale",   F, SHOOT, true, 0.25, 4.0, false},
+    {"diffusion_filter_halo_warmth",     "camera.diffusion_filter.halo_warmth",     F, SHOOT, true, -1.5, 1.5, false},
+    {"diffusion_filter_core_intensity",  "camera.diffusion_filter.core_intensity",  F, SHOOT, true, 0.0, 4.0, false},
+    {"diffusion_filter_core_size",       "camera.diffusion_filter.core_size",       F, SHOOT, true, 0.25, 4.0, false},
+    {"diffusion_filter_halo_intensity",  "camera.diffusion_filter.halo_intensity",  F, SHOOT, true, 0.0, 4.0, false},
+    {"diffusion_filter_halo_size",       "camera.diffusion_filter.halo_size",       F, SHOOT, true, 0.25, 4.0, false},
+    {"diffusion_filter_bloom_intensity", "camera.diffusion_filter.bloom_intensity", F, SHOOT, true, 0.0, 4.0, false},
+    {"diffusion_filter_bloom_size",      "camera.diffusion_filter.bloom_size",      F, SHOOT, true, 0.25, 4.0, false},
+    // API-SPEC §21.6, macOS 2.x (ported): the taking lens's aberrations.
+    {"lens_aberrations_active",  "camera.lens_aberrations.active",              B, SHOOT, false, 0, 0, false},
+    {"lens_field_curvature_um",  "camera.lens_aberrations.field_curvature_um",  F, SHOOT, true, 0.0, 120.0, false},
+    {"lens_astigmatism_um",      "camera.lens_aberrations.astigmatism_um",      F, SHOOT, true, -120.0, 120.0, false},
+    {"lens_field_exponent",      "camera.lens_aberrations.field_exponent",      F, SHOOT, true, 1.0, 4.0, false},
+    {"lens_sharp_radius",        "camera.lens_aberrations.sharp_radius",        F, SHOOT, true, 0.0, 0.8, false},
+    {"lens_coma_um",             "camera.lens_aberrations.coma_um",             F, SHOOT, true, -150.0, 150.0, false},
+    {"lens_spherical_amount",    "camera.lens_aberrations.spherical_amount",    F, SHOOT, true, 0.0, 0.6, false},
+    {"lens_spherical_um",        "camera.lens_aberrations.spherical_um",        F, SHOOT, true, 10.0, 400.0, false},
+    {"lens_lateral_ca_r",        "camera.lens_aberrations.lateral_ca_r",        F, SHOOT, true, -3.0, 3.0, false},
+    {"lens_lateral_ca_b",        "camera.lens_aberrations.lateral_ca_b",        F, SHOOT, true, -3.0, 3.0, false},
+    {"lens_loca_um",             "camera.lens_aberrations.loca_um",             F, SHOOT, true, 0.0, 30.0, false},
+    {"lens_loca_sign",           "camera.lens_aberrations.loca_sign",           S, SHOOT, false, 0, 0, false},
+    {"lens_loca_highlight_gate", "camera.lens_aberrations.loca_highlight_gate", F, SHOOT, true, 0.0, 1.0, false},
     // The stops a recorded highlight is taken to have been clipped by, for the
     // back-reflection halo only (a film with no anti-halation layer). Native
     // only, SHOOT, after `camera_filter`. Every film with a layer ignores it.
@@ -250,6 +299,26 @@ double* float_slot(Params& p, const std::string& path) {
     if (path == "camera.exposure_baseline_ev") return &p.camera.exposure_baseline_ev;
     if (path == "camera.film_format_mm") return &p.camera.film_format_mm;
     if (path == "camera.lens_blur_um") return &p.camera.lens_blur_um;
+    if (path == "camera.diffusion_filter.strength") return &p.camera.diffusion_filter.strength;
+    if (path == "camera.diffusion_filter.spatial_scale") return &p.camera.diffusion_filter.spatial_scale;
+    if (path == "camera.diffusion_filter.halo_warmth") return &p.camera.diffusion_filter.halo_warmth;
+    if (path == "camera.diffusion_filter.core_intensity") return &p.camera.diffusion_filter.core_intensity;
+    if (path == "camera.diffusion_filter.core_size") return &p.camera.diffusion_filter.core_size;
+    if (path == "camera.diffusion_filter.halo_intensity") return &p.camera.diffusion_filter.halo_intensity;
+    if (path == "camera.diffusion_filter.halo_size") return &p.camera.diffusion_filter.halo_size;
+    if (path == "camera.diffusion_filter.bloom_intensity") return &p.camera.diffusion_filter.bloom_intensity;
+    if (path == "camera.diffusion_filter.bloom_size") return &p.camera.diffusion_filter.bloom_size;
+    if (path == "camera.lens_aberrations.field_curvature_um") return &p.camera.lens_aberrations.field_curvature_um;
+    if (path == "camera.lens_aberrations.astigmatism_um") return &p.camera.lens_aberrations.astigmatism_um;
+    if (path == "camera.lens_aberrations.field_exponent") return &p.camera.lens_aberrations.field_exponent;
+    if (path == "camera.lens_aberrations.sharp_radius") return &p.camera.lens_aberrations.sharp_radius;
+    if (path == "camera.lens_aberrations.coma_um") return &p.camera.lens_aberrations.coma_um;
+    if (path == "camera.lens_aberrations.spherical_amount") return &p.camera.lens_aberrations.spherical_amount;
+    if (path == "camera.lens_aberrations.spherical_um") return &p.camera.lens_aberrations.spherical_um;
+    if (path == "camera.lens_aberrations.lateral_ca_r") return &p.camera.lens_aberrations.lateral_ca_r;
+    if (path == "camera.lens_aberrations.lateral_ca_b") return &p.camera.lens_aberrations.lateral_ca_b;
+    if (path == "camera.lens_aberrations.loca_um") return &p.camera.lens_aberrations.loca_um;
+    if (path == "camera.lens_aberrations.loca_highlight_gate") return &p.camera.lens_aberrations.loca_highlight_gate;
     if (path == "film_render.halation.halation_amount") return &p.film_render.halation.halation_amount;
     if (path == "film_render.halation.boost_ev") return &p.film_render.halation.boost_ev;
     if (path == "film_render.halation.headroom_ev") return &p.film_render.halation.headroom_ev;
@@ -272,6 +341,8 @@ double* float_slot(Params& p, const std::string& path) {
     if (path == "enlarger.y_filter_neutral") return &p.enlarger.y_filter_neutral;
     if (path == "enlarger.preflash_exposure") return &p.enlarger.preflash_exposure;
     if (path == "scanner.lens_blur") return &p.scanner.lens_blur;
+    if (path == "scanner.unsharp_mask.sigma") return &p.scanner.unsharp_mask[0];
+    if (path == "scanner.unsharp_mask.amount") return &p.scanner.unsharp_mask[1];
     if (path == "print_render.contrast_mask.highlights") return &p.print_render.contrast_mask.highlights;
     if (path == "print_render.contrast_mask.shadows") return &p.print_render.contrast_mask.shadows;
     if (path == "print_render.contrast_mask.core") return &p.print_render.contrast_mask.core;
@@ -290,6 +361,7 @@ double* float_slot(Params& p, const std::string& path) {
     if (path == "film_render.halation.scatter_amount") return &p.film_render.halation.scatter_amount;
     if (path == "film_render.grain.amount") return &p.film_render.grain.amount;
     if (path == "film_render.overscan.fog") return &p.film_render.overscan.fog;
+    if (path == "film_render.overscan.falloff") return &p.film_render.overscan.falloff;
     if (path == "film_render.overscan.leaks") return &p.film_render.overscan.leaks;
     if (path == "film_render.overscan.f_number") return &p.film_render.overscan.f_number;
     if (path == "film_render.date_imprint.exposure_ev") return &p.film_render.date_imprint.exposure_ev;
@@ -302,7 +374,11 @@ double* float_slot(Params& p, const std::string& path) {
 
 bool* bool_slot(Params& p, const std::string& path) {
     if (path == "camera.auto_exposure") return &p.camera.auto_exposure;
+    if (path == "camera.diffusion_filter.active") return &p.camera.diffusion_filter.active;
+    if (path == "camera.lens_aberrations.active") return &p.camera.lens_aberrations.active;
     if (path == "film_render.halation.active") return &p.film_render.halation.active;
+    if (path == "film_render.halation.halation_renormalize")
+        return &p.film_render.halation.halation_renormalize;
     if (path == "film_render.halation.antihalation_removed")
         return &p.film_render.halation.antihalation_removed;
     if (path == "film_render.grain.active") return &p.film_render.grain.active;
@@ -341,7 +417,10 @@ std::string* str_slot(Params& p, const std::string& path) {
     if (path == "io.viewing_illuminant") return &p.io.viewing_illuminant;
     if (path == "camera.auto_exposure_method") return &p.camera.auto_exposure_method;
     if (path == "camera.filter") return &p.camera.filter;
+    if (path == "camera.diffusion_filter.filter_family") return &p.camera.diffusion_filter.filter_family;
+    if (path == "camera.lens_aberrations.loca_sign") return &p.camera.lens_aberrations.loca_sign;
     if (path == "camera.scene_latitude.norm") return &p.camera.scene_latitude.norm;
+    if (path == "camera.scene_curve") return &p.camera.scene_curve;
     if (path == "print_render.contrast_mask.scheme") return &p.print_render.contrast_mask.scheme;
     if (path == "film_render.overscan.format") return &p.film_render.overscan.format;
     if (path == "film_render.overscan.mode") return &p.film_render.overscan.mode;
@@ -359,6 +438,7 @@ std::string* str_slot(Params& p, const std::string& path) {
 }
 
 int* int_slot(Params& p, const std::string& path) {
+    if (path == "settings.film_seed") return &p.settings.film_seed;
     if (path == "io.geometry.quarter_turns") return &p.io.geometry.quarter_turns;
     if (path == "io.preview_long_edge") return &p.io.preview_long_edge;
     if (path == "settings.strip_rows") return &p.settings.strip_rows;
@@ -399,6 +479,38 @@ bool is_known_camera_filter(const std::string& name) {
     if (name.empty()) return true;
     for (const CameraFilter& f : kCameraFilters) if (name == f.name) return true;
     return false;
+}
+
+bool parse_scene_curve(const std::string& text, std::vector<float>& table, size_t& n,
+                       std::string& error) {
+    table.clear();
+    n = 0;
+    if (text.empty()) return true;
+    const char* p = text.c_str();
+    while (*p) {
+        char* end = nullptr;
+        const double v = std::strtod(p, &end);
+        if (end == p || !std::isfinite(v) || v < 0.0 || v > 1.0) {
+            error = "'scene_curve' must be comma-separated numbers in 0..1";
+            table.clear();
+            return false;
+        }
+        table.push_back(float(v));
+        p = end;
+        if (*p == ',') ++p;
+        else if (*p) {
+            error = "'scene_curve' must be comma-separated numbers in 0..1";
+            table.clear();
+            return false;
+        }
+    }
+    if (table.size() % kSceneCurveRows != 0 || table.size() / kSceneCurveRows < 2) {
+        error = "'scene_curve' must hold five rows of at least two samples (rgb, luma, r, g, b)";
+        table.clear();
+        return false;
+    }
+    n = table.size() / kSceneCurveRows;
+    return true;
 }
 
 namespace {
@@ -484,6 +596,21 @@ bool validate_delta(const Json& delta, std::string& error, std::string& param) {
                     "' is not a camera filter ('' for none, w8, w11, w12, w15, w21, w25, w47, w58)";
             param = kv.first;
             return false;
+        }
+        if (kv.first == "lens_loca_sign" &&
+            !(v.as_string() == "purple" || v.as_string() == "green")) {
+            error = "'lens_loca_sign' = '" + v.as_string() +
+                    "' is not a LoCA sign (purple: R and B soft; green: G soft)";
+            param = kv.first;
+            return false;
+        }
+        if (kv.first == "scene_curve") {
+            std::vector<float> table;
+            size_t samples = 0;
+            if (!parse_scene_curve(v.as_string(), table, samples, error)) {
+                param = kv.first;
+                return false;
+            }
         }
         if (kv.first == "auto_exposure_method" && !is_known_exposure_method(v.as_string())) {
             error = "'auto_exposure_method' = '" + v.as_string() +
@@ -583,6 +710,36 @@ void set2(double dst[2], double a, double b) { dst[0] = a; dst[1] = b; }
 // again. That is also why it starts from the struct's own defaults -- an
 // unknown tag "leaves the defaults", and on a second call the defaults would
 // otherwise be whatever the first call wrote.
+// The halo's per-channel **geometric width**, from the back-reflection kernel
+// in `halation_psf.hpp`: the red record is the deepest and its halo the
+// widest, blue the shallowest -- the layer geometry every real halation has
+// and the audit measured on CineStill (360/120/100 um to 25 %). A film with an
+// anti-halation layer shows that geometry only in the residual return, so `t`
+// pulls the ratio toward isotropic: 0.25 for a strong layer (measured strong
+// Ektar 130/110/100 um), 0.5 for a weak one, 1 for a layer that is not there.
+void halation_channel_shape(double t, double out[3]) {
+    double mean[kBackReflectionComponents][3] = {};
+    for (int k = 0; k < kBackReflectionComponents; ++k)
+        for (int c = 0; c < 3; ++c)
+            mean[k][c] = kBackReflectionWeight[k][c] * kBackReflectionSigmaOverBase[k][c];
+    double r[3] = {0, 0, 0};
+    for (int k = 0; k < kBackReflectionComponents; ++k)
+        for (int c = 0; c < 3; ++c) r[c] += mean[k][c];
+    const double geo = std::cbrt(r[0] * r[1] * r[2]);
+    for (int c = 0; c < 3; ++c) out[c] = 1.0 + t * (r[c] / geo - 1.0);
+}
+
+// The per-channel halo shape is an intentional divergence from the reference
+// (which gives every film the same three-channel width); the parity harnesses
+// set this to compare the two engines on the reference's own model.
+bool reference_halation_shape() {
+    static const bool reference = []() {
+        const char* e = std::getenv("SPK_REFERENCE_HALATION_SHAPE");
+        return e != nullptr && std::string(e) != "0" && !std::string(e).empty();
+    }();
+    return reference;
+}
+
 void apply_halation_preset(Params& p) {
     if (p.film.info.support != "film") return;
     const HalationParams defaults;
@@ -601,13 +758,20 @@ void apply_halation_preset(Params& p) {
     const bool own_no = p.film.info.antihalation == "no";
     const double sigma = use == "cine" ? 50.0 : 65.0;
     double s0, s1, s2;
-    if (ah == "strong") { s0 = 0.015; s1 = 0.005; s2 = 0.0; }
-    else if (ah == "weak") { s0 = 0.08; s1 = 0.02; s2 = 0.0; }
-    else if (ah == "no" && own_no) { s0 = kBackReflectionStrength[0]; s1 = kBackReflectionStrength[1]; s2 = kBackReflectionStrength[2]; }
-    else if (ah == "no") { s0 = 0.30; s1 = 0.10; s2 = 0.015; }
+    double shape[3] = {1, 1, 1};
+    if (ah == "strong") { s0 = 0.015; s1 = 0.005; s2 = 0.0; halation_channel_shape(0.25, shape); }
+    else if (ah == "weak") { s0 = 0.08; s1 = 0.02; s2 = 0.0; halation_channel_shape(0.5, shape); }
+    else if (ah == "no" && own_no) { s0 = kBackReflectionStrength[0]; s1 = kBackReflectionStrength[1]; s2 = kBackReflectionStrength[2]; halation_channel_shape(1.0, shape); }
+    else if (ah == "no") { s0 = 0.30; s1 = 0.10; s2 = 0.015; halation_channel_shape(1.0, shape); }
     else return;   // an unknown tag leaves the defaults, as the dict lookup does
     if (use != "still" && use != "cine") return;
-    set3(p.film_render.halation.halation_first_sigma_um, sigma, sigma, sigma);
+    if (reference_halation_shape()) { shape[0] = shape[1] = shape[2] = 1.0; }
+    // The spread, per channel: same total energy and strength, but the red
+    // halo reaches further than the blue instead of all three being 65 um.
+    // (A film with no layer keeps the physical kernel itself, below, so the
+    // Gaussian's sigma is not read on that branch.)
+    for (int c = 0; c < 3; ++c)
+        p.film_render.halation.halation_first_sigma_um[c] = sigma * shape[c];
     set3(p.film_render.halation.halation_strength, s0, s1, s2);
     // No layer at all: the rear face of the base is a mirror, and the halo is
     // its geometry (`HalationParams::back_reflection`), not a Gaussian guess.
@@ -714,6 +878,7 @@ bool digest(Params& p, const Json& neutral_filters, std::string& error) {
         p.enlarger.lens_blur = 0.0;
         p.enlarger.diffusion_filter.active = false;
         p.camera.diffusion_filter.active = false;
+        p.camera.lens_aberrations.active = false;
         p.scanner.lens_blur = 0.0;
         set2(p.scanner.unsharp_mask, 0.0, 0.0);
     }
@@ -750,16 +915,42 @@ struct StockGrainRatio {
 };
 
 constexpr StockGrainRatio kStockGrainRatios[] = {
-    // k = sigma-d of the stock / sigma-d of VISION3 50D, per channel R,G,B,
-    // read from each sheet page 4 by its own printed rule (density 1.0 ->
-    // characteristic curve -> granularity curve).  Sheet values at density
-    // 1.0: 50D 4.76/5.30/11.97, 250D 6.10/8.47/11.49 (blue is an edge read:
-    // 250D's blue minimum density sits at about 1.0), 200T 5.15/8.19/20.38,
-    // 500T 6.09/10.99/30.44.  Numbers and method in
-    // film-validation/realism/vision3_granularity.json.
+    // k = sigma of the stock / sigma of VISION3 50D, per channel R,G,B.
+    //
+    // **T1: the four VISION3 cinema negatives**, read from each sheet page 4
+    // by its own printed rule (density 1.0 -> characteristic curve ->
+    // granularity curve).  Sheet values at density 1.0: 50D 4.76/5.30/11.97,
+    // 250D 6.10/8.47/11.49 (blue is an edge read: 250D's blue minimum density
+    // sits at about 1.0), 200T 5.15/8.19/20.38, 500T 6.09/10.99/30.44.
+    // Numbers and method in film-validation/realism/vision3_granularity.json.
     {"kodak_vision3_250d", 6.10 / 4.76, 8.47 / 5.30, 11.49 / 11.97},
     {"kodak_vision3_200t", 5.15 / 4.76, 8.19 / 5.30, 20.38 / 11.97},
     {"kodak_vision3_500t", 6.09 / 4.76, 10.99 / 5.30, 30.44 / 11.97},
+
+    // **T3: Kodak's still stocks, by PGI** (Kodak's Print Grain Index: a
+    // *perceived* granularity on its own scale, not comparable with diffuse
+    // rms; the relative ratio is what is defensible).  The anchor is PORTRA
+    // 400 at the VISION3 50D visual level -- same maker, same negative
+    // granularity convention at net density 1.0 -- an explicit assumption
+    // recorded in film-validation/realism/sources.md §4 and §8.2:
+    //     k = 10^((PGI - 37) / 100.8)
+    // (E-58 PGI has 4 units ≈ 1 jnd; the three channels take the same k, as
+    // the visual weighting is a scalar over the records.)
+    {"kodak_ektar_100", 0.7600, 0.7600, 0.7600},     // PGI <= 25, a threshold: taken at 25
+    {"kodak_portra_160", 0.8145, 0.8145, 0.8145},    // PGI 28
+    {"kodak_portra_400", 1.0000, 1.0000, 1.0000},    // PGI 37: the anchor itself
+    {"kodak_portra_800", 1.2864, 1.2864, 1.2864},    // PGI 48
+    {"kodak_gold_200", 1.1735, 1.1735, 1.1735},      // PGI 44
+    {"kodak_ultramax_400", 1.2280, 1.2280, 1.2280},  // PGI 46
+
+    // **T2: Fujifilm's still negatives, a weak constraint** -- six datasheets
+    // give DIFFUSE RMS 4 (48 um, +1.0 above min density, their own
+    // measurements) against 50D's visual rms 5.63, so *ordering* is all it
+    // supports: 4 / 5.63, the same for all three (they are all 4 -- the data
+    // cannot tell them apart).  Confidence lowest; recorded as such.
+    {"fujifilm_c200", 0.7105, 0.7105, 0.7105},       // RMS 4, weak
+    {"fujifilm_pro_400h", 0.7105, 0.7105, 0.7105},   // RMS 4, weak
+    {"fujifilm_xtra_400", 0.7105, 0.7105, 0.7105},   // RMS 4, weak
 };
 
 }  // namespace

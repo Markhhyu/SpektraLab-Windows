@@ -1,0 +1,60 @@
+#version 450
+
+// spk_scene_curve.comp -- the Decode curve (API-SPEC §17, macOS 2.x, ported
+// from src/shaders/scene_latitude.metal's kernel).
+//
+// A tone curve on the scene before the film, as five rows of n samples (rgb,
+// luma, r, g, b). Its axis is stops about the metered mid-grey (Scene
+// Latitude's own axis). Applied luma first (a gain on Y, hue kept), then rgb on
+// each channel, then each channel's own row -- the Layer 2 pass's order.
+//
+// RFC-035 §5.3: the axis is the scene as exposed onto the film. This node runs
+// before `node_exposure`'s 2^c (c = Film Exposure), so it reads the table at
+// E + c and applies 2^(f(E + c) - (E + c)); the film then gets 2^c on top, and
+// its exposure is exactly f(E + c). With c = 0 this is the kernel as it was.
+//
+// p: {n, S (stops either side), n_ref, Y row 0..2, c (Film Exposure, stops)}
+// t: five rows of n, rgb luma r g b
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer Rgb { float value[]; } rgb;
+layout(set = 0, binding = 1, std430) readonly buffer Params { float value[]; } p;
+layout(set = 0, binding = 2, std430) readonly buffer Table { float value[]; } t;
+layout(set = 0, binding = 3, std430) readonly buffer Count { uint value[]; } count_data;
+layout(set = 0, binding = 4, std430) writeonly buffer Out { float value[]; } out_data;
+
+uint spk_global_index() {
+    return gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) + gl_GlobalInvocationID.x;
+}
+
+float scene_curve_gain(float v, uint row, uint n, float S, float n_ref, float c) {
+    if (!(v > 0.0) || isnan(v) || isinf(v)) return 1.0;
+    float E = log2(v / n_ref) + c;
+    float u = clamp((E + S) / (2.0 * S), 0.0, 1.0);
+    float x = u * float(n - 1u);
+    uint i = min(uint(x), n - 2u);
+    float f = x - float(i);
+    uint base = row * n;
+    float y = mix(t.value[base + i], t.value[base + i + 1u], f);
+    // At the clamp, u is the end's: the gain there is held beyond it.
+    float d = 2.0 * S * (y - u);
+    return clamp(exp2(d), exp2(-30.0), exp2(30.0));
+}
+
+void main() {
+    uint i = spk_global_index();
+    if (i >= count_data.value[0]) return;
+    uint n = uint(p.value[0]);
+    float S = p.value[1], n_ref = p.value[2], ec = p.value[6];
+    vec3 c = vec3(rgb.value[3u * i], rgb.value[3u * i + 1u], rgb.value[3u * i + 2u]);
+    float y = p.value[3] * max(c.r, 0.0) + p.value[4] * max(c.g, 0.0) + p.value[5] * max(c.b, 0.0);
+    c *= scene_curve_gain(y, 1u, n, S, n_ref, ec);
+    c = vec3(c.r * scene_curve_gain(c.r, 0u, n, S, n_ref, ec),
+             c.g * scene_curve_gain(c.g, 0u, n, S, n_ref, ec),
+             c.b * scene_curve_gain(c.b, 0u, n, S, n_ref, ec));
+    c = vec3(c.r * scene_curve_gain(c.r, 2u, n, S, n_ref, ec),
+             c.g * scene_curve_gain(c.g, 3u, n, S, n_ref, ec),
+             c.b * scene_curve_gain(c.b, 4u, n, S, n_ref, ec));
+    out_data.value[3u * i] = c.r;
+    out_data.value[3u * i + 1u] = c.g;
+    out_data.value[3u * i + 2u] = c.b;
+}

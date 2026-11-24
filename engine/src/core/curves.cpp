@@ -140,20 +140,18 @@ void development_morph(const DevelopmentParams& p, DevelopmentMorph& out) {
         out.shift[c] = std::min(0.3, std::max(-0.9, kShiftB[c] * x + kShiftC[c] * x * x));
     }
     // Push processing coarsens the grain (more development of the same
-    // particles); a pull smooths it. The temperature term is the same
-    // activity, at a third of the push's strength.
-    // Push processing coarsens the grain (more development of the same
-    // particles); a pull smooths it. The temperature term is the same
-    // activity, at a third of the push's strength.
-    //
-    // This is the *only* push -> grain coupling. `build_grain_tables` bakes the
-    // morph into the density axis and the layer tables too, but measured on
-    // developed density at matched net density (bench/realism_push_compare.py,
-    // VISION3 50D, 48 um aperture) that part moves sigma-D by under 5%: it
-    // changes which density a pixel lands on, not how coarse that density is.
-    // So there is no double counting to remove -- but do not grow this
-    // coefficient without re-measuring the fixed-density response.
-    const double grain = 1.0 + 0.18 * push + 0.03 * (p.temperature_c - 20.0);
+    // particles); a pull smooths it. **One coupling, and temperature is
+    // already inside `push`** (`push_stops + (T - 20)/6` above, C-41's
+    // "1 °C ≈ 1/6 stop"): the old second term `+ 0.03 (T - 20)` was the same
+    // 1/6-stop rule again through the 0.18/stop coefficient, so a warm
+    // developer counted twice (the audit's C-11: push 0.5 at 20 °C and
+    // push 0 at 23 °C are one development, and grain read 1.090 against
+    // 1.180). Measured on developed density at matched net density
+    // (`bench/realism_push_compare.py`, VISION3 50D, 48 um aperture), the
+    // curve morph moves sigma-D by under 5%: it changes where a pixel lands,
+    // not how coarse that density is. Do not grow this coefficient without
+    // re-measuring the fixed-density response.
+    const double grain = 1.0 + 0.18 * push;
     out.grain_scale = std::min(2.0, std::max(0.5, grain));
 }
 

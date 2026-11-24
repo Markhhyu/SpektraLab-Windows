@@ -67,6 +67,14 @@ import numpy as np
 
 from spk_test_paths import add_engine_arguments, engine_options
 
+# This harness compares against the *optical* reference build. The macOS 2.x
+# reading refinements (the print hue from the negative, and the minilab
+# print table) are deliberate departures from the reference: with them on,
+# every chromatic pair would differ by their design, so they are pinned off
+# for the comparison (the same switch the macOS harnesses use).
+os.environ.setdefault("SPK_V2_REFERENCE_OPTICAL", "1")
+os.environ.setdefault("SPK_REFERENCE_HALATION_SHAPE", "1")   # the reference's equal-width halo
+
 REPO = Path(__file__).resolve().parents[2]
 PRODUCT = REPO / "engine/resources_product/profiles"
 SHARED = REPO / "engine/resources/profiles"

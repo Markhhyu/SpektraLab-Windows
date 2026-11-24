@@ -229,6 +229,134 @@ export const LENS_BLUR_RANGE: [number, number] = [0, 200];
 export const SCANNER_BLUR_RANGE: [number, number] = [0, 20];
 export const DENSITY_GAMMA_RANGE: [number, number] = [0.2, 4];
 
+/** The diffusion filter (柔光镜) families the engine's PSF model bakes, in the
+ *  oracle's order (`engine/src/core/diffusion_psf.cpp`, macOS 2.x §21.5). */
+export const DIFFUSION_FILTER_FAMILIES = ['glimmerglass', 'black_pro_mist', 'pro_mist', 'cinebloom'] as const;
+
+export function diffusionFilterLabel(value: string): string {
+  switch (value) {
+    case 'glimmerglass': return tz('Glimmerglass', '闪柔');
+    case 'pro_mist': return tz('Pro-Mist', '白柔');
+    case 'cinebloom': return tz('CineBloom', '晕柔');
+    case 'black_pro_mist': return tz('Black Pro-Mist', '黑柔');
+    default: return tz('Black Pro-Mist', '黑柔');
+  }
+}
+
+/** Commercial filter stops: 1/8, 1/4, 1/2, 1 and 2 (the wire takes 0..2). */
+export const DIFFUSION_STRENGTHS = [0.125, 0.25, 0.5, 1, 2] as const;
+
+export interface DiffusionFilterSettings {
+  active: boolean;
+  family: string;
+  strength: number;
+}
+
+export const DIFFUSION_FILTER_DEFAULT: DiffusionFilterSettings = {
+  active: false,
+  family: 'black_pro_mist',
+  strength: 0.5,
+};
+
+/** The taking lens's aberrations (API-SPEC §21.6, macOS 2.x, ported). Sizes are
+ *  µm at the frame's edge; CA is in thousandths of the radial scale. */
+export interface LensCharacterSettings {
+  active: boolean;
+  fieldCurvatureUm: number;
+  astigmatismUm: number;
+  fieldExponent: number;
+  sharpRadius: number;
+  comaUm: number;
+  sphericalAmount: number;
+  sphericalUm: number;
+  lateralCaR: number;
+  lateralCaB: number;
+  locaUm: number;
+  locaSign: string;
+  locaHighlightGate: number;
+}
+
+export const LENS_CHARACTER_DEFAULT: LensCharacterSettings = {
+  active: false,
+  fieldCurvatureUm: 0,
+  astigmatismUm: 0,
+  fieldExponent: 2,
+  sharpRadius: 0,
+  comaUm: 0,
+  sphericalAmount: 0,
+  sphericalUm: 60,
+  lateralCaR: 0,
+  lateralCaB: 0,
+  locaUm: 0,
+  locaSign: 'purple',
+  locaHighlightGate: 1,
+};
+
+export const LENS_CURVATURE_RANGE: [number, number] = [0, 120];
+export const LENS_ASTIGMATISM_RANGE: [number, number] = [-120, 120];
+export const LENS_COMA_RANGE: [number, number] = [-150, 150];
+export const LENS_CA_RANGE: [number, number] = [-3, 3];
+export const LENS_LOCA_RANGE: [number, number] = [0, 30];
+export const LENS_GLOW_RANGE: [number, number] = [0, 0.6];
+
+export function locaSignLabel(value: string): string {
+  return value === 'green' ? tz('Green soft', '绿通道柔化') : tz('Purple soft', '紫边柔化');
+}
+
+/** The Decode curve (API-SPEC §17, macOS 2.x, ported): five curves on the
+ *  scene before the film, on Scene Latitude's axis (stops about mid-grey). The
+ *  wire carries them as one table of five rows (rgb, luma, red, green, blue),
+ *  sampled by the panel; the points are kept so the editor can reopen them. */
+export type DecodeCurvePoints = [number, number][];
+export interface DecodeCurveSet {
+  rgb: { points: DecodeCurvePoints };
+  luma: { points: DecodeCurvePoints };
+  red: { points: DecodeCurvePoints };
+  green: { points: DecodeCurvePoints };
+  blue: { points: DecodeCurvePoints };
+}
+
+export const DECODE_CURVE_IDENTITY: DecodeCurveSet = {
+  rgb: { points: [[0, 0], [1, 1]] },
+  luma: { points: [[0, 0], [1, 1]] },
+  red: { points: [[0, 0], [1, 1]] },
+  green: { points: [[0, 0], [1, 1]] },
+  blue: { points: [[0, 0], [1, 1]] },
+};
+
+/** Validate a wire-shaped Decode-curve table: five rows of at least two numbers
+ *  in 0…1. Returns the text unchanged, or '' (the identity) for anything else. */
+export function sanitizeSceneCurveText(text: unknown): string {
+  if (typeof text !== 'string' || text === '') return '';
+  const parts = text.split(',');
+  if (parts.length < 10 || parts.length % 5 !== 0) return '';
+  for (const part of parts) {
+    const v = Number(part);
+    if (!Number.isFinite(v) || v < 0 || v > 1) return '';
+  }
+  return text;
+}
+
+/** The wire text for five sampled rows (`curveTables`' layout: rgb, luma, red,
+ *  green, blue). `''` when every sample is the identity, so a neutral curve is
+ *  byte-for-byte the render without one. */
+export function encodeSceneCurve(tables: Float32Array | number[]): string {
+  const values: string[] = [];
+  for (let i = 0; i < tables.length; i++) {
+    const v = Number(tables[i]);
+    if (!Number.isFinite(v)) return '';
+    values.push(v.toFixed(6).replace(/0+$/, '').replace(/\.$/, ''));
+  }
+  const n = values.length / 5;
+  if (!Number.isInteger(n) || n < 2) return '';
+  for (let row = 0; row < 5; row++)
+    for (let i = 0; i < n; i++) {
+      const expected = i / (n - 1);
+      if (Math.abs(Number(values[row * n + i]) - expected) > 1e-9) return values.join(',');
+    }
+  return '';
+}
+
 export const FILM_EDGE_FORMATS = [
   '135',
   '135_half',
@@ -253,6 +381,8 @@ export interface FilmEdgeSettings {
   frameSeed: number;
   frameNumber: number;
   fog: number;
+  /** The taking lens's cos^n falloff over the picture, 0..1.5 (0 = off). */
+  falloff: number;
   leaks: number;
   edgeText: string;
   fNumber: number;
@@ -270,6 +400,7 @@ export const FILM_EDGE_DEFAULT: FilmEdgeSettings = {
   frameSeed: 1,
   frameNumber: 0,
   fog: 1,
+  falloff: 0,
   leaks: 0,
   edgeText: '',
   fNumber: 0,
@@ -347,12 +478,33 @@ export interface FilmParams {
   viewingIlluminant: string;
   /** A Wratten filter in front of the taking lens (`engine/src/core/camera_filters.hpp`); `''` = none. */
   cameraFilter: string;
+  /** The diffusion filter (柔光镜) in front of the taking lens, macOS 2.x §21.5. */
+  diffusionFilter: DiffusionFilterSettings;
+  /** The taking lens's aberrations (API-SPEC §21.6, macOS 2.x). */
+  lensCharacter: LensCharacterSettings;
+  /** The Decode curve's five curves, for the editor (API-SPEC §17). */
+  decodeCurve: DecodeCurveSet;
+  /** The Decode curve as the wire carries it ("" = the identity, off). */
+  decodeCurveText: string;
+  /** `grain_seed` (macOS 2.x / the audit's G-4): 0 = a fresh grain per render,
+   *  a positive value holds one realisation across renders and exports. */
+  filmSeed: number;
   /** Diffraction at the taking aperture, µm. Previews zero it in `digest()`. */
   lensBlurUm: number;
   /** Exposure of the stock's density curve; `1` is the curve the profile ships. */
   densityCurveGamma: number;
   /** Scanner white/black point correction and its lens blur, as on the Mac. */
   scannerWhiteCorrection: boolean;
+  /** The scan's unsharp mask (the audit's M-3; engine defaults 0.7 / 0.7).
+   *  **The product sends amount 0**: no hidden digital sharpening on the film
+   *  texture by default, and the UI raises it if wanted. */
+  scanUnsharpSigma: number;
+  scanUnsharpAmount: number;
+  /** H-2: the late-halation renormalise (`(raw + a*halo)/(1+a)`), which dims
+   *  the source's highlights. The engine keeps the reference default (true,
+   *  parity unchanged); the product sends false -- measured 23 % darkening on
+   *  CineStill against about 6 % on a real RAW. */
+  halationRenormalize: boolean;
   scannerBlackCorrection: boolean;
   scannerLensBlur: number;
   /** What the scan shows past the frame edges: `none` | `black` | `open`. */
@@ -393,9 +545,17 @@ export const FILM_PARAMS_DEFAULT: FilmParams = {
   scanIlluminant: '',
   viewingIlluminant: '',
   cameraFilter: '',
+  diffusionFilter: DIFFUSION_FILTER_DEFAULT,
+  lensCharacter: LENS_CHARACTER_DEFAULT,
+  decodeCurve: DECODE_CURVE_IDENTITY,
+  decodeCurveText: '',
+  filmSeed: 0,
   lensBlurUm: 0,
   densityCurveGamma: 1,
   scannerWhiteCorrection: false,
+  scanUnsharpSigma: 0.7,
+  scanUnsharpAmount: 0,
+  halationRenormalize: false,
   scannerBlackCorrection: false,
   scannerLensBlur: 0,
   overscanCarrier: 'none',
@@ -460,6 +620,51 @@ export function decodeFilmParams(raw: unknown): FilmParams {
   // An unknown filter or carrier in an older sidecar would make the host refuse
   // the whole delta, and the wire has no way to say "keep the engine's".
   base.cameraFilter = (CAMERA_FILTERS as readonly string[]).includes(base.cameraFilter) ? base.cameraFilter : '';
+  base.diffusionFilter = decodeShape(o.diffusionFilter, DIFFUSION_FILTER_DEFAULT);
+  if (!(DIFFUSION_FILTER_FAMILIES as readonly string[]).includes(base.diffusionFilter.family)) {
+    base.diffusionFilter = { ...base.diffusionFilter, family: DIFFUSION_FILTER_DEFAULT.family };
+  }
+  base.diffusionFilter.strength = Math.min(2, Math.max(0, Number(base.diffusionFilter.strength) || 0));
+  base.lensCharacter = decodeShape(o.lensCharacter, LENS_CHARACTER_DEFAULT);
+  if (base.lensCharacter.locaSign !== 'purple' && base.lensCharacter.locaSign !== 'green') {
+    base.lensCharacter = { ...base.lensCharacter, locaSign: LENS_CHARACTER_DEFAULT.locaSign };
+  }
+  {
+    const c = base.lensCharacter;
+    const clamp = (v: number, lo: number, hi: number) =>
+      Math.min(hi, Math.max(lo, Number(v) || 0));
+    base.lensCharacter = {
+      ...c,
+      fieldCurvatureUm: clamp(c.fieldCurvatureUm, ...LENS_CURVATURE_RANGE),
+      astigmatismUm: clamp(c.astigmatismUm, ...LENS_ASTIGMATISM_RANGE),
+      fieldExponent: clamp(c.fieldExponent, 1, 4),
+      sharpRadius: clamp(c.sharpRadius, 0, 0.8),
+      comaUm: clamp(c.comaUm, ...LENS_COMA_RANGE),
+      sphericalAmount: clamp(c.sphericalAmount, ...LENS_GLOW_RANGE),
+      sphericalUm: clamp(c.sphericalUm, 10, 400),
+      lateralCaR: clamp(c.lateralCaR, ...LENS_CA_RANGE),
+      lateralCaB: clamp(c.lateralCaB, ...LENS_CA_RANGE),
+      locaUm: clamp(c.locaUm, ...LENS_LOCA_RANGE),
+      locaHighlightGate: clamp(c.locaHighlightGate, 0, 1),
+    };
+  }
+  base.decodeCurve = decodeShape(o.decodeCurve, DECODE_CURVE_IDENTITY);
+  {
+    const validPoints = (points: unknown): boolean =>
+      Array.isArray(points) &&
+      points.length >= 2 &&
+      points.every((p) => Array.isArray(p) && p.length === 2 &&
+        Number.isFinite(Number(p[0])) && Number.isFinite(Number(p[1])));
+    const fixed: DecodeCurveSet = { ...base.decodeCurve };
+    for (const ch of ['rgb', 'luma', 'red', 'green', 'blue'] as const) {
+      if (!validPoints(fixed[ch]?.points)) fixed[ch] = { points: [[0, 0], [1, 1]] };
+    }
+    base.decodeCurve = fixed;
+  }
+  base.decodeCurveText = sanitizeSceneCurveText(base.decodeCurveText);
+  base.filmSeed = Math.min(2147483647, Math.max(0, Math.round(Number(base.filmSeed) || 0)));
+  base.scanUnsharpSigma = Math.min(5, Math.max(0, Number(base.scanUnsharpSigma) || 0));
+  base.scanUnsharpAmount = Math.min(2, Math.max(0, Number(base.scanUnsharpAmount) || 0));
   base.overscanCarrier = (OVERSCAN_CARRIERS as readonly string[]).includes(base.overscanCarrier) ? base.overscanCarrier : 'none';
   base.development = decodeShape(o.development, DEVELOPMENT_DEFAULT);
   base.contrastMask = decodeShape(o.contrastMask, CONTRAST_MASK_DEFAULT);
@@ -586,10 +791,31 @@ export function wire(p: FilmParams, gate: FeatureGate = ALL_FEATURES, catalog?: 
     // P2-03: path detail the engine always had but no panel exposed. Previews
     // zero the two lens blurs in `digest()`, so they show on a full render.
     { name: 'camera_filter', value: p.cameraFilter, layer: 'shoot' },
+    { name: 'diffusion_filter_active', value: p.diffusionFilter.active, layer: 'shoot' },
+    { name: 'diffusion_filter_family', value: p.diffusionFilter.family, layer: 'shoot' },
+    { name: 'diffusion_filter_strength', value: p.diffusionFilter.strength, layer: 'shoot' },
+    { name: 'lens_aberrations_active', value: p.lensCharacter.active, layer: 'shoot' },
+    { name: 'lens_field_curvature_um', value: p.lensCharacter.fieldCurvatureUm, layer: 'shoot' },
+    { name: 'lens_astigmatism_um', value: p.lensCharacter.astigmatismUm, layer: 'shoot' },
+    { name: 'lens_field_exponent', value: p.lensCharacter.fieldExponent, layer: 'shoot' },
+    { name: 'lens_sharp_radius', value: p.lensCharacter.sharpRadius, layer: 'shoot' },
+    { name: 'lens_coma_um', value: p.lensCharacter.comaUm, layer: 'shoot' },
+    { name: 'lens_spherical_amount', value: p.lensCharacter.sphericalAmount, layer: 'shoot' },
+    { name: 'lens_spherical_um', value: p.lensCharacter.sphericalUm, layer: 'shoot' },
+    { name: 'lens_lateral_ca_r', value: p.lensCharacter.lateralCaR, layer: 'shoot' },
+    { name: 'lens_lateral_ca_b', value: p.lensCharacter.lateralCaB, layer: 'shoot' },
+    { name: 'lens_loca_um', value: p.lensCharacter.locaUm, layer: 'shoot' },
+    { name: 'lens_loca_sign', value: p.lensCharacter.locaSign, layer: 'shoot' },
+    { name: 'lens_loca_highlight_gate', value: p.lensCharacter.locaHighlightGate, layer: 'shoot' },
+    { name: 'scene_curve', value: p.decodeCurveText, layer: 'shoot' },
+    { name: 'grain_seed', value: clamp(Math.round(p.filmSeed), 0, 2147483647), layer: 'shoot' },
     { name: 'lens_blur_um', value: clamp(p.lensBlurUm, LENS_BLUR_RANGE[0], LENS_BLUR_RANGE[1]), layer: 'shoot' },
     { name: 'density_curve_gamma', value: clamp(p.densityCurveGamma, DENSITY_GAMMA_RANGE[0], DENSITY_GAMMA_RANGE[1]), layer: 'shoot' },
     { name: 'overscan_carrier', value: p.overscanCarrier, layer: 'shoot' },
     { name: 'scanner_white_correction', value: p.scannerWhiteCorrection, layer: 'print' },
+    { name: 'halation_renormalize', value: p.halationRenormalize, layer: 'shoot' },
+    { name: 'scanner_unsharp_sigma', value: clamp(p.scanUnsharpSigma, 0, 5), layer: 'print' },
+    { name: 'scanner_unsharp_amount', value: clamp(p.scanUnsharpAmount, 0, 2), layer: 'print' },
     { name: 'scanner_black_correction', value: p.scannerBlackCorrection, layer: 'print' },
     { name: 'scanner_lens_blur', value: clamp(p.scannerLensBlur, SCANNER_BLUR_RANGE[0], SCANNER_BLUR_RANGE[1]), layer: 'print' },
   );
@@ -688,6 +914,7 @@ export function wire(p: FilmParams, gate: FeatureGate = ALL_FEATURES, catalog?: 
         { name: 'overscan_frame_seed', value: clamp(Math.round(fe.frameSeed), 0, 2147483647), layer: 'shoot' },
         { name: 'overscan_frame_number', value: clamp(Math.round(fe.frameNumber), 0, 99), layer: 'shoot' },
         { name: 'overscan_fog', value: clamp(fe.fog, 0, 4), layer: 'shoot' },
+        { name: 'overscan_falloff', value: clamp(fe.falloff, 0, 1.5), layer: 'shoot' },
         { name: 'overscan_leaks', value: clamp(fe.leaks, 0, 4), layer: 'shoot' },
         { name: 'overscan_edge_text', value: fe.edgeText, layer: 'shoot' },
         { name: 'overscan_f_number', value: clamp(fe.fNumber, 0, 64), layer: 'shoot' },

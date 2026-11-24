@@ -1,0 +1,35 @@
+#version 450
+
+// spk_lens_loca_share.comp -- longitudinal CA's scattered light, "share" half
+// (API-SPEC §21.6, macOS 2.x, ported from src/shaders/lens.metal).
+//
+// The share of a pixel's light the soft channels scatter:
+//   m = (1 - gate) + gate * smoothstep(mid, 4 mid, Y)
+// on the sharp luminance. The scattered light M = soft * m * A is taken out where
+// it is and put back blurred by spk_lens_loca_mix, so the soft channels keep
+// their energy exactly and go soft only where the light is bright.
+// p: {soft_r, soft_g, soft_b, gate, mid}; meta: {n}
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer In { float value[]; } in_data;
+layout(set = 0, binding = 1, std430) readonly buffer Params { float value[]; } p;
+layout(set = 0, binding = 2, std430) readonly buffer Meta { uint value[]; } meta;
+layout(set = 0, binding = 3, std430) writeonly buffer Out { float value[]; } out_data;
+
+uint spk_global_index() {
+    return gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) + gl_GlobalInvocationID.x;
+}
+
+float loca_share(vec3 v) {
+    float y = 0.25 * v.x + 0.5 * v.y + 0.25 * v.z;
+    return (1.0 - p.value[3]) + p.value[3] * smoothstep(p.value[4], 4.0 * p.value[4], y);
+}
+
+void main() {
+    uint i = spk_global_index();
+    if (i >= meta.value[0]) return;
+    vec3 va = vec3(in_data.value[3u * i], in_data.value[3u * i + 1u], in_data.value[3u * i + 2u]);
+    vec3 o = vec3(p.value[0], p.value[1], p.value[2]) * loca_share(va) * va;
+    out_data.value[3u * i] = o.x;
+    out_data.value[3u * i + 1u] = o.y;
+    out_data.value[3u * i + 2u] = o.z;
+}

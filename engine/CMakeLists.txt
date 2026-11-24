@@ -39,9 +39,12 @@ add_library(spektralab_core STATIC
     src/core/colour.cpp
     src/core/curves.cpp
     src/core/digital_intermediate.cpp
+    src/core/diffusion_psf.cpp
     src/core/hanatos.cpp
     src/core/json.cpp
     src/core/latitude_fit.cpp
+    src/core/minilab.cpp
+    src/core/negative_hue.cpp
     src/core/numeric.cpp
     src/core/params.cpp
     src/core/print_lut.cpp
@@ -105,6 +108,12 @@ if(BUILD_TESTING)
         COMMAND spk_dump_setup "${CMAKE_CURRENT_SOURCE_DIR}/resources"
                 "${CMAKE_CURRENT_BINARY_DIR}/setup.dat"
                 "${CMAKE_CURRENT_BINARY_DIR}/setup.idx")
+
+    # API-SPEC §21.5, macOS 2.x: the diffusion filter's host tables against the
+    # oracle's numbers (`diffusion_psf.cpp` comment says where they come from).
+    add_executable(spk_diffusion_psf tests/diffusion_psf.cpp)
+    target_link_libraries(spk_diffusion_psf PRIVATE spektralab_core)
+    add_test(NAME spk_diffusion_psf COMMAND spk_diffusion_psf)
 endif()
 
 if(SPEKTRALAB_PORTABLE_BACKEND)
@@ -157,6 +166,9 @@ if(SPEKTRALAB_PORTABLE_BACKEND)
             spk_lut3d_trilinear spk_di_normalise spk_di_encode spk_scene_latitude
             spk_overscan_canvas spk_overscan_add_mask spk_overscan_film_present spk_overscan_light
             spk_mask_reduce spk_mask_epilogue
+            spk_negative_hue spk_minilab
+            spk_lens_tca spk_lens_loca_share spk_lens_loca_mix spk_lens_down2 spk_lens_line
+            spk_scene_curve
             CACHE INTERNAL "")
         set(vulkan_spirv)
         file(GLOB vulkan_includes "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/vulkan/*.glsl")

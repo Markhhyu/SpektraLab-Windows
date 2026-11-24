@@ -9,7 +9,6 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
-#include <cstdio>
 #include <cstdlib>
 #include <thread>
 
@@ -64,6 +63,21 @@ constexpr double kMeterFloor = kMidgray / 4096.0;
 // `model/grain.MIN_EFFECTIVE_BLUR_SIGMA` -- a Gaussian narrower than this is
 // numerically the identity, so the pass is skipped rather than paid for.
 constexpr double kMinEffectiveBlurSigma = 0.4;
+// The grain's micro-structure: a clumping field's contrast, dimensionless (its
+// spatial scale is `GrainParams::micro_structure[1]`, in film micrometres).
+constexpr double kMicroAmplitude = 0.10;
+// **Absolute grain amplitude, calibrated against the reference model's
+// datasheet-validated texture.** Every parity case runs with grain off, so the
+// port never had this check. Measured 2026-11-24 on a flat 18 % grey, VISION3
+// 50D, 35 mm frame: the reference's printing-density 48 um granularity at its
+// 2600 px rendering (13.46 um/px) is R 4.77 / G 5.26 / B 12.35 x1000 against
+// the sheet's 4.76 / 5.30 / 11.97; the reference's print-space 48 um aperture
+// sigma there is 483 counts, and the port's was 1204 (2.49x too strong). This
+// is that ratio. The port's aperture sigma is also pitch-dependent (the
+// particle sampler's per-pixel density sigma is pixel-anchored, unlike the
+// reference's); that residual is measured and listed as an open item in
+// `film-validation/realism/VISION3-50D-VALIDATION.md`.
+constexpr double kGrainAmplitudeCalibration = 483.0 / 1204.0;
 
 void fill3(double dst[3], double v) { dst[0] = dst[1] = dst[2] = v; }
 
@@ -128,6 +142,18 @@ uint32_t Pipeline::fresh_seed() {
     z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
     z = z ^ (z >> 31);
     return uint32_t(z & 0xFFFFFFFFu);
+}
+
+uint32_t Pipeline::draw_film_seed() {
+    // `grain_seed` (settings.film_seed): a positive value holds one realisation
+    // across renders -- the frame keeps its grain while a slider moves, and two
+    // exports are the same pixels. 0 keeps the historic draw: fresh when the
+    // stochastic sampler runs, the pinned constant when `grain_sampler` is
+    // "exact" (the tests' fixed realisation).
+    if (params_.settings.film_seed > 0) return uint32_t(params_.settings.film_seed);
+    return (params_.film_render.grain.active && params_.settings.grain_sampler != "exact")
+               ? fresh_seed()
+               : 0x5EEDu;
 }
 
 void Pipeline::set_source_long_edge(uint32_t long_edge, uint32_t frame_long_edge) {
@@ -198,9 +224,16 @@ bool Pipeline::build(const Params& params, std::string& error) {
                 "engine; it always evaluates the exact spectral integral";
         return false;
     }
-    if (params_.camera.diffusion_filter.active || params_.enlarger.diffusion_filter.active) {
-        error = "diffusion filters are not implemented by the native engine";
+    // API-SPEC §21.5: the camera's diffusion filter is a pass on the source in
+    // `film_prefix` (`node_diffusion_filter`, ported from the macOS 2.x line);
+    // the enlarger's filter stays refused, as it is in the macOS engine.
+    if (params_.enlarger.diffusion_filter.active) {
+        error = "the enlarger's diffusion filter is not implemented by the native engine";
         return false;
+    }
+    if (params_.camera.diffusion_filter.active) {
+        diffusion::Psf psf;
+        if (!diffusion::build_psf(params_.camera.diffusion_filter, psf, error)) return false;
     }
     if (params_.io.crop || params_.io.upscale_factor != 1.0) {
         error = "the legacy io.crop / io.upscale_factor path is not implemented by the native "
@@ -412,9 +445,38 @@ bool Pipeline::build(const Params& params, std::string& error) {
     // It replaces the paper exactly as `scan_film` does, and `scan_film` wins.
     // A positive has no mask and no paper, so the switch means nothing there.
     di_active_ = params_.io.digital_intermediate && !params_.io.scan_film && !film.info.is_positive();
-    if (di_active_) {
+    // macOS 2.x's pair-specific minilab print (ported): a catalogued film/paper
+    // pair prints through its qualified table instead of the optical stage. The
+    // catalog is hash-pinned against these very profile files; a listed pair
+    // with changed material is an error, never a silent optical substitution.
+    // `SPK_V2_REFERENCE_OPTICAL` keeps the parity harnesses on the optical path.
+    minilab_active_ = false;
+    minilab_table_ = {};
+    if (!std::getenv("SPK_V2_REFERENCE_OPTICAL") && !di_active_ && !params_.io.scan_film &&
+        !film.info.is_positive() && film.info.channel_model != "monochrome" &&
+        // The Tone Mask is a print-side control: its epilogue is the enlarger's
+        // integral with the mask's gain on the paper exposure, and the table
+        // was qualified at the enlarger's rest. Rather than let a catalogued
+        // pair silently swallow the mask, the mask wins and the print falls
+        // back to the optical path for that frame (`contrast_mask_wanted`, so
+        // a mask with both branches at zero is still the table's print).
+        !contrast_mask_wanted()) {
+        MinilabTable table;
+        if (!cache_->minilab().load(film.info.stock, print.info.stock,
+                                    params_.io.output_color_space, table, error)) return false;
+        if (table.side) {
+            minilab_table_ = gpu_->upload_persistent(table.values.data(),
+                                                     table.values.size() * sizeof(float), error);
+            if (!minilab_table_) return false;
+            minilab_side_ = table.side;
+            std::copy(table.lo, table.lo + 3, minilab_lo_);
+            std::copy(table.inv_span, table.inv_span + 3, minilab_inv_);
+            minilab_active_ = true;
+        }
+    }
+    if (di_active_ || minilab_active_) {
         if (!di_constants(*colour_, *blob_, params_, tc_lut_host_, baked_.tc_lut_side, tc_b_host_,
-                          film_sensitivity_, di_, error)) return false;
+                          film_sensitivity_, di_, error, minilab_active_ && !di_active_)) return false;
         const Vec zero(kNumWavelengths, 0.0);
         baked_.di_chd = gpu_->upload_persistent_f32(di_.chd.data(), di_.chd.size(), error);
         baked_.di_zero_base = gpu_->upload_persistent_f32(zero.data(), zero.size(), error);
@@ -427,6 +489,7 @@ bool Pipeline::build(const Params& params, std::string& error) {
     }
 
     // --- print curves -------------------------------------------------------
+    Vec print_curves_host;   // the paper's range, for `negative_hue_` below
     if (!params_.io.scan_film && !di_active_) {
         Vec morphed;
         if (!print_curves_morph(print.data.log_exposure, print.data.model,
@@ -441,6 +504,7 @@ bool Pipeline::build(const Params& params, std::string& error) {
         baked_.print_curve_inv = gpu_->upload_persistent_f32(t.inv.data(), t.inv.size(), error);
         baked_.print_curve_y = gpu_->upload_persistent_f32(t.y.data(), t.y.size(), error);
         if (!baked_.print_curve_x || !baked_.print_curve_inv || !baked_.print_curve_y) return false;
+        print_curves_host = std::move(morphed);
     }
 
     // --- the scanner's spectral integral and its illuminant ----------------
@@ -513,6 +577,48 @@ bool Pipeline::build(const Params& params, std::string& error) {
         transposed(m, row);   // spk_matmul3's convention
         baked_.xyz_to_rgb = gpu_->upload_persistent_f32(row, 9, error);
         if (!baked_.xyz_to_rgb) return false;
+
+        // --- the print's hue, from the negative (core/negative_hue.hpp) ------
+        // Ported from the macOS 2.x line (2026-11-11). The optical print is two
+        // sets of steep per-layer curves in series; a saturated colour puts its
+        // weak layers in a paper toe or shoulder and collapses toward the nearest
+        // primary. The negative itself holds the hue, and the print stage reads
+        // it back from the film's own curves and exposure map.
+        //
+        // `SPK_V2_REFERENCE_OPTICAL` stays what the parity harnesses mean by it:
+        // the optical print and nothing else. `SPK_NEGATIVE_HUE=0` is the same
+        // for this node alone, `=force` puts it in a catalogued pair's place.
+        negative_hue_active_ = false;
+        {
+            const char* sw = std::getenv("SPK_NEGATIVE_HUE");
+            const bool off = std::getenv("SPK_V2_REFERENCE_OPTICAL") ||
+                             (sw && std::string(sw) == "0");
+            const bool force = sw && std::string(sw) == "force" && !std::getenv("SPK_V2_REFERENCE_OPTICAL");
+            // `=force` puts the analytic reading in a catalogued pair's place,
+            // for the comparison against that pair's table.
+            if (force && minilab_active_) { minilab_active_ = false; minilab_table_ = {}; }
+            // A colour negative on a colour paper, said positively: a
+            // black-and-white stock is "bw" here, three layers that record one
+            // thing, and has no hue to read.
+            if (!off && !minilab_active_ && !di_active_ && !params_.io.scan_film &&
+                !film.info.is_positive() && !print.info.is_positive() &&
+                film.info.channel_model == "color" && print.info.channel_model == "color") {
+                std::string hue_error;
+                // A film this cannot be set up for prints as it always did: the
+                // optical print is a complete picture, and a refinement that
+                // cannot run is not a reason to refuse it.
+                if (negative_hue_constants(*colour_, *blob_, params_, tc_lut_host_,
+                                           baked_.tc_lut_side, tc_b_host_, sc, scan_xy,
+                                           print_curves_host, negative_hue_, hue_error)) {
+                    const NegativeHue& nh = negative_hue_;
+                    negative_hue_layers_ = gpu_->upload_persistent_f32(nh.layers.data(), nh.layers.size(), error);
+                    negative_hue_gamut_ = gpu_->upload_persistent_f32(nh.gamut.data(), nh.gamut.size(), error);
+                    negative_hue_map_ = gpu_->upload_persistent_f32(nh.map.data(), nh.map.size(), error);
+                    if (!negative_hue_layers_ || !negative_hue_gamut_ || !negative_hue_map_) return false;
+                    negative_hue_active_ = true;
+                }
+            }
+        }
     }
 
     // --- the output transfer function's near-identity matrix ---------------
@@ -601,11 +707,14 @@ bool Pipeline::build(const Params& params, std::string& error) {
     // way as `len(pipe._topology)`: the nodes that survive pruning.
     node_count_ = 0;
     node_count_ += 1;                                                    // input_cast
+    node_count_ += params_.camera.diffusion_filter.active ? 1 : 0;       // diffusion filter
+    node_count_ += params_.camera.lens_aberrations.active ? 2 : 0;       // glow + the gathers
     node_count_ += params_.io.input_cctf_decoding ? 1 : 0;               // decode_input
     node_count_ += params_.io.geometry.is_identity() ? 0 : 1;            // geometry
     node_count_ += (params_.camera.auto_exposure || params_.camera.exposure_baseline_ev != 0) ? 1 : 0;
     node_count_ += 1;                                                    // crop_rescale
     node_count_ += scene_latitude_wanted() ? 1 : 0;                      // RFC-023
+    node_count_ += scene_curve_wanted() ? 1 : 0;                         // the Decode curve
     node_count_ += 1;                                                    // upsample
     node_count_ += 1;                                                    // exposure
     node_count_ += 1;                                                    // boost
@@ -621,9 +730,10 @@ bool Pipeline::build(const Params& params, std::string& error) {
     if (di_active_) {
         node_count_ += 1;                                                // digital_intermediate
     } else {
-    if (!params_.io.scan_film) node_count_ += 3;                         // the printing stage
+    if (!params_.io.scan_film) node_count_ += minilab_active_ ? 1 : 3;    // the printing stage
     node_count_ += contrast_mask_wanted() ? 1 : 0;                       // RFC-024 analysis
     node_count_ += 5;                                                    // scan..gamut_compress
+    node_count_ += negative_hue_active_ ? 1 : 0;                         // the print's hue, from the negative
     node_count_ += params_.print_render.edr_enabled && !params_.io.scan_film ? 1 : 0;
     node_count_ += params_.scanner.lens_blur > 0.0 ? 1 : 0;              // scanner_blur
     node_count_ += (params_.scanner.unsharp_mask[0] > 0.0 &&
@@ -1571,7 +1681,6 @@ bool Pipeline::grain_realise(const Image& in, Image& out, std::string& error) {
             }
         gpu::BufferRef lp_buf = gpu_->upload(lp, sizeof lp, error);
         if (!lp_buf) return false;
-
         if (!dye_clouds) {
             if (!alloc_like(in, grain, error)) return false;
             const uint32_t meta[4] = {uint32_t(k), uint32_t(in.pixels()),
@@ -1643,28 +1752,42 @@ bool Pipeline::grain_realise(const Image& in, Image& out, std::string& error) {
         if (!blur_.affine(grain, s, t0, scaled, error)) return false;
         grain.buf.reset();
         if (!gpu_->flush(error)) return false;
-        if (g.blur > kMinEffectiveBlurSigma) {
-            double sigma[3];
-            fill3(sigma, g.blur);
-            return blur_.gaussian(scaled, sigma, out, error);
-        }
-        out = scaled;
-        return true;
+        return grain_spatial_scale(in, scaled, out, error);
     }
 
+    // debug: density-domain 48 um aperture sigma of the realised grain
     // --- the sub-layer path's tail: micro-structure, then density_min, then
-    // the overall grain blur. The order is the reference's.
+    // the grain's own spatial scale. The order is the reference's.
+    //
+    // **Micro-structure is a clumping field, and its length is micrometres**
+    // (the audit's G-1): the reference passes `micro_structure[1] * 0.001 / px`
+    // as the lognormal's *standard deviation* -- nanometres turned into an
+    // amplitude that changes with the pixel size -- so a 30 nm entry left the
+    // field invisible and a 1.5 um one would have made its contrast pixel-
+    // anchored truth. Here `[1]` is the modulation's correlation length in
+    // film um, generated from white lognormal noise of a fixed contrast
+    // (`kMicroAmplitude`) and blurred to that length; `[0]` stays the extra
+    // fine blur on the field, also um.
     const double blur_px = g.micro_structure[0] / px;
-    const double micro_sigma = g.micro_structure[1] * 0.001 / px;
+    const double micro_sigma = g.micro_structure[1] / px;
     if (micro_sigma > 0.05) {
         Image field;
-        if (!lognormal_field(in.h, in.w, 1.0, micro_sigma, seed, 100, true, field, error)) return false;
+        if (!lognormal_field(in.h, in.w, 1.0, kMicroAmplitude, seed, 100, true, field, error)) return false;
         if (blur_px > kMinEffectiveBlurSigma) {
             double sigma[3];
             fill3(sigma, blur_px);
             Image blurred;
             if (!blur_.gaussian(field, sigma, blurred, error)) return false;
             field = blurred;
+        }
+        if (micro_sigma > 0.05) {
+            // The field's own correlation: blur the white modulation to the
+            // micrometres `micro_structure[1]` names.
+            double sigma[3];
+            fill3(sigma, micro_sigma);
+            Image correlated;
+            if (!blur_.gaussian(field, sigma, correlated, error)) return false;
+            field = correlated;
         }
         Image multiplied;
         if (!alloc_like(grain, multiplied, error)) return false;
@@ -1682,13 +1805,102 @@ bool Pipeline::grain_realise(const Image& in, Image& out, std::string& error) {
     if (!blur_.affine(grain, s, t0, shifted, error)) return false;
     grain.buf.reset();
     if (!gpu_->flush(error)) return false;
-    if (g.blur > 0.0) {
-        double sigma[3];
-        fill3(sigma, g.blur);
-        return blur_.gaussian(shifted, sigma, out, error);
-    }
-    out = shifted;
+    // --- the grain's spatial scale, **anchored in film micrometres** (the
+    // audit's G-1): the variation `shifted - in` is blurred with
+    // clump_sigma_um / pixel_size_um_ per channel, so the realised grain has
+    // the same physical correlation length at every tier and export
+    // resolution. `blur` (pixels) stays only as the legacy fallback when a
+    // caller zeroes the micrometre sizes; the product path never uses it.
+    if (!grain_spatial_scale(in, shifted, out, error)) return false;
     return true;
+}
+
+// The grain's own variation, `dens - in`, blurred in micrometres and added
+// back. Blurring the delta and not the density keeps the picture's mean and
+// low frequencies exactly (`shifted` differs from `in` only in the grain).
+// Variance a normalised 2D Gaussian of `sigma_um` leaves on white noise **when
+// the noise is measured through Kodak's 48 um granularity aperture** -- the
+// convention every sigma-D number in the 50D sheet (and the whole T1/T3/T2
+// calibration) is stated in. It must be a film length, not a pixel length:
+// a per-pixel normalisation would make the grain's amplitude depend on the
+// export resolution again, which is the bug G-1 removed.
+double aperture_variance_retention(double sigma_um) {
+    if (!(sigma_um > 1e-6)) return 1.0;
+    constexpr double kPi = 3.14159265358979323846;
+    constexpr double kApertureUm = 24.0;   // 48 um disc, Kodak E-58
+    const double area = kPi * kApertureUm * kApertureUm;
+    constexpr int kSteps = 512;
+    const double step = 2.0 * kApertureUm / double(kSteps);
+    double sum = 0.0;
+    for (int i = 0; i < kSteps; ++i) {
+        const double u = (double(i) + 0.5) * step;
+        const double c = std::min(1.0, u / (2.0 * kApertureUm));
+        const double overlap = 2.0 * kApertureUm * kApertureUm * std::acos(c) -
+                               0.5 * u * std::sqrt(std::max(4.0 * kApertureUm * kApertureUm - u * u, 0.0));
+        sum += 2.0 * kPi * u * overlap *
+               std::exp(-u * u / (4.0 * sigma_um * sigma_um)) * step;
+    }
+    return std::clamp(sum / (area * area), 1e-6, 1.0);
+}
+
+bool Pipeline::grain_spatial_scale(const Image& in, const Image& dens, Image& out,
+                                   std::string& error) {
+    // Calibration switch (tests only): render the raw model without the
+    // micrometre clump, so the reference calibration can be measured directly.
+    if (const char* off = std::getenv("SPK_GRAIN_ANCHOR_OFF"); off && std::string(off) != "0") {
+        // Calibration hook (the validation harness in
+        // `film-validation/realism/VISION3-50D-VALIDATION.md`): the raw model,
+        // without the micrometre clump, so the reference calibration can be
+        // measured directly.
+        out = dens;
+        return true;
+    }
+    const GrainParams& g = params_.film_render.grain;
+    const double px = pixel_size_um_;
+    double sigma[3];
+    bool physical = false;
+    for (int c = 0; c < 3; ++c) {
+        sigma[c] = g.clump_sigma_um[c] / px;
+        physical |= g.clump_sigma_um[c] > 0.0;
+    }
+    if (!physical) {
+        if (g.blur > kMinEffectiveBlurSigma) {
+            double legacy[3];
+            fill3(legacy, g.blur);
+            Image blurred;
+            if (!blur_.gaussian(dens, legacy, blurred, error)) return false;
+            double amp[3], zero[3];
+            fill3(amp, kGrainAmplitudeCalibration);
+            fill3(zero, 0.0);
+            Image scaled;
+            if (!blur_.affine(blurred, amp, zero, scaled, error)) return false;
+            double one[3];
+            fill3(one, 1.0);
+            return blur_.lincomb(in, scaled, one, one, out, error);
+        }
+        out = dens;
+        return true;
+    }
+    Image delta;
+    if (!alloc_like(in, delta, error)) return false;
+    double one[3], neg[3];
+    fill3(one, 1.0);
+    fill3(neg, -1.0);
+    if (!blur_.lincomb(dens, in, one, neg, delta, error)) return false;
+    Image blurred;
+    if (!blur_.gaussian(delta, sigma, blurred, error)) return false;
+    // Put back the variance the clump takes out of the **48 um aperture** --
+    // the quantity the datasheet states and every per-stock sigma ratio was
+    // calibrated against. A bigger clump is then the same granularity with
+    // fewer, larger, denser grains (ISO 500 against ISO 50), and the aperture
+    // sigma-D does not move with the tier or the export size.
+    double add[3];
+    for (int c = 0; c < 3; ++c) {
+        const double retention = aperture_variance_retention(g.clump_sigma_um[c]);
+        add[c] = kGrainAmplitudeCalibration / std::sqrt(retention);
+    }
+    // out = in + add * blurred, on the grain's own variation only.
+    return blur_.lincomb(in, blurred, one, add, out, error);
 }
 
 // ---------------------------------------------------------------------------
@@ -2063,6 +2275,24 @@ bool Pipeline::film_prefix(const Image& in, const FrameShape& frame, Image& cur,
     Image next;
     SPK_NODE(node_input_cast(in, cur, error));
     SPK_NODE(advance_if_ok(node_decode_input(cur, next, error), cur, next));
+    // API-SPEC §21.5–§21.6, macOS 2.x: the lens pass. The diffusion filter
+    // (柔光镜), the spherical glow, and the aberrations are one pass on the
+    // source in linear light, in the macOS order (filter -> glow -> aberrations),
+    // and it sits before `geometry` like that pass does; a shift-invariant blur
+    // commutes with the crop, and the pitch is the frame's own (which crop does
+    // not change), so the two orders are the same picture.
+    if (params_.camera.diffusion_filter.active || params_.camera.lens_aberrations.active) {
+        const double long_mm = overscan_wanted() ? overscan_gate_long_mm() : params_.camera.film_format_mm;
+        const uint32_t long_edge = source_long_edge_ ? source_long_edge_ : frame.long_edge();
+        const double um_per_px = long_mm * 1000.0 / double(long_edge);
+        if (params_.camera.diffusion_filter.active) {
+            SPK_NODE(advance_if_ok(node_diffusion_filter(cur, um_per_px, next, error), cur, next));
+        }
+        if (params_.camera.lens_aberrations.active) {
+            SPK_NODE(advance_if_ok(node_lens_glow(cur, um_per_px, next, error), cur, next));
+            SPK_NODE(advance_if_ok(node_lens_aberrations(cur, um_per_px, next, error), cur, next));
+        }
+    }
     SPK_NODE(advance_if_ok(node_geometry(cur, next, error), cur, next));
     SPK_NODE(advance_if_ok(node_auto_exposure(cur, next, error), cur, next));
 
@@ -2091,8 +2321,7 @@ bool Pipeline::film_prefix(const Image& in, const FrameShape& frame, Image& cur,
     // assumed: the hash of every un-striped render is byte-identical across
     // this change.
     const GrainParams& film_grain = params_.film_render.grain;
-    film_seed_ = (film_grain.active && params_.settings.grain_sampler != "exact")
-               ? fresh_seed() : 0x5EEDu;
+    film_seed_ = draw_film_seed();
     return true;
 }
 
@@ -2109,12 +2338,252 @@ bool Pipeline::film_prefix(const Image& in, const FrameShape& frame, Image& cur,
 // between a band run and a whole-frame stage has to copy **every live field**,
 // not just `cur`. That is a real finding from writing this out rather than a
 // complication invented here, and step 6 inherits it.
+// --- the camera's diffusion filter (API-SPEC §21.5, macOS 2.x) --------------
+//
+// The model (core/diffusion_psf.hpp, a literal port of the oracle): every group
+// is a sum of 2-D exponentials on a geometric progression of lambdas, and the
+// filter is E_out = (1 - p_s) E + p_s (K * E). Each exponential is applied by
+// `Blur::exponential_components`' three-Gaussian surrogate -- the same
+// approximation the macOS engine makes -- and the per-channel weights are
+// normalised so the scatter is unit mass, exactly as `diffusion_components`
+// there does it.
+bool Pipeline::diffusion_components(double um_per_px, double& p_s,
+                                    std::vector<Blur::Component>& comps,
+                                    std::string& error) const {
+    comps.clear();
+    diffusion::Psf psf;
+    if (!diffusion::build_psf(params_.camera.diffusion_filter, psf, error)) return false;
+    p_s = psf.p_s;
+    if (!(p_s > 0.0) || !(um_per_px > 0.0)) { p_s = 0.0; return true; }
+    for (const diffusion::Exponential& e : psf.exps) {
+        const double lk = std::max(e.lambda_um / um_per_px, 1e-6);
+        const double decay[3] = {lk, lk, lk};
+        std::vector<Blur::Component> three;
+        Blur::exponential_components(decay, e.weight, three);
+        comps.insert(comps.end(), three.begin(), three.end());
+    }
+    for (int c = 0; c < 3; ++c) {
+        double sum = 0.0;
+        for (const Blur::Component& comp : comps) sum += comp.weight[c];
+        if (sum > 0.0)
+            for (Blur::Component& comp : comps) comp.weight[c] /= sum;
+    }
+    return true;
+}
+
+bool Pipeline::node_diffusion_filter(const Image& in, double um_per_px, Image& out,
+                                     std::string& error) {
+    Timer t(this, "preprocess.diffusion_filter");
+    double p_s = 0.0;
+    std::vector<Blur::Component> comps;
+    if (!diffusion_components(um_per_px, p_s, comps, error)) return false;
+    if (!(p_s > 0.0) || comps.empty()) { out = in; return true; }
+    Image scattered;
+    if (!blur_.mixture(in, comps, scattered, error, 3.0)) return false;
+    double a[3], b[3];
+    fill3(a, 1.0 - p_s);
+    fill3(b, p_s);
+    return blur_.lincomb(in, scattered, a, b, out, error);
+}
+
+// --- the taking lens's aberrations (API-SPEC §21.6, macOS 2.x, ported) -------
+//
+// The spherical glow, lateral CA, LoCA, and the field's curvature/astigmatism/
+// coma gathers -- the `lens.cpp` pass on the macOS line, on the tier's source in
+// linear light, before geometry (a shift-invariant pass; the field's geometry is
+// the frame's own centre and half-diagonal, so a crop cannot move it).
+
+namespace {
+constexpr double kLensMinEffectiveSigma = 0.4;   // `kMinEffectiveBlurSigma`
+constexpr double kLensMinComet = 0.05;           // px: a comet shorter moves no code
+constexpr int kLensMaxLevel = 4;                 // the gathers' mip pyramid
+}  // namespace
+
+bool Pipeline::lens_glow(double um_per_px, double& weight, double& sigma) const {
+    const LensAberrationParams& la = params_.camera.lens_aberrations;
+    weight = 0.0;
+    sigma = 0.0;
+    if (!la.active || !(um_per_px > 0.0)) return false;
+    weight = std::clamp(la.spherical_amount, 0.0, 1.0);
+    sigma = 0.5 * la.spherical_um / um_per_px;
+    if (!(weight > 0.0) || !(sigma >= kLensMinEffectiveSigma)) {
+        weight = 0.0;
+        return false;
+    }
+    return true;
+}
+
+bool Pipeline::node_lens_glow(const Image& in, double um_per_px, Image& out, std::string& error) {
+    Timer t(this, "preprocess.lens_glow");
+    double weight = 0.0, sigma = 0.0;
+    if (!lens_glow(um_per_px, weight, sigma)) {
+        out = in;
+        return true;
+    }
+    double s[3];
+    fill3(s, sigma);
+    Image blurred;
+    if (!blur_.gaussian(in, s, blurred, error)) return false;
+    double a[3], b[3];
+    fill3(a, 1.0 - weight);
+    fill3(b, weight);
+    return blur_.lincomb(in, blurred, a, b, out, error);
+}
+
+Pipeline::LensFieldPx Pipeline::lens_field_px(double um_per_px) const {
+    const LensAberrationParams& la = params_.camera.lens_aberrations;
+    LensFieldPx F;
+    if (!la.active || !(um_per_px > 0.0)) return F;
+    F.sfc = la.field_curvature_um / um_per_px;
+    F.sast = la.astigmatism_um / um_per_px;
+    F.coma = la.coma_um / um_per_px;
+    const double L = std::fabs(F.coma);
+    F.var_t1 = F.sfc * F.sfc + (F.sast > 0 ? F.sast * F.sast : 0.0) + L * L / 54.0;
+    F.var_r1 = F.sfc * F.sfc + (F.sast < 0 ? F.sast * F.sast : 0.0);
+    const double st = std::sqrt(F.var_t1), sr = std::sqrt(F.var_r1 + L * L / 18.0);
+    F.tangential = st >= kLensMinEffectiveSigma;
+    F.radial = sr >= kLensMinEffectiveSigma;
+    const double smax = std::max(F.tangential ? st : 0.0, F.radial ? sr : 0.0);
+    F.lmax = smax > 4.0 ? std::min(kLensMaxLevel, int(std::ceil(std::log2(smax / 4.0)))) : 0;
+    return F;
+}
+
+bool Pipeline::lens_aberrations_wanted(double um_per_px) const {
+    const LensAberrationParams& la = params_.camera.lens_aberrations;
+    if (!la.active || !(um_per_px > 0.0)) return false;
+    const LensFieldPx F = lens_field_px(um_per_px);
+    return la.lateral_ca_r != 0.0 || la.lateral_ca_b != 0.0 ||
+           la.loca_um / um_per_px >= kLensMinEffectiveSigma || F.tangential || F.radial;
+}
+
+bool Pipeline::lens_pyramid(const Image& base, int lmax, std::vector<Image>& levels,
+                            std::string& error) {
+    levels.clear();
+    levels.push_back(base);
+    for (int l = 1; l <= lmax; ++l) {
+        const Image& in = levels.back();
+        Image o;
+        o.h = (in.h + 1) / 2;
+        o.w = (in.w + 1) / 2;
+        o.c = 3;
+        o.buf = gpu_->alloc(o.bytes(), error);
+        if (!o.buf) return false;
+        const uint32_t meta[6] = {in.h, in.w, 0u, o.h, o.w, 0u};
+        if (!gpu_->dispatch("spk_lens_down2",
+                            {gpu::Arg::buf(in.buf), gpu::Arg::inline_bytes(meta, 6),
+                             gpu::Arg::buf(o.buf)},
+                            o.pixels(), error)) return false;
+        levels.push_back(std::move(o));
+    }
+    return true;
+}
+
+bool Pipeline::lens_line(const std::vector<Image>& levels, double pcx, double pcy, double inv_hd,
+                         const LensFieldPx& F, uint32_t mode, Image& out, std::string& error) {
+    const Image& base = levels.front();
+    int lv[15];
+    for (int l = 0; l <= kLensMaxLevel; ++l) {
+        const Image& img = l < int(levels.size()) ? levels[size_t(l)] : base;
+        lv[3 * l] = 0;
+        lv[3 * l + 1] = int(img.h);
+        lv[3 * l + 2] = int(img.w);
+    }
+    const LensAberrationParams& la = params_.camera.lens_aberrations;
+    const float lp[8] = {float(pcx), float(pcy), float(inv_hd), float(la.sharp_radius),
+                         float(la.field_exponent), float(F.sfc), float(F.sast), float(F.coma)};
+    auto ref = [&](size_t i) -> const gpu::BufferRef& {
+        return i < levels.size() ? levels[i].buf : base.buf;
+    };
+    gpu::BufferRef lv_buf = gpu_->upload(lv, sizeof lv, error);
+    gpu::BufferRef lp_buf = gpu_->upload(lp, sizeof lp, error);
+    if (!lv_buf || !lp_buf || !alloc_like(base, out, error)) return false;
+    const uint32_t meta[5] = {base.h, base.w, 0u, mode, uint32_t(levels.size() - 1)};
+    return gpu_->dispatch("spk_lens_line",
+                          {gpu::Arg::buf(ref(0)), gpu::Arg::buf(ref(1)), gpu::Arg::buf(ref(2)),
+                           gpu::Arg::buf(ref(3)), gpu::Arg::buf(ref(4)), gpu::Arg::buf(lv_buf),
+                           gpu::Arg::buf(lp_buf), gpu::Arg::inline_bytes(meta, 5),
+                           gpu::Arg::buf(out.buf)},
+                          base.pixels(), error);
+}
+
+bool Pipeline::node_lens_aberrations(const Image& in, double um_per_px, Image& out,
+                                     std::string& error) {
+    Timer t(this, "preprocess.lens_aberrations");
+    if (!lens_aberrations_wanted(um_per_px)) {
+        out = in;
+        return true;
+    }
+    const LensAberrationParams& la = params_.camera.lens_aberrations;
+    const double hd = 0.5 * std::hypot(double(in.w), double(in.h));
+    const double pcx = 0.5 * (double(in.w) - 1.0), pcy = 0.5 * (double(in.h) - 1.0);
+    const double inv_hd = 1.0 / hd;
+    Image cur = in;
+
+    // 1. lateral CA: the R and B images magnified against G.
+    const double ar = la.lateral_ca_r * 1e-3, ablue = la.lateral_ca_b * 1e-3;
+    if (ar != 0.0 || ablue != 0.0) {
+        const float p[5] = {float(pcx), float(pcy), float(inv_hd), float(ar), float(ablue)};
+        gpu::BufferRef p_buf = gpu_->upload(p, sizeof p, error);
+        Image next;
+        if (!p_buf || !alloc_like(cur, next, error)) return false;
+        const uint32_t meta[3] = {cur.h, cur.w, 0u};
+        if (!gpu_->dispatch("spk_lens_tca",
+                            {gpu::Arg::buf(cur.buf), gpu::Arg::buf(p_buf),
+                             gpu::Arg::inline_bytes(meta, 3), gpu::Arg::buf(next.buf)},
+                            cur.pixels(), error)) return false;
+        cur = std::move(next);
+    }
+
+    // 2. LoCA: the soft channels' bright light scattered, energy kept exactly.
+    const double sl = la.loca_um / um_per_px;
+    if (sl >= kLensMinEffectiveSigma) {
+        const bool purple = la.loca_sign != "green";
+        const float p[5] = {purple ? 1.0f : 0.0f, purple ? 0.0f : 1.0f, purple ? 1.0f : 0.0f,
+                            float(std::clamp(la.loca_highlight_gate, 0.0, 1.0)), float(kMidgray)};
+        gpu::BufferRef p_buf = gpu_->upload(p, sizeof p, error);
+        const uint32_t n[1] = {uint32_t(cur.pixels())};
+        Image share, blurred, next;
+        if (!p_buf || !alloc_like(cur, share, error)) return false;
+        if (!gpu_->dispatch("spk_lens_loca_share",
+                            {gpu::Arg::buf(cur.buf), gpu::Arg::buf(p_buf),
+                             gpu::Arg::inline_bytes(n, 1), gpu::Arg::buf(share.buf)},
+                            cur.pixels(), error)) return false;
+        const double sigma[3] = {purple ? sl : 0.0, purple ? 0.0 : sl, purple ? sl : 0.0};
+        if (!blur_.gaussian(share, sigma, blurred, error)) return false;
+        share = Image{};
+        if (!alloc_like(cur, next, error)) return false;
+        if (!gpu_->dispatch("spk_lens_loca_mix",
+                            {gpu::Arg::buf(cur.buf), gpu::Arg::buf(blurred.buf),
+                             gpu::Arg::buf(p_buf), gpu::Arg::inline_bytes(n, 1),
+                             gpu::Arg::buf(next.buf)},
+                            cur.pixels(), error)) return false;
+        cur = std::move(next);
+    }
+
+    // 3. field curvature, astigmatism, coma: tangential, then radial.
+    const LensFieldPx F = lens_field_px(um_per_px);
+    for (uint32_t mode : {0u, 1u}) {
+        if (mode == 0u ? !F.tangential : !F.radial) continue;
+        std::vector<Image> levels;
+        if (!lens_pyramid(cur, F.lmax, levels, error)) return false;
+        Image next;
+        if (!lens_line(levels, pcx, pcy, inv_hd, F, mode, next, error)) return false;
+        levels.clear();
+        cur = std::move(next);
+    }
+    out = std::move(cur);
+    return true;
+}
+
 bool Pipeline::film_scale_and_expose(Chain in, Chain& out, std::string& error) {
     Image cur = std::move(in.cur), next;
     // RFC-023 sits here, before `upsample`: a scalar gain commutes with the
     // spectral reconstruction exactly (§12.2), and this is the band-able
     // stage, so the node strips with it.
     if (scene_latitude_wanted()) { SPK_NODE(advance_if_ok(node_scene_latitude(cur, next, error), cur, next)); }
+    // The Decode curve (API-SPEC §17, macOS 2.x): after placement, on the axis
+    // the film will be exposed to (it reads its table at E + Film Exposure).
+    if (scene_curve_wanted()) { SPK_NODE(advance_if_ok(node_scene_curve(cur, next, error), cur, next)); }
     SPK_NODE(advance_if_ok(node_upsample(cur, next, error), cur, next));
     SPK_NODE(advance_if_ok(node_exposure(cur, next, error), cur, next));
     // Spectral reconstruction leaves two- and one-channel scratch planes.
@@ -2226,17 +2695,204 @@ bool Pipeline::print_spectral(Chain in, Chain& out, std::string& error) {
         out.cur = std::move(cur);
         return true;
     }
-    if (!params_.io.scan_film) {
+    // The developed negative, before the print's own exposure and curves below:
+    // the hue the print reads back is the film's, not the paper's. Upstream
+    // captures it before those nodes; capturing after them feeds the reading the
+    // print densities instead and turns every saturated hue (measured on the
+    // first port: 100-140 degrees of error, and greys no longer bit-identical).
+    const Image negative = cur;
+    if (minilab_active_) {
+        // The pair's qualified table replaces the enlarger, the print exposure
+        // and the paper's curves: it maps the recovered log-positive straight
+        // to paper CMY, and the ordinary scan follows.
+        SPK_NODE(advance_if_ok(node_minilab(cur, next, error), cur, next));
+    } else if (!params_.io.scan_film) {
         if (mask_on_) { SPK_NODE(advance_if_ok(node_contrast_mask_epilogue(cur, next, error), cur, next)); }
         else { SPK_NODE(advance_if_ok(node_enlarger_spectral(cur, next, error), cur, next)); }
         SPK_NODE(advance_if_ok(node_print_exposure(cur, next, error), cur, next));
         SPK_NODE(advance_if_ok(node_print_curves(cur, next, error), cur, next));
     }
     SPK_NODE(advance_if_ok(node_scan_spectral(cur, next, error), cur, next));
+    if (negative_hue_active_) {
+        SPK_NODE(advance_if_ok(node_negative_hue(negative, cur, next, error), cur, next));
+    }
     SPK_NODE(advance_if_ok(node_bw_correction(cur, next, error), cur, next));
     out = std::move(in);
     out.cur = std::move(cur);
     return true;
+}
+
+// --- the print's hue, from the negative (core/negative_hue.hpp) -------------
+//
+// The enlarger's filters, as the negative's reading sees them. A filter shift is
+// a colour balance: it multiplies each paper layer's exposure, which is the same
+// as the layer under it having recorded that much less density -- that much less
+// light, through the layer's own contrast. The ratios are the optical path's, at
+// mid-grey, exactly as the print constants take them. At rest: zero.
+bool Pipeline::negative_hue_offsets(double out[3], std::string& error) {
+    out[0] = out[1] = out[2] = 0.0;
+    const EnlargerParams& en = params_.enlarger;
+    if (en.y_filter_shift == 0.0 && en.m_filter_shift == 0.0) return true;
+    Params rest = params_;
+    rest.enlarger.y_filter_shift = rest.enlarger.m_filter_shift = 0.0;
+    PrintConstants base;
+    if (!print_constants(*colour_, *blob_, rest, tc_lut_host_, baked_.tc_lut_side, base, error))
+        return false;
+    auto midgray = [](const PrintConstants& pc, double m[3]) {
+        m[0] = m[1] = m[2] = 0.0;
+        for (size_t l = 0; l < kNumWavelengths; ++l) {
+            const double t = std::pow(10.0, -pc.density_spectral_midgray[l]) * pc.print_illuminant[l];
+            if (!std::isfinite(t)) continue;
+            for (int c = 0; c < 3; ++c) m[c] += t * pc.paper_sensitivity[3 * l + size_t(c)];
+        }
+        for (int c = 0; c < 3; ++c) m[c] *= pc.gain[c];
+    };
+    double m_at[3], m_rest[3];
+    midgray(print_constants_, m_at);   // refreshed at the top of every print run
+    midgray(base, m_rest);
+    for (int c = 0; c < 3; ++c)
+        out[c] = -std::log10(std::fmax(m_at[c], 1e-30) / std::fmax(m_rest[c], 1e-30)) /
+                 negative_hue_.gamma_ref[c];
+    return true;
+}
+
+bool Pipeline::negative_hue_params(float p[60], std::string& error) {
+    const NegativeHue& nh = negative_hue_;
+    double offset[3];
+    if (!negative_hue_offsets(offset, error)) return false;
+    for (int i = 0; i < 60; ++i) p[i] = 0.0f;
+    for (int c = 0; c < 3; ++c) {
+        p[c] = float(1.0 / nh.neutral[c]);
+        p[4 + c] = float(nh.layer_lo[c]);
+        p[36 + c] = float(nh.layer_scale[c]);
+    }
+    p[3] = float(1.0 / kNegativeHueLightness);
+    p[7] = float(kNegativeHueWeightFloor);
+    for (int i = 0; i < 9; ++i) {
+        p[9 + i] = float(nh.scan_to_d65[i]);
+        p[18 + i] = float(nh.d65_to_scan[i]);
+    }
+    for (int c = 0; c < 3; ++c) p[27 + c] = float(offset[c]);
+    p[30] = float(kNegativeHueChromaLo);
+    p[31] = float(1.0 / (kNegativeHueChromaHi - kNegativeHueChromaLo));
+    p[32] = float(kNegativeHueUnreliability);
+    p[33] = float(kNegativeHueGamutKnee);
+    p[34] = float(nh.gamut_l_lo);
+    p[35] = float(double(kNegativeHueGamutLevels - 1) / std::fmax(nh.gamut_l_hi - nh.gamut_l_lo, 1e-6));
+    // On a film-edge canvas the hue is the picture's alone. The rebate -- the
+    // edge print, the fog, the light through the perforations -- is light no
+    // scene produced: there is no colour "that went in" for the reading to
+    // return, and the edge print's colour was set against scans of real strips
+    // through the optical print. So outside the gate's rectangle the print is
+    // the optical one, to the bit. The rectangle, not the gate's exact outline:
+    // its corners and wobble are a fraction of a millimetre, where the picture
+    // is already fading into the gate's shadow.
+    if (overscan_wanted() && overscan_.valid) {
+        const OverscanLayout& L = overscan_;
+        p[40] = 1.0f;
+        p[41] = float(L.canvas_w);
+        p[42] = float(band_row0_);
+        p[43] = float(L.px);
+        for (int i = 0; i < 4; ++i) p[44 + i] = float(L.A[i]);
+        p[48] = float(L.cs); p[49] = float(L.ct); p[50] = float(L.cu); p[51] = float(L.cv);
+        p[52] = float(L.gate_s0); p[53] = float(L.gate_t0);
+        p[54] = float(L.gate_along); p[55] = float(L.gate_across);
+        p[56] = float(L.pair_adv);
+    }
+    return true;
+}
+
+bool Pipeline::node_negative_hue(const Image& negative, const Image& in, Image& out,
+                                 std::string& error) {
+    Timer t(this, "printing.negative_hue");
+    float p[60];
+    if (!negative_hue_params(p, error)) return false;
+    gpu::BufferRef p_buf = gpu_->upload(p, sizeof p, error);
+    if (!p_buf) return false;
+    if (!alloc_like(in, out, error)) return false;
+    const uint32_t meta[5] = {uint32_t(in.pixels()), kNegativeHueLayerSamples,
+                              kNegativeHueGamutHues, kNegativeHueGamutLevels, kNegativeHueMapSide};
+    return gpu_->dispatch("spk_negative_hue",
+                          {gpu::Arg::buf(negative.buf), gpu::Arg::buf(in.buf),
+                           gpu::Arg::buf(negative_hue_layers_), gpu::Arg::buf(p_buf),
+                           gpu::Arg::buf(negative_hue_gamut_), gpu::Arg::buf(negative_hue_map_),
+                           gpu::Arg::inline_bytes(meta, 5), gpu::Arg::buf(out.buf)},
+                          in.pixels(), error);
+}
+
+// --- the minilab print (core/minilab.hpp, macOS 2.x, ported) -----------------
+//
+// The enlarger on a minilab pair. The qualified table is the pair's print at the
+// enlarger's rest, and this node replaces the whole optical printing stage, so
+// Brightness, Yellow, Magenta and Pre-flash would otherwise move nothing. They
+// act where the enlarger acts -- on the light through the negative, before the
+// table: the kernel's epilogue `a * gain + offset`, per channel, at rest
+// {1,1,1,0,0,0} (the picture to the bit). The numbers are the optical path's
+// own at mid-grey: `print_constants` at these settings and at rest.
+bool Pipeline::minilab_enlarger(float ep[6], std::string& error) {
+    const EnlargerParams& en = params_.enlarger;
+    if (en.print_exposure == 1.0 && en.y_filter_shift == 0.0 && en.m_filter_shift == 0.0 &&
+        en.preflash_exposure <= 0.0)
+        return true;
+    Params rest = params_;
+    rest.enlarger.print_exposure = 1.0;
+    rest.enlarger.y_filter_shift = rest.enlarger.m_filter_shift = 0.0;
+    rest.enlarger.preflash_exposure = 0.0;
+    PrintConstants at, base;
+    if (!print_constants(*colour_, *blob_, params_, tc_lut_host_, baked_.tc_lut_side, at, error))
+        return false;
+    if (!print_constants(*colour_, *blob_, rest, tc_lut_host_, baked_.tc_lut_side, base, error))
+        return false;
+    // Mid-grey's normalised paper exposure, per channel: gain x sum(10^-d * light * sensitivity).
+    auto midgray = [](const PrintConstants& pc, double m[3]) {
+        m[0] = m[1] = m[2] = 0.0;
+        for (size_t l = 0; l < kNumWavelengths; ++l) {
+            const double t = std::pow(10.0, -pc.density_spectral_midgray[l]) * pc.print_illuminant[l];
+            if (!std::isfinite(t)) continue;
+            for (int c = 0; c < 3; ++c) m[c] += t * pc.paper_sensitivity[3 * l + size_t(c)];
+        }
+        for (int c = 0; c < 3; ++c) m[c] *= pc.gain[c];
+    };
+    double m_at[3], m_rest[3];
+    midgray(at, m_at);
+    midgray(base, m_rest);
+    // The table's own mid-grey exposure: the film's dyes above its base,
+    // through the paper's printing density.
+    double a_mid[3] = {0, 0, 0};
+    for (size_t l = 0; l < kNumWavelengths; ++l) {
+        const double d = base.density_spectral_midgray[l] - base.spectral.base_density[l];
+        const double t = std::pow(10.0, -d);
+        if (!std::isfinite(t)) continue;
+        for (int c = 0; c < 3; ++c) a_mid[c] += t * di_.ixs[3 * l + size_t(c)];
+    }
+    const double pe = en.print_exposure;
+    for (int c = 0; c < 3; ++c) {
+        const double ref = std::fmax(m_rest[c], 1e-12);
+        ep[c] = float(pe * m_at[c] / ref);
+        ep[3 + c] = float(pe * at.offset[c] / ref * a_mid[c]);
+    }
+    return true;
+}
+
+bool Pipeline::node_minilab(const Image& in, Image& out, std::string& error) {
+    Timer t(this, "printing.minilab");
+    if (!alloc_like(in, out, error)) return false;
+    // `di_.chd` / `di_.ixs` carry a zero row where a wavelength has no
+    // measurement, so the whole 81-row grid is safe to integrate without the
+    // dead-row compaction the macOS build does for speed.
+    const uint32_t nl = uint32_t(kNumWavelengths);
+    const uint32_t meta[4] = {uint32_t(in.pixels()), nl, uint32_t(di_.curve.k), minilab_side_};
+    float ep[6] = {1, 1, 1, 0, 0, 0};
+    if (!minilab_enlarger(ep, error)) return false;
+    return gpu_->dispatch("spk_minilab",
+                          {gpu::Arg::buf(in.buf), gpu::Arg::buf(baked_.di_chd),
+                           gpu::Arg::buf(baked_.di_zero_base), gpu::Arg::buf(baked_.di_ixs),
+                           gpu::Arg::inline_bytes(ep, 6), gpu::Arg::inline_bytes(meta, 4),
+                           gpu::Arg::buf(baked_.di_curve_x), gpu::Arg::buf(baked_.di_curve_inv),
+                           gpu::Arg::buf(baked_.di_curve_y), gpu::Arg::buf(minilab_table_),
+                           gpu::Arg::inline_bytes(minilab_lo_, 3),
+                           gpu::Arg::inline_bytes(minilab_inv_, 3), gpu::Arg::buf(out.buf)},
+                          in.pixels(), error);
 }
 
 bool Pipeline::print_glare(Chain in, Chain& out, std::string& error) {

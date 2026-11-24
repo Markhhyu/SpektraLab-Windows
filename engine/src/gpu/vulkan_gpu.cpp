@@ -130,6 +130,18 @@ constexpr KernelSpec kKernels[] = {
     // RFC-024's contrast mask (ported from the Metal core).
     {"spk_mask_reduce", 7, kWorkgroup},
     {"spk_mask_epilogue", 8, kWorkgroup},
+    // The print's hue, from the negative (ported from the macOS 2.x line).
+    {"spk_negative_hue", 8, kWorkgroup},
+    // The pair-specific minilab print (ported from the macOS 2.x line).
+    {"spk_minilab", 13, kWorkgroup},
+    // The taking lens's aberrations (ported from the macOS 2.x line).
+    {"spk_lens_tca", 4, kWorkgroup},
+    {"spk_lens_loca_share", 4, kWorkgroup},
+    {"spk_lens_loca_mix", 5, kWorkgroup},
+    {"spk_lens_down2", 3, kWorkgroup},
+    {"spk_lens_line", 9, kWorkgroup},
+    // The Decode curve (ported from the macOS 2.x line).
+    {"spk_scene_curve", 5, kWorkgroup},
 };
 
 const KernelSpec* find_kernel(const char* name) {

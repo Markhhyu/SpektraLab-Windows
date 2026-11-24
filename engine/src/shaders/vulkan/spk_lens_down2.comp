@@ -1,0 +1,46 @@
+#version 450
+
+// spk_lens_down2.comp -- one mip level of the aberration gathers, plane-anchored
+// (API-SPEC §21.6, macOS 2.x, ported from src/shaders/lens.metal).
+//
+// Texel i of level l is centred on plane pixel (i + 0.5) 2^l - 0.5 and is made
+// from level l - 1's texels 2i - 1 .. 2i + 2 with the tent [1 3 3 1] / 8 per
+// axis. A tent, not a 2 x 2 box: a box moves a point's mean with the pixel's
+// phase, and where the pass blends two levels by a field-varying fraction the
+// two copies' means differ and the point's energy moves with them.
+// meta: {Hin, Win, I0in, Hout, Wout, I0out}
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer In { float value[]; } in_data;
+layout(set = 0, binding = 1, std430) readonly buffer Meta { uint value[]; } meta;
+layout(set = 0, binding = 2, std430) writeonly buffer Out { float value[]; } out_data;
+
+uint spk_global_index() {
+    return gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) + gl_GlobalInvocationID.x;
+}
+
+vec3 ld3(uint s) {
+    return vec3(in_data.value[3u * s], in_data.value[3u * s + 1u], in_data.value[3u * s + 2u]);
+}
+
+void main() {
+    uint i = spk_global_index();
+    uint Hin = meta.value[0], Win = meta.value[1], I0in = meta.value[2];
+    uint Hout = meta.value[3], Wout = meta.value[4], I0out = meta.value[5];
+    if (i >= Hout * Wout) return;
+    uint r = i / Wout, j = i % Wout;
+    const float c[4] = {0.125, 0.375, 0.375, 0.125};
+    int fy = 2 * int(I0out + r) - 1 - int(I0in), fx = 2 * int(j) - 1;
+    vec3 s = vec3(0.0);
+    for (int a = 0; a < 4; ++a) {
+        uint yy = uint(clamp(fy + a, 0, int(Hin) - 1));
+        vec3 row = vec3(0.0);
+        for (int b = 0; b < 4; ++b) {
+            uint xx = uint(clamp(fx + b, 0, int(Win) - 1));
+            row += c[b] * ld3(yy * Win + xx);
+        }
+        s += c[a] * row;
+    }
+    out_data.value[3u * i] = s.x;
+    out_data.value[3u * i + 1u] = s.y;
+    out_data.value[3u * i + 2u] = s.z;
+}

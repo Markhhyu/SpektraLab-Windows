@@ -88,13 +88,23 @@ struct DiConstants {
 // `tc_lut` / `side` and `tc_b` are the pipeline's own (the same film eye and
 // input adaptation the image goes through), so the neutral wedge and the
 // colour fit see exactly what a uniform patch of the image would.
+//
+// `log_positive_only` stops after the reversal curve: the minilab print's
+// table takes the recovered log-positive, not the DI's Cineon colour step.
 bool di_constants(const Colour& colour, const Blob& blob, const Params& params,
                   const Vec& tc_lut, size_t side, const Mat3& tc_b, const Vec& film_sensitivity,
-                  DiConstants& out, std::string& error);
+                  DiConstants& out, std::string& error, bool log_positive_only = false);
 
 // The per-channel log10 offset the live print controls give the DI positive:
 // print brightness as true stops, and the two filter shifts matched to the
 // print's own mid-grey response (+1 -> +0.05 stop of blue, +0.03 of green).
 void di_live_offsets(const Params& params, double out[3]);
+
+// `FilmHost` for a caller outside this file (`negative_hue.cpp`, ported from
+// the macOS 2.x line): the same flat-field chain on many patches, input-space
+// linear RGB -> the developed layer densities (CMY). `tc_lut` / `side` / `tc_b`
+// are the pipeline's own, exactly as `di_constants` takes them.
+void film_host_develop(const Params& params, const Vec& tc_lut, size_t side, const Mat3& tc_b,
+                       const double* rgb, size_t n, double* cmy);
 
 }  // namespace spk

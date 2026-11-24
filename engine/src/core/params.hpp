@@ -56,9 +56,30 @@ struct GrainParams {
     double particle_scale_layers[3] = {2.0, 1.0, 0.5};
     double density_min[3] = {0.03, 0.03, 0.03};
     double uniformity[3] = {0.97, 0.99, 0.97};
-    double blur = 0.65;
+    double blur = 0.65;   // **legacy**, pixels: only when clump_sigma_um <= 0
+    /// The visible grain agglomerate's size, **in micrometres of film**, not
+    /// pixels: the node blurs the grain's own variation with
+    /// `clump_sigma_um / pixel_size_um_`, so the realised grain has the same
+    /// physical correlation length at every tier and export resolution -- which
+    /// a pixel-anchored blur cannot (the audit measured 0.856 px at 28 um/px
+    /// and at 5 um/px: 24 um against 4.3 um, a 5.6x drift, and a 2.2x preview /
+    /// export high-frequency gap). 18.2 um keeps the 28 um/px appearance of the
+    /// old 0.65 px blur; it is the agglomerate the model can see, not the
+    /// silver halide crystal (under a micrometre, below every scan's pixel).
+    /// Per-channel: real film's red record is the deepest and its halo/glow the
+    /// widest, blue the shallowest; these values keep the same ordering and a
+    /// mean of 18.2 um.
+    double clump_sigma_um[3] = {21.0, 18.2, 15.4};
     double blur_dye_clouds_um = 1.0;
-    double micro_structure[2] = {0.2, 30.0};
+    /// Micro-structure (`add_micro_structure` upstream): a multiplicative
+    /// lognormal field of fixed contrast (`kMicroAmplitude`) whose modulations
+    /// are correlated over `[0]` um (fine blur) and `[1]` um (the field's own
+    /// length). The reference reads `[1]` as `nm * 0.001 / pixel_size_um` -- an
+    /// **amplitude** in nanometres that changes with the pixel size; the audit
+    /// (G-1) called that a dimension error and asked for a micrometre length.
+    /// This engine takes it as the length: {0.2, 1.5} means 0.2 um fine blur
+    /// and 1.5 um clumping.
+    double micro_structure[2] = {0.2, 1.5};
     int n_sub_layers = 1;
     /// RFC-025. Native-only: `node_grain`'s output mixed back over its input,
     /// `in + amount * (grained - in)`, in density. 1 is the model's own grain
@@ -198,6 +219,11 @@ struct OverscanParams {
     int frame_seed = 1;
     double fog = 1.0;                // edge fog from the spool, 0 = none
     double leaks = 0.0;              // spool light leaks, 0 = none
+    // API-SPEC §21.4, macOS 2.x (ported): the taking lens's natural falloff
+    // over the picture, cos^n of the angle off axis (n the camera's own,
+    // 3.8-4.2), times this. 0 = off. Picture only: never the fog, the edge
+    // print or the rebate.
+    double falloff = 0.0;
     std::string edge_text;           // the manufacturer's edge print; the app decides real vs display names
     double f_number = 0.0;           // EXIF; sets the gate penumbra. 0 = unknown (f/5.6 assumed)
     // RFC-032 §29: the gate's shape family (auto = the camera seed picks one
@@ -341,6 +367,43 @@ struct SceneLatitudeParams {
 bool is_known_scene_latitude_norm(const std::string& norm);
 bool is_known_camera_filter(const std::string& name);
 
+// The Decode curve (API-SPEC §17, macOS 2.x, ported): a tone curve the host
+// draws on the scene before the film, as a table. **The axis is stops about the
+// metered mid-grey**, as Scene Latitude's is: the unit square's 0…1 is
+// −kSceneCurveStops…+kSceneCurveStops on both axes, so the curve's centre is
+// mid-grey and its identity is the diagonal. Five rows of `n` samples, in the
+// order the host's Edit curve keeps them -- rgb, luma, r, g, b -- each row the
+// curve at i/(n−1), in 0…1. Applied luma first (a gain on Y, hue kept), then
+// rgb on each channel, then each channel's own, as the Layer 2 pass orders
+// them. "" = off.
+constexpr double kSceneCurveStops = 8.0;
+constexpr size_t kSceneCurveRows = 5;
+/// Parses the wire's text -- `5n` comma-separated numbers in 0…1, n ≥ 2 --
+/// into `table` (row-major) and `n`. "" parses to an empty table.
+bool parse_scene_curve(const std::string& text, std::vector<float>& table, size_t& n,
+                       std::string& error);
+
+// API-SPEC §21.6, macOS 2.x (ported): the taking lens's aberrations. The field
+// functions and the gather model live in `pipeline/lens.metal` upstream and in
+// `pipeline.cpp` + `shaders/vulkan/spk_lens_*.comp` here; these are the optical
+// numbers the model takes. Every size is µm at the frame's edge (h = 1), so a
+// format or crop change does not move the lens.
+struct LensAberrationParams {
+    bool active = false;
+    double field_curvature_um = 0.0;   // 0..120: isotropic sigma at h = 1
+    double astigmatism_um = 0.0;       // -120..120: extra sigma, tangential (> 0) or radial (< 0), at h = 1
+    double field_exponent = 2.0;       // 1..4: sigma ~ h^p
+    double sharp_radius = 0.0;         // 0..0.8: h below which nothing blurs (smooth knee)
+    double coma_um = 0.0;              // -150..150: the comet's length at h = 1; sign = outward / inward
+    double spherical_amount = 0.0;     // 0..0.6: the glow's share of the light
+    double spherical_um = 60.0;        // 10..400: the glow's radius
+    double lateral_ca_r = 0.0;         // -3..3: red's radial scale against green at h = 1, in thousandths
+    double lateral_ca_b = 0.0;         // -3..3: the same for blue
+    double loca_um = 0.0;              // 0..30: sigma of the defocused channels
+    std::string loca_sign = "purple";  // purple (R and B soft) | green (G soft)
+    double loca_highlight_gate = 1.0;  // 0 = everywhere, 1 = on highlight edges only
+};
+
 struct CameraParams {
     double exposure_compensation_ev = 0.0;
     double exposure_baseline_ev = 0.0; // Frozen meter, applied before scene placement when AE is off.
@@ -359,6 +422,9 @@ struct CameraParams {
     /// The filter factor is given (18 % grey keeps its exposure). Native only.
     std::string filter;
     DiffusionFilterParams diffusion_filter;
+    LensAberrationParams lens_aberrations;
+    /// The Decode curve's table, as the wire carries it (`parse_scene_curve`).
+    std::string scene_curve;
     SceneLatitudeParams scene_latitude;
 };
 
@@ -495,6 +561,12 @@ struct SettingsParams {
     bool use_scanner_lut = false;
     int lut_resolution = 17;
     std::string grain_sampler = "stochastic";
+    /// The film's grain realisation (`grain_seed`, macOS 2.x; the audit's G-4):
+    /// 0 draws a fresh one per render -- the historic behaviour, and what a
+    /// contact sheet wants -- while a positive value holds one realisation
+    /// across renders, so an A/B or a re-export is the same pixels and a frame
+    /// keeps its grain while a slider moves. SHOOT: it is the negative's.
+    int film_seed = 0;
     std::string working_precision = "float32";
     int preview_max_size = 640;
     bool preview_mode = false;

@@ -28,12 +28,25 @@ import {
   LENS_BLUR_RANGE,
   SCANNER_BLUR_RANGE,
   DENSITY_GAMMA_RANGE,
+  DIFFUSION_FILTER_FAMILIES,
+  DIFFUSION_FILTER_DEFAULT,
+  diffusionFilterLabel,
+  LENS_CHARACTER_DEFAULT,
+  LENS_CURVATURE_RANGE,
+  LENS_ASTIGMATISM_RANGE,
+  LENS_COMA_RANGE,
+  LENS_CA_RANGE,
+  LENS_LOCA_RANGE,
+  LENS_GLOW_RANGE,
+  locaSignLabel,
+  DECODE_CURVE_IDENTITY,
+  encodeSceneCurve,
   SIDE_UNIT_DECIMALS,
   SIDE_UNIT_PER_MM,
   type SideUnit,
   aeMethodOf,
 } from '@shared/params';
-import { type ColorZone, type CurveChannel, CURVE_CHANNELS, isNeutral } from '@shared/adjustments';
+import { type ColorZone, type CurveChannel, CURVE_CHANNELS, curveTables, isNeutral } from '@shared/adjustments';
 import { createLocalAdjustment, localAdjustmentLabel, LOCAL_GRADE_RANGE, type LocalAdjustment } from '@shared/localAdjust';
 import {
   type AsShot,
@@ -85,11 +98,13 @@ export function RightRail() {
             <LightingSection />
             <ImagingSection />
             <ScenePlacementSection />
+            <DecodeCurveSection />
           </>
         ) : (
           <>
             <PresetsSection />
             <WhiteBalanceSection />
+            <ScanSection />
             <ExposureSection />
             <CurveSection />
             <ColorBalanceSection />
@@ -516,6 +531,16 @@ function DevelopmentSection() {
         onChange={(v) => setD({ temperatureC: v })}
         testId="development-temperature"
       />
+      <ScrubSlider
+        label={tz('Grain seed', '颗粒种子')}
+        sublabel={tz('0 = a new grain per render', '0 = 每次渲染新颗粒')}
+        value={p.filmSeed}
+        range={[0, 9999]}
+        snap={1}
+        format={(v) => (v < 1 ? tz('New', '新') : String(Math.round(v)))}
+        onChange={(v) => setParams((q) => ({ ...q, filmSeed: Math.round(v) }))}
+        testId="grain-seed"
+      />
     </Section>
   );
 }
@@ -563,6 +588,15 @@ function LightingSection() {
 
 // ------------------------------------------------------------ Imaging detail
 
+/** Commercial diffusion-filter stops: 1/8, 1/4, 1/2, 1 and 2 (the wire is 0..2). */
+function diffusionStrengthLabel(v: number): string {
+  if (v <= 0) return '0';
+  if (Math.abs(v - 0.125) < 1e-9) return '1/8';
+  if (Math.abs(v - 0.25) < 1e-9) return '1/4';
+  if (Math.abs(v - 0.5) < 1e-9) return '1/2';
+  return v.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 /** P2-03: the physical detail the stock profiles already imply. The engine has
  *  always had these fields, but no panel reached them, so a dull or soft frame
  *  could not be traced to the film, the taking lens or the scanner. */
@@ -575,6 +609,8 @@ function ImagingSection() {
   const set = (patch: Partial<typeof p>) => setParams((q) => ({ ...q, ...patch }));
   const reset = () => set({
     cameraFilter: '', lensBlurUm: 0, densityCurveGamma: 1,
+    diffusionFilter: DIFFUSION_FILTER_DEFAULT,
+    lensCharacter: LENS_CHARACTER_DEFAULT,
     scannerWhiteCorrection: false, scannerBlackCorrection: false, scannerLensBlur: 0, overscanCarrier: 'none',
   });
   return (
@@ -591,6 +627,118 @@ function ImagingSection() {
         onChange={(v) => set({ cameraFilter: v })}
         display={cameraFilterLabel(p.cameraFilter)}
         testId="camera-filter"
+      />
+      <ToggleRow
+        label={tz('Diffusion filter', '柔光镜')}
+        on={p.diffusionFilter.active}
+        onChange={(v) => set({ diffusionFilter: { ...p.diffusionFilter, active: v } })}
+        testId="diffusion-active"
+      />
+      <PillMenu
+        label={tz('Diffusion family', '柔光镜类型')}
+        value={p.diffusionFilter.family}
+        options={DIFFUSION_FILTER_FAMILIES.map((v) => ({ value: v, label: diffusionFilterLabel(v) }))}
+        onChange={(v) => set({ diffusionFilter: { ...p.diffusionFilter, family: v } })}
+        display={diffusionFilterLabel(p.diffusionFilter.family)}
+        disabled={!p.diffusionFilter.active}
+        reason={tz('Turn the diffusion filter on first.', '先打开柔光镜。')}
+        testId="diffusion-family"
+      />
+      <ScrubSlider
+        label={tz('Diffusion strength', '柔光强度')}
+        value={p.diffusionFilter.strength}
+        range={[0, 2]}
+        snap={0.125}
+        format={diffusionStrengthLabel}
+        onChange={(v) => set({ diffusionFilter: { ...p.diffusionFilter, strength: v } })}
+        testId="diffusion-strength"
+      />
+      <p className="caption">{tz('Lens character', '镜头性格')}</p>
+      <ToggleRow
+        label={tz('Lens aberrations', '镜头像差')}
+        on={p.lensCharacter.active}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, active: v } })}
+        testId="lens-character-active"
+      />
+      <ScrubSlider
+        label={tz('Field curvature', '场曲')}
+        value={p.lensCharacter.fieldCurvatureUm}
+        range={[...LENS_CURVATURE_RANGE] as [number, number]}
+        snap={1}
+        format={(v) => v.toFixed(0) + ' µm'}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, fieldCurvatureUm: v } })}
+        testId="lens-curvature"
+      />
+      <ScrubSlider
+        label={tz('Astigmatism', '像散')}
+        value={p.lensCharacter.astigmatismUm}
+        range={[...LENS_ASTIGMATISM_RANGE] as [number, number]}
+        zero={0}
+        snap={1}
+        format={(v) => v.toFixed(0) + ' µm'}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, astigmatismUm: v } })}
+        testId="lens-astigmatism"
+      />
+      <ScrubSlider
+        label={tz('Coma', '彗差')}
+        value={p.lensCharacter.comaUm}
+        range={[...LENS_COMA_RANGE] as [number, number]}
+        zero={0}
+        snap={1}
+        format={(v) => v.toFixed(0) + ' µm'}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, comaUm: v } })}
+        testId="lens-coma"
+      />
+      <ScrubSlider
+        label={tz('Lateral CA · red', '横向色差 · 红')}
+        value={p.lensCharacter.lateralCaR}
+        range={[...LENS_CA_RANGE] as [number, number]}
+        zero={0}
+        snap={0.05}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, lateralCaR: v } })}
+        testId="lens-ca-r"
+      />
+      <ScrubSlider
+        label={tz('Lateral CA · blue', '横向色差 · 蓝')}
+        value={p.lensCharacter.lateralCaB}
+        range={[...LENS_CA_RANGE] as [number, number]}
+        zero={0}
+        snap={0.05}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, lateralCaB: v } })}
+        testId="lens-ca-b"
+      />
+      <ScrubSlider
+        label={tz('Longitudinal CA', '纵向色差')}
+        value={p.lensCharacter.locaUm}
+        range={[...LENS_LOCA_RANGE] as [number, number]}
+        snap={0.5}
+        format={(v) => v.toFixed(1) + ' µm'}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, locaUm: v } })}
+        testId="lens-loca"
+      />
+      <PillMenu
+        label={tz('LoCA soft side', '纵向色差柔化侧')}
+        value={p.lensCharacter.locaSign}
+        options={[
+          { value: 'purple', label: locaSignLabel('purple') },
+          { value: 'green', label: locaSignLabel('green') },
+        ]}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, locaSign: v } })}
+        display={locaSignLabel(p.lensCharacter.locaSign)}
+        disabled={!p.lensCharacter.active}
+        reason={tz('Turn the lens aberrations on first.', '先打开镜头像差。')}
+        testId="lens-loca-sign"
+      />
+      <ScrubSlider
+        label={tz('Spherical glow', '球面光晕')}
+        value={p.lensCharacter.sphericalAmount}
+        range={[...LENS_GLOW_RANGE] as [number, number]}
+        snap={0.01}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => set({ lensCharacter: { ...p.lensCharacter, sphericalAmount: v } })}
+        testId="lens-glow"
       />
       <ScrubSlider
         label={tz('Lens diffraction', '镜头衍射')}
@@ -638,7 +786,14 @@ function ImagingSection() {
           '预览会跳过两处镜头模糊，请在整幅渲染或导出时判断。',
         )}
       </p>
-    </Section>
+          <ToggleRow
+        label={tz('Halation keeps highlights intact', '光晕保留高光')}
+        sublabel={tz('Off: the halo adds light without dimming the source.', '关：光晕只加光，不压暗光源。')}
+        on={!p.halationRenormalize}
+        onChange={(v) => set({ halationRenormalize: !v })}
+        testId="halation-keep-highlights"
+      />
+</Section>
   );
 }
 
@@ -672,6 +827,46 @@ function ScenePlacementSection() {
 }
 
 // ---------------------------------------------------------------- Post-Dev
+
+/** The scan's unsharp mask (the audit's M-3). The engine keeps the reference
+ *  default (0.7 px / 0.7); the product sends 0 so no hidden sharpening sits on
+ *  the film texture, and a person can raise it deliberately. */
+function ScanSection() {
+  const p = useSession((s) => s.sidecar.params);
+  const set = (patch: Partial<typeof p>) => setParams((q) => ({ ...q, ...patch }));
+  const off = p.scanUnsharpAmount <= 0;
+  return (
+    <Section
+      id="scan"
+      title={tz('Scan sharpening', '扫描锐化')}
+      onReset={() => set({ scanUnsharpSigma: 0.7, scanUnsharpAmount: 0 })}
+      resetHelp={tz('Back to no sharpening (the film texture as developed).', '恢复为不锐化（显影后的胶片质感）。')}
+    >
+      <ScrubSlider
+        label={tz('Amount', '强度')}
+        sublabel={tz('0 = no sharpening', '0 = 不锐化')}
+        value={p.scanUnsharpAmount}
+        range={[0, 1.5]}
+        snap={0.05}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => set({ scanUnsharpAmount: v })}
+        testId="scan-unsharp-amount"
+      />
+      <ScrubSlider
+        label={tz('Radius', '半径')}
+        sublabel={tz('pixels at the full frame', '全画幅像素')}
+        value={p.scanUnsharpSigma}
+        range={[0, 3]}
+        snap={0.1}
+        format={(v) => v.toFixed(1)}
+        disabled={off}
+        reason={tz('Raise the amount first.', '先提高强度。')}
+        onChange={(v) => set({ scanUnsharpSigma: v })}
+        testId="scan-unsharp-sigma"
+      />
+    </Section>
+  );
+}
 
 function WhiteBalanceSection() {
   const a = useSession(shownAdjustments);
@@ -733,6 +928,50 @@ function CurveSection() {
         ))}
       </div>
       <CurveEditor channel={ch} />
+    </Section>
+  );
+}
+
+/** The Decode curve (API-SPEC §17, macOS 2.x): five curves on the scene before
+ *  the film, on Scene Latitude's axis (stops about the metered mid-grey), so
+ *  placement and the curve compose and Film Exposure moves the scene along it. */
+function DecodeCurveSection() {
+  const p = useSession((s) => s.sidecar.params);
+  const [ch, setCh] = useState<CurveChannel>('rgb');
+  const set = (curves: typeof DECODE_CURVE_IDENTITY) =>
+    setParams((q) => ({ ...q, decodeCurve: curves, decodeCurveText: encodeSceneCurve(curveTables(curves, 33)) }));
+  return (
+    <Section
+      id="decodecurve"
+      title={tz('Decode curve', '解码曲线')}
+      onReset={() => set(DECODE_CURVE_IDENTITY)}
+      resetHelp={tz('Back to the identity: the scene as decoded.', '恢复为恒等：解码后的场景原样。')}
+    >
+      <p className="caption">
+        {tz(
+          'A tone curve on the scene before the film, on the latitude plot\'s axis (stops about mid-grey).',
+          '胶片之前的场景色调曲线，横轴与宽容度图一致（相对中灰的档位）。',
+        )}
+      </p>
+      <div className="row" style={{ gap: 4 }}>
+        {CURVE_CHANNELS.map((c) => (
+          <button
+            key={c}
+            className={'btn' + (c === ch ? ' primary' : '')}
+            style={{ height: 18, padding: '0 8px', fontSize: 'var(--fs-small)' }}
+            onClick={() => setCh(c)}
+            data-testid={'decode-curve-' + c}
+          >
+            {CHANNEL_LABEL[c]()}
+          </button>
+        ))}
+      </div>
+      <CurveEditor
+        channel={ch}
+        value={p.decodeCurve[ch]}
+        onChange={(c) => set({ ...p.decodeCurve, [ch]: c })}
+        histogram={false}
+      />
     </Section>
   );
 }

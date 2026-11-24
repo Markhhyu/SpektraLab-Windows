@@ -281,6 +281,7 @@ function FilmEdgeSection() {
       <div className="row"><span className="row-label">{tz('Film advance', '过片')}</span><button className="pill-menu" disabled={off} onClick={advanceFilm}>{tz('Another', '再过一格')}</button></div>
       <ScrubSlider label={tz('Frame number', '帧号')} sublabel={tz('0 = automatic', '0 = 自动')} value={fe.frameNumber} disabled={off} range={[0, 99]} snap={1} format={(v) => String(Math.round(v))} onChange={(v) => set({ frameNumber: Math.round(v) })} />
       <ScrubSlider label={t('edgeFog')} value={fe.fog} disabled={off} range={[0, 4]} zero={1} onChange={(v) => set({ fog: v })} />
+      <ScrubSlider label={tz('Lens falloff', '镜头失光')} value={fe.falloff} disabled={off} range={[0, 1.5]} zero={0} snap={0.05} format={(v) => v.toFixed(2)} onChange={(v) => set({ falloff: v })} testId="edge-falloff" />
       <ScrubSlider label={t('edgeLeaks')} value={fe.leaks} disabled={off} range={[0, 4]} onChange={(v) => set({ leaks: v })} />
       {fe.active && <p className="caption">{fe.edgeText}{fe.fNumber > 0 ? ` · f/${fe.fNumber}` : ''}</p>}
     </Section>

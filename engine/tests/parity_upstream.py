@@ -49,6 +49,14 @@ import numpy as np
 
 from spk_test_paths import add_engine_arguments, engine_options
 
+# This harness compares against the *optical* reference build. The macOS 2.x
+# reading refinements (the print hue from the negative, and the minilab
+# print table) are deliberate departures from the reference: with them on,
+# every chromatic pair would differ by their design, so they are pinned off
+# for the comparison (the same switch the macOS harnesses use).
+os.environ.setdefault("SPK_V2_REFERENCE_OPTICAL", "1")
+os.environ.setdefault("SPK_REFERENCE_HALATION_SHAPE", "1")   # the reference's equal-width halo
+
 REPO = Path(__file__).resolve().parents[2]
 
 FLOAT_TOLERANCE = 3e-5
@@ -78,6 +86,22 @@ DELTA_MAP = {
     "scan_film": "io.scan_film",
     "output_color_space": "io.output_color_space",
     "output_cctf_encoding": "io.output_cctf_encoding",
+    # API-SPEC §21.5, macOS 2.x: the camera's diffusion filter. The public
+    # reference implements it too (`model/diffusion.py`), so a case here is a
+    # real comparison; the engine applies it with the same three-Gaussian
+    # surrogate the macOS engine uses, so expect the surrogate's tolerance, not
+    # the 3e-5 bar (see `diffusion_engine_checks.py`).
+    "diffusion_filter_active": "camera.diffusion_filter.active",
+    "diffusion_filter_family": "camera.diffusion_filter.filter_family",
+    "diffusion_filter_strength": "camera.diffusion_filter.strength",
+    "diffusion_filter_spatial_scale": "camera.diffusion_filter.spatial_scale",
+    "diffusion_filter_halo_warmth": "camera.diffusion_filter.halo_warmth",
+    "diffusion_filter_core_intensity": "camera.diffusion_filter.core_intensity",
+    "diffusion_filter_core_size": "camera.diffusion_filter.core_size",
+    "diffusion_filter_halo_intensity": "camera.diffusion_filter.halo_intensity",
+    "diffusion_filter_halo_size": "camera.diffusion_filter.halo_size",
+    "diffusion_filter_bloom_intensity": "camera.diffusion_filter.bloom_intensity",
+    "diffusion_filter_bloom_size": "camera.diffusion_filter.bloom_size",
 }
 
 CASES = [

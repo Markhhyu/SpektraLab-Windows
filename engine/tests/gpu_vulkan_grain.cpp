@@ -306,6 +306,85 @@ bool check_grain(Gpu* gpu, std::string& error) {
     return true;
 }
 
+// The sub-layer kernel at the magnitudes VISION3 50D actually feeds it:
+// 256-row tables, density 0.725 (18 % grey on that stock), layer maxima
+// 0.53-0.68, 31-605 particles per pixel, uniformity 0.97/0.99. The formula is
+// var(sum_sl layer) = sum_sl d_sl * dmax_sl * sat_sl / n_sl, per channel --
+// the moment the whole-frame grain node must produce (VISION3-50D-VALIDATION).
+bool check_grain_realistic(Gpu* gpu, std::string& error) {
+    constexpr uint32_t K = 256, count = 4096;
+    static const double kAxisMax[3] = {1.62495, 1.69575, 1.91283};
+    static const double kDmax[3][3] = {{0.5345, 0.5620, 0.5575},
+                                       {0.5346, 0.6017, 0.5886},
+                                       {0.5972, 0.6798, 0.6646}};
+    static const double kDmin[3][3] = {{0.0097, 0.0102, 0.0101},
+                                       {0.0093, 0.0105, 0.0102},
+                                       {0.0092, 0.0105, 0.0103}};
+    static const double kParticles[3][3] = {{145.0, 304.8, 604.7},
+                                            {108.8, 245.0, 479.4},
+                                            {31.2, 71.0, 138.8}};
+    static const double kTarget[3][3] = {{0.5232, 0.2103, 0.0180},
+                                         {0.5237, 0.2028, 0.0165},
+                                         {0.5846, 0.2291, 0.0184}};
+    static const double kUniformity[3] = {0.97, 0.99, 0.97};
+    const double query = 0.7250;
+
+    std::vector<float> xa(K * 3), inv((K - 1) * 3), y(K * 9), lp(36);
+    std::vector<float> cmy(count * 3);
+    uint32_t streams[9];
+    for (uint32_t ch = 0; ch < 3; ++ch) {
+        for (uint32_t k = 0; k < K; ++k) xa[k * 3 + ch] = float(kAxisMax[ch] * double(k) / double(K - 1));
+        for (uint32_t k = 0; k + 1 < K; ++k)
+            inv[k * 3 + ch] = float(1.0 / (double(xa[(k + 1) * 3 + ch]) - double(xa[k * 3 + ch])));
+        for (uint32_t sl = 0; sl < 3; ++sl) {
+            const uint32_t col = ch * 3 + sl;
+            streams[col] = 17 + col * 13;
+            lp[col * 4] = float(kDmin[sl][ch]);
+            lp[col * 4 + 1] = float(kDmax[sl][ch]);
+            lp[col * 4 + 2] = float(kParticles[sl][ch]);
+            lp[col * 4 + 3] = float(kUniformity[ch]);
+            for (uint32_t k = 0; k < K; ++k)
+                y[k * 9 + col] = float(kTarget[sl][ch] * (double(xa[k * 3 + ch]) / query));
+        }
+    }
+    for (uint32_t i = 0; i < count; ++i)
+        for (uint32_t ch = 0; ch < 3; ++ch) cmy[i * 3 + ch] = float(query);
+
+    auto input = gpu->upload(cmy.data(), cmy.size() * sizeof(float), error);
+    auto xa_b = gpu->upload(xa.data(), xa.size() * sizeof(float), error);
+    auto inv_b = gpu->upload(inv.data(), inv.size() * sizeof(float), error);
+    auto ylay_b = gpu->upload(y.data(), y.size() * sizeof(float), error);
+    auto lp_b = gpu->upload(lp.data(), lp.size() * sizeof(float), error);
+    auto st_b = gpu->upload_u32(streams, 9, error);
+    if (!input || !xa_b || !inv_b || !ylay_b || !lp_b || !st_b) return false;
+    const uint32_t meta[4] = {K, count, 0, 424242};
+    std::vector<float> got;
+    if (!dispatch_f32(gpu, "spk_grain_layers",
+                      {Arg::buf(input), Arg::buf(xa_b), Arg::buf(inv_b), Arg::buf(ylay_b),
+                       Arg::buf(lp_b), Arg::buf(st_b), Arg::inline_bytes(meta, 4)},
+                      count, cmy.size(), got, error)) return false;
+
+    bool ok = true;
+    for (uint32_t ch = 0; ch < 3; ++ch) {
+        double mean = 0.0, var = 0.0;
+        for (uint32_t sl = 0; sl < 3; ++sl) {
+            const double d = kTarget[sl][ch] + kDmin[sl][ch];
+            const double p = std::clamp(d / kDmax[sl][ch], 1e-6, 1.0 - 1e-6);
+            const double sat = 1.0 - p * kUniformity[ch] * (1.0 - 1e-6);
+            mean += d;
+            var += d * kDmax[sl][ch] * sat / kParticles[sl][ch];
+        }
+        const auto m = moments(got, ch, 3, count);
+        const double sd_bar = 6.0 * std::sqrt(var / double(count)) + 1e-6 * mean;
+        const double var_bar = 7.0 * var * std::sqrt(2.0 / double(count)) + 1e-6 * var;
+        std::printf("grain realistic ch%u: mean %.5f/%.5f (bar %.2g)  var %.8f/%.8f (bar %.2g)\n",
+                    ch, m.mean, mean, sd_bar, m.variance, var, var_bar);
+        if (std::abs(m.mean - mean) > sd_bar || std::abs(m.variance - var) > var_bar) ok = false;
+    }
+    if (!ok) error = "spk_grain_layers does not match its own layer_draw variance at 50D magnitudes";
+    return ok;
+}
+
 bool check_lognormal(Gpu* gpu, std::string& error) {
     for (const auto& pair : {std::array<float, 2>{1, 0.2f}, std::array<float, 2>{0.04f, 0.06f},
                              std::array<float, 2>{1.5f, 0}}) {
@@ -362,7 +441,8 @@ int main(int argc, char** argv) {
     if (!gpu) { std::fprintf(stderr, "Vulkan device: %s\n", error.c_str()); return 1; }
     std::printf("Vulkan grain device: %s\n", gpu->device_name().c_str());
     if (!check_rng(gpu.get(), error) || !check_layer_moments(gpu.get(), error) ||
-        !check_grain(gpu.get(), error) || !check_lognormal(gpu.get(), error)) {
+        !check_grain(gpu.get(), error) || !check_grain_realistic(gpu.get(), error) ||
+        !check_lognormal(gpu.get(), error)) {
         std::fprintf(stderr, "grain gate: %s\n", error.c_str()); return 1;
     }
     std::printf("Windows Vulkan grain local gates passed; whole-frame Python/Metal parity remains unverified.\n");

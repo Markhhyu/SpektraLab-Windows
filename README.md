@@ -21,7 +21,7 @@ Develop a camera RAW as a film exposure, then choose how to print it. You can se
 | Inspecting texture at 100% | VISION3 stocks have individual grain calibrations. On 50D, the spread of fine detail also follows Kodak’s published red, green and blue MTF curves. |
 | Editing a shoot | Rate and flag photos in the library, apply local adjustments with masks, and batch-export a selection. Edits are stored separately from the original RAW. |
 
-Calibration uses published film data and synthetic targets. For example, on daylight samples held out of the E100 fit, blue-layer density RMS error fell from 0.170 D to 0.041 D. A same-scene comparison with physical film is still pending. [Measurements and test conditions](RELEASES.md#en-1.9.5) · [Differences from upstream](DIFFERENCES.md)
+Calibration uses published film data and synthetic targets. For example, on daylight samples held out of the E100 fit, blue-layer density RMS error fell from 0.170 D to 0.041 D. A same-scene comparison with physical film is still pending. [Measurements and test conditions](RELEASES.md#en-1.10.0) · [Differences from upstream](DIFFERENCES.md)
 
 ## Build and contribute
 

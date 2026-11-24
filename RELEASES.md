@@ -42,6 +42,28 @@ link. Both installer names on that release contain the same bytes.
 
 ## History
 
+### v1.10.0 — macOS 2.x 成像移植与胶片真实感校准 / macOS 2.x imaging port and film realism calibration
+
+<h4 id="cn-1.10.0">胶片模拟</h4>
+
+- 移植 macOS 2.x 的成像链路：负片色相、minilab 印放查表（Portra 400 → Portra Endura 的 r=1 校准）、柔光镜 PSF、镜头性格（色差、纵向色差、场曲）、解码曲线与片边失光。
+- 颗粒改为以微米锚定，并逐通道补偿 48 µm 孔径内的方差；新增 `grain_seed`（一次渲染一个可复现的实现）、按公开 T1/T3/T2 片种颗粒比值的逐片种标定，以及逐片种光晕形状。
+- VISION3 50D 按柯达 TI-2657 公开数据验证：10/20/30/40 周期/毫米的 MTF 与数据表最大偏差 0.040；48 µm 颗粒度按数据表口径的参考实现标定；20 °C 推冲半档与 23 °C 不推冲的等价性固化为门禁。
+- 两个此前隐藏的打印侧行为改为显式可控：扫描锐化上 wire、产品默认关闭（M-3）；CineStill 光晕默认不再压暗自身高光（H-2）。引擎默认仍与参考一致，因此参考对比保持不变。
+
+以上数值来自模拟测试图与原厂资料的对照，本版尚无同场景实拍胶片对照。
+
+<h4 id="en-1.10.0">Film simulation</h4>
+
+- Ported the macOS 2.x imaging chain: negative hue, the qualified minilab print transforms (Portra 400 → Portra Endura, r=1 calibration), the diffusion-filter PSF, lens character (TCA, LoCA, field curvature), the decode curve and film-edge falloff.
+- Grain is now anchored in micrometres and its 48 µm-aperture variance is restored per channel. Added `grain_seed` (one reproducible realisation per render), per-stock calibration from the published T1/T3/T2 grain ratios, and per-stock halation shape.
+- VISION3 50D is validated against the public Kodak TI-2657 data: MTF at 10/20/30/40 cycles/mm within 0.040 of the sheet, 48 µm granularity calibrated to the sheet-calibrated reference, and the 20 °C half-push / 23 °C no-push equivalence pinned as a gate.
+- Two print-side behaviours that were hidden are now explicit: scan sharpening is on the wire and off in the product (M-3), and CineStill's halation no longer dims its own highlights by default (H-2). The engine defaults still match the reference, so the reference comparisons are unchanged.
+
+These measurements compare synthetic targets with published film data. A matched-scene comparison with physical film is still pending.
+
+Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.9.5...v1.10.0
+
 ### v1.9.5 — 胶片曝光、高光与细节校准 / Film exposure, highlights and detail
 
 <h4 id="cn-1.9.5">胶片模拟</h4>

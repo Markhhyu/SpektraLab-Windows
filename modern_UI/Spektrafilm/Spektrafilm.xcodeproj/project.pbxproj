@@ -525,6 +525,9 @@
 		3C85018F7CFC2D41AC98B13B /* profile.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "profile.cpp"; path = "../../engine/src/core/profile.cpp"; sourceTree = SOURCE_ROOT; };
 		1D045DFCC1EDDCD6A7A24BAC /* setup_cache.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "setup_cache.cpp"; path = "../../engine/src/core/setup_cache.cpp"; sourceTree = SOURCE_ROOT; };
 		4B3FFEDB7D788D9CE9176200 /* spectral.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "spectral.cpp"; path = "../../engine/src/core/spectral.cpp"; sourceTree = SOURCE_ROOT; };
+		9A6143975F1EB172E000C780 /* diffusion_psf.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "diffusion_psf.cpp"; path = "../../engine/src/core/diffusion_psf.cpp"; sourceTree = SOURCE_ROOT; };
+		2BE639B5B0BE4E80B6D21744 /* minilab.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "minilab.cpp"; path = "../../engine/src/core/minilab.cpp"; sourceTree = SOURCE_ROOT; };
+		7D8B5B6E63EC0690CD79A991 /* negative_hue.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "negative_hue.cpp"; path = "../../engine/src/core/negative_hue.cpp"; sourceTree = SOURCE_ROOT; };
 		07C47698192131C92F2CB924 /* metal_gpu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "metal_gpu.cpp"; path = "../../engine/src/gpu/metal_gpu.cpp"; sourceTree = SOURCE_ROOT; };
 		F6410F0A97C5410171E3B7A9 /* metal_impl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "metal_impl.cpp"; path = "../../engine/src/gpu/metal_impl.cpp"; sourceTree = SOURCE_ROOT; };
 		C132A91149E2E1D76F4F8C2E /* blur.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "blur.cpp"; path = "../../engine/src/pipeline/blur.cpp"; sourceTree = SOURCE_ROOT; };
@@ -552,6 +555,9 @@
 				3C85018F7CFC2D41AC98B13B /* profile.cpp */,
 				1D045DFCC1EDDCD6A7A24BAC /* setup_cache.cpp */,
 				4B3FFEDB7D788D9CE9176200 /* spectral.cpp */,
+				9A6143975F1EB172E000C780 /* diffusion_psf.cpp */,
+				2BE639B5B0BE4E80B6D21744 /* minilab.cpp */,
+				7D8B5B6E63EC0690CD79A991 /* negative_hue.cpp */,
 				07C47698192131C92F2CB924 /* metal_gpu.cpp */,
 				F6410F0A97C5410171E3B7A9 /* metal_impl.cpp */,
 				C132A91149E2E1D76F4F8C2E /* blur.cpp */,
@@ -708,6 +714,12 @@
 		D7897A126A90A8BE6BC8D2FB /* profile.cpp */ = {isa = PBXBuildFile; fileRef = 3C85018F7CFC2D41AC98B13B; };
 		CB17EB6046ACCFAF88E60F20 /* setup_cache.cpp */ = {isa = PBXBuildFile; fileRef = 1D045DFCC1EDDCD6A7A24BAC; };
 		57D44DCC31EA6D2C4F4CEE2D /* spectral.cpp */ = {isa = PBXBuildFile; fileRef = 4B3FFEDB7D788D9CE9176200; };
+		974EB4D8D23764F66ED4E315 /* diffusion_psf.cpp */ = {isa = PBXBuildFile; fileRef = 9A6143975F1EB172E000C780; };
+		441FF8AD0523B11FE8A0380E /* minilab.cpp */ = {isa = PBXBuildFile; fileRef = 2BE639B5B0BE4E80B6D21744; };
+		65729BE18143B69377520D40 /* negative_hue.cpp */ = {isa = PBXBuildFile; fileRef = 7D8B5B6E63EC0690CD79A991; };
+		B2C9F3DA54D186CCB4B00012 /* diffusion_psf.cpp */ = {isa = PBXBuildFile; fileRef = 9A6143975F1EB172E000C780; };
+		E8F754F46FA852B549A11168 /* minilab.cpp */ = {isa = PBXBuildFile; fileRef = 2BE639B5B0BE4E80B6D21744; };
+		AA8A8C350D048CD59749B68A /* negative_hue.cpp */ = {isa = PBXBuildFile; fileRef = 7D8B5B6E63EC0690CD79A991; };
 		482DD0A9D7EF5BCF0D8B273F /* metal_gpu.cpp */ = {isa = PBXBuildFile; fileRef = 07C47698192131C92F2CB924; };
 		A4F4DB9D1206599FBE5DFD58 /* metal_impl.cpp */ = {isa = PBXBuildFile; fileRef = F6410F0A97C5410171E3B7A9; };
 		0E89615A1A137B8283BBD90D /* blur.cpp */ = {isa = PBXBuildFile; fileRef = C132A91149E2E1D76F4F8C2E; };
@@ -842,6 +854,12 @@
 				D7897A126A90A8BE6BC8D2FB /* profile.cpp */,
 				CB17EB6046ACCFAF88E60F20 /* setup_cache.cpp */,
 				57D44DCC31EA6D2C4F4CEE2D /* spectral.cpp */,
+				974EB4D8D23764F66ED4E315 /* diffusion_psf.cpp */,
+				441FF8AD0523B11FE8A0380E /* minilab.cpp */,
+				65729BE18143B69377520D40 /* negative_hue.cpp */,
+				B2C9F3DA54D186CCB4B00012 /* diffusion_psf.cpp */,
+				E8F754F46FA852B549A11168 /* minilab.cpp */,
+				AA8A8C350D048CD59749B68A /* negative_hue.cpp */,
 				482DD0A9D7EF5BCF0D8B273F /* metal_gpu.cpp */,
 				A4F4DB9D1206599FBE5DFD58 /* metal_impl.cpp */,
 				0E89615A1A137B8283BBD90D /* blur.cpp */,

@@ -2,6 +2,7 @@
 // interface: Tauri commands and plugins in the app, an in-memory stand-in in
 // the browser (layout harness, plain `vite`).
 
+import type { ImportFormat } from '@shared/fileTypes';
 import { inTauri } from '../host/transport';
 import { browserPlatform } from './browser';
 import { tauriPlatform } from './tauri';
@@ -51,7 +52,7 @@ export interface Platform {
   ensureDir(path: string): Promise<void>;
   appPaths(): Promise<AppPaths>;
   pickFolder(title: string): Promise<string | null>;
-  pickFiles(title: string): Promise<string[]>;
+  pickFiles(title: string, format?: ImportFormat): Promise<string[]>;
   pickSave(title: string, defaultPath: string, ext: string): Promise<string | null>;
   reveal(path: string): Promise<void>;
   openUrl(url: string): Promise<void>;

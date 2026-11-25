@@ -46,6 +46,9 @@ import type { Transport } from '../host/transport';
 import { POOL_MAX_WORKERS, poolAvailable, poolEnsure, poolShutdown, poolTransport } from '../host/pool';
 import { openCollection } from './session';
 import { thumbs } from './thumbs';
+import { matchesImportFormat, type ImportFormat } from '@shared/fileTypes';
+import { isRawPath } from '@shared/whiteBalance';
+import { tz } from '../i18n';
 
 /** Long edge of the preview thumbnails the grid shows. */
 const THUMB_EDGE = 512;
@@ -70,6 +73,7 @@ export interface LibraryState {
   ready: boolean;
   /** The Library overlay replaces the editor until the user opens a photo. */
   open: boolean;
+  importOpen: boolean;
   /** A one-shot error for the UI to surface. */
   error: string | null;
   /** Imported paths whose camera preview could not be read; retryable. */
@@ -87,6 +91,7 @@ const initial = (): LibraryState => ({
   progress: null,
   ready: false,
   open: false,
+  importOpen: false,
   error: null,
   failures: [],
 });
@@ -144,24 +149,24 @@ async function toJpeg(image: { width: number; height: number; data: Uint8Array }
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** Pull one camera-embedded preview through the host and cache it as a JPEG. */
+/** Read the embedded preview for RAW or a resized image for raster files. */
 async function readThumb(
-  entry: CatalogEntry, thumbs: Record<string, string>, transport: Pick<Transport, 'request'> | null = null,
-): Promise<boolean> {
+  entry: CatalogEntry, transport: Pick<Transport, 'request'> | null = null,
+): Promise<string | null> {
+  const embeddedOnly = isRawPath(entry.path);
   let preview: RgbaImage;
   if (transport) {
     // A pool worker answers `thumbnail` without owning a session.
     const reply = await transport.request('thumbnail',
-      { path: entry.path, long_edge: THUMB_EDGE, embedded_only: true }, { timeoutMs: 60_000 });
+      { path: entry.path, long_edge: THUMB_EDGE, ...(embeddedOnly ? { embedded_only: true } : {}) }, { timeoutMs: 60_000 });
     preview = displayImage((reply.result as { image: ImageInfo }).image, reply.payload);
   } else {
-    preview = await host().thumbnail(entry.path, THUMB_EDGE, true);
+    preview = await host().thumbnail(entry.path, THUMB_EDGE, embeddedOnly);
   }
   const jpeg = await toJpeg(preview);
-  if (!jpeg) return false;
+  if (!jpeg) return null;
   await platform().catalogThumbSave(entry.path, jpeg).catch(() => '');
-  thumbs[entry.path] = bytesToDataUrl(jpeg);
-  return true;
+  return bytesToDataUrl(jpeg);
 }
 
 /** Read one file's EXIF capture time through the same transport as its preview.
@@ -179,7 +184,18 @@ async function readCapturedAt(transport: Pick<Transport, 'request'> | null, path
   }
 }
 
+function recordPreview(path: string, url: string | null, capturedAt?: string | null) {
+  const { catalog, thumbs } = store();
+  if (!catalog.entries.some((entry) => entry.path === path)) return;
+  set({
+    ...(url && { thumbs: { ...thumbs, [path]: url } }),
+    catalog: { ...catalog, entries: catalog.entries.map((entry) => entry.path === path
+      ? { ...entry, ...(url && { thumb: true }), ...(capturedAt && { capturedAt }) } : entry) },
+  });
+}
+
 let hydrating = false;
+let importing = false;
 /** Set by cancelImport(); the worker loops check it between previews. */
 let importCancelled = false;
 
@@ -189,9 +205,9 @@ let importCancelled = false;
  * the Library is on screen and stops as soon as it closes; the host is
  * single-threaded, so a couple at a time keeps the editor responsive.
  */
-export function hydrateThumbs(): void {
-  if (hydrating) return;
-  const missing = store().catalog.entries.filter((e) => !e.thumb && !store().thumbs[e.path]);
+export function hydrateThumbs(skip?: ReadonlySet<string>): void {
+  if (hydrating || importing || !store().open) return;
+  const missing = store().catalog.entries.filter((e) => !store().thumbs[e.path] && !skip?.has(e.path));
   if (missing.length === 0) return;
   hydrating = true;
   void (async () => {
@@ -200,18 +216,11 @@ export function hydrateThumbs(): void {
       for (;;) {
         const index = next++;
         const entry = missing[index];
-        if (!entry || !store().open) return;
+        if (!entry || !store().open || importing) return;
+        if (store().thumbs[entry.path]) continue;
         try {
-          const thumbs = { ...store().thumbs };
-          if (await readThumb(entry, thumbs)) {
-            set({
-              thumbs,
-              catalog: {
-                ...store().catalog,
-                entries: store().catalog.entries.map((e) => (e.path === entry.path ? { ...e, thumb: true } : e)),
-              },
-            });
-          }
+          const url = await readThumb(entry);
+          if (url) recordPreview(entry.path, url);
         } catch {
           // Files the host cannot preview keep their placeholder.
         }
@@ -245,15 +254,18 @@ export function cancelImport(): void {
 }
 
 /** Import the given files or folders (folders are expanded by the platform). */
-export async function importPaths(paths: string[]): Promise<void> {
-  if (paths.length === 0) return;
+export async function importPaths(paths: string[], format: ImportFormat = 'all'): Promise<void> {
+  if (paths.length === 0 || importing) return;
+  importing = true;
+  const attempted = new Set<string>();
   importCancelled = false;
-  set({ busy: 'Importing…', progress: null, error: null, failures: [] });
+  set({ busy: tz('Importing…', '正在导入…'), progress: null, error: null, failures: [] });
   let poolWorkers = 0;
   try {
-    const files = await platform().expandPaths(paths);
+    const files = (await platform().expandPaths(paths)).filter((file) => matchesImportFormat(file.path, format));
     if (files.length === 0) {
-      set({ busy: null, error: 'No photographs found in the selected path.' });
+      set({ error: format === 'all' ? tz('No supported photos found.', '所选位置没有支持的照片。')
+        : tz(`No ${format.toUpperCase()} photos found.`, `所选位置没有 ${format.toUpperCase()} 照片。`) });
       return;
     }
     const first = files[0];
@@ -261,22 +273,22 @@ export async function importPaths(paths: string[]): Promise<void> {
     const folder = first.path.replace(/[\\/][^\\/]+$/, '');
     const before = store().catalog;
     const { catalog, added } = addImportedFiles(before, folder, files);
-    const thumbs = { ...store().thumbs };
-    set({ catalog, thumbs, busy: `Reading previews (0/${added.length})…`, progress: { done: 0, total: added.length } });
-    // A folder import is a batch: previews are camera-embedded JPEGs, so they
-    // parallelise cleanly across render-pool workers. Small imports stay on
-    // the interactive host, where starting a pool would cost more than it saves.
-    const wantPool = added.length >= IMPORT_POOL_MIN && poolAvailable();
+    const requested = new Set(files.map((file) => file.path.toLowerCase()));
+    const pending = catalog.entries.filter((entry) => requested.has(entry.path.toLowerCase()) && !store().thumbs[entry.path]);
+    const total = pending.length;
+    const progressText = (done: number) => tz(`Reading previews (${done}/${total})…`, `正在读取预览（${done}/${total}）…`);
+    set({ catalog, busy: progressText(0), progress: { done: 0, total } });
+    const wantPool = total >= IMPORT_POOL_MIN && poolAvailable();
     if (wantPool) {
       try {
-        poolWorkers = (await poolEnsure(Math.min(POOL_MAX_WORKERS, Math.max(2, Math.ceil(added.length / 40))))).workers;
-        platform().log('info', `thumbnail pool: ${poolWorkers} worker(s) for ${added.length} preview(s)`);
+        poolWorkers = (await poolEnsure(Math.min(POOL_MAX_WORKERS, Math.max(2, Math.ceil(total / 40))))).workers;
+        platform().log('info', `thumbnail pool: ${poolWorkers} worker(s) for ${total} preview(s)`);
       } catch (e) {
         platform().log('warn', `thumbnail pool unavailable: ${String(e)}`);
         poolWorkers = 0;
       }
     }
-    const workers = poolWorkers > 1 ? poolWorkers : Math.min(THUMB_CONCURRENCY, added.length);
+    const workers = poolWorkers > 1 ? poolWorkers : Math.min(THUMB_CONCURRENCY, total);
     let done = 0;
     let next = 0;
     const failures: string[] = [];
@@ -285,44 +297,42 @@ export async function importPaths(paths: string[]): Promise<void> {
       for (;;) {
         if (importCancelled) return;
         const index = next++;
-        if (index >= added.length) return;
-        const entry = added[index];
+        if (index >= total) return;
+        const entry = pending[index];
         if (!entry) return;
+        attempted.add(entry.path);
         try {
-          const ok = await readThumb(entry, thumbs, transport);
+          const url = await readThumb(entry, transport);
           const capturedAt = await readCapturedAt(transport, entry.path);
-          catalog.entries = catalog.entries.map((e) => (e.path === entry.path
-            ? { ...e, thumb: ok, ...(capturedAt ? { capturedAt } : {}) }
-            : e));
-          set({ thumbs: { ...thumbs }, catalog: { ...catalog, entries: [...catalog.entries] } });
-          if (!ok) failures.push(entry.path);
+          recordPreview(entry.path, url, capturedAt);
+          if (!url) failures.push(entry.path);
         } catch {
           // A file the host cannot preview stays in the catalog without a thumb.
           failures.push(entry.path);
         } finally {
           done += 1;
-          set({ busy: `Reading previews (${done}/${added.length})…`, progress: { done, total: added.length } });
+          set({ busy: progressText(done), progress: { done, total } });
         }
       }
     };
     await Promise.all(Array.from({ length: workers }, (_v, lane) => worker(lane)));
     const lastAdded = added.length > 0 ? added[added.length - 1] : null;
     set({
-      busy: null,
-      progress: null,
       failures: [...new Set(failures)],
       selection: lastAdded ? [lastAdded.path] : store().selection,
       anchor: lastAdded ? lastAdded.path : store().anchor,
       ...(importCancelled ? { error: 'Import stopped; the remaining previews load when the folder is opened.' } : {}),
     });
     await persist();
-    hydrateThumbs();
   } catch (e) {
-    set({ busy: null, error: `Import failed: ${String(e)}` });
+    set({ error: `Import failed: ${String(e)}` });
   } finally {
     if (poolWorkers > 1) {
       await poolShutdown().catch((e) => platform().log('error', `thumbnail pool shutdown: ${String(e)}`));
     }
+    importing = false;
+    set({ busy: null, progress: null });
+    if (!importCancelled && attempted.size) hydrateThumbs(attempted);
     importCancelled = false;
   }
 }
@@ -425,15 +435,11 @@ export async function markEdited(paths: string[] = store().selection): Promise<v
 
 /** Refresh the `edited` badge from the sidecar store (cheap, one read per entry). */
 export async function refreshEditedBadges(): Promise<void> {
-  const catalog = store().catalog;
-  const entries = await Promise.all(catalog.entries.map(async (e) => {
-    if (e.edited) return e;
-    const sidecar = await platform().sidecarLoad(e.path).catch(() => null);
-    return sidecar ? { ...e, edited: true } : e;
-  }));
-  if (entries.some((e, i) => e.edited !== (catalog.entries[i]?.edited ?? e.edited))) {
-    set({ catalog: { ...catalog, entries } });
-  }
+  const pending = store().catalog.entries.filter((entry) => !entry.edited);
+  const paths = await Promise.all(pending.map(async ({ path }) =>
+    await platform().sidecarLoad(path).catch(() => null) ? path : null));
+  const edited = paths.filter((path): path is string => path !== null);
+  if (edited.length) set({ catalog: updateEntries(store().catalog, edited, { edited: true }) });
 }
 
 export function selectOnly(path: string) {
@@ -597,8 +603,12 @@ export async function syncDevelopSettings(paths: string[] = store().selection): 
   await persist();
 }
 
+export function setImportOpen(importOpen: boolean) {
+  set({ importOpen, ...(importOpen && { open: true, error: null }) });
+}
+
 export function setLibraryOpen(open: boolean) {
-  set({ open });
+  set({ open, ...(!open && { importOpen: false }) });
   if (open) hydrateThumbs();
 }
 

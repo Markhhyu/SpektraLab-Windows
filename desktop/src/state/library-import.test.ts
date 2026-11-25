@@ -77,13 +77,38 @@ describe('importPaths previews', () => {
     expect(libraryStore.getState().busy).toBeNull();
   });
 
+  it('uses the ordinary thumbnail path for JPEG, and the embedded preview for RAW', async () => {
+    expanded = filesFor(2, 'D:/Mixed').map((file, i) => ({ ...file, path: i ? 'D:/Mixed/b.JPG' : 'D:/Mixed/a.ARW' }));
+    await importPaths(['D:/Mixed']);
+    expect(m.hostThumb).toHaveBeenCalledWith('D:/Mixed/b.JPG', 512, false);
+    expect(m.hostThumb).toHaveBeenCalledWith('D:/Mixed/a.ARW', 512, true);
+  });
+
+  it('filters before catalog insertion and preview generation, including mixed-case JPEG extensions', async () => {
+    const folder = 'D:/Filter';
+    expanded = ['a.ArW', 'a.JpG', 'b.JPEG', 'scan.tif'].map((name) => ({ path: folder + '/' + name, name, size: 10, mtime_ms: 1 }));
+    await importPaths([folder], 'jpeg');
+    expect(libraryStore.getState().catalog.entries.filter((e) => e.folder === folder).map((e) => e.name)).toEqual(['a.JpG', 'b.JPEG']);
+    expect(m.hostThumb).toHaveBeenCalledTimes(2);
+    m.hostThumb.mockClear();
+    await importPaths([folder], 'raw');
+    expect(m.hostThumb).toHaveBeenCalledTimes(1);
+    expect(m.hostThumb).toHaveBeenCalledWith('D:/Filter/a.ArW', 512, true);
+    m.hostThumb.mockClear();
+    expanded = [];
+    await importPaths([folder], 'raw');
+    expect(m.hostThumb).not.toHaveBeenCalled();
+    expect(libraryStore.getState().error).toBeTruthy();
+  });
+
   it('runs folder-sized imports through the pool and always stops it', async () => {
-    expanded = filesFor(9, 'D:\\Batch');
+    expanded = [...filesFor(8, 'D:\\Batch'), { path: 'D:\\Batch\\scan.JPG', name: 'scan.JPG', size: 200, mtime_ms: 2 }];
     await importPaths(['D:\\Batch']);
     expect(m.poolEnsure).toHaveBeenCalledTimes(1);
     expect((m.poolEnsure.mock.calls[0] as unknown as [number] | undefined)?.[0]).toBeGreaterThanOrEqual(2);
     expect(m.poolTransport.mock.calls.length).toBeGreaterThan(0);
-    expect(m.poolThumb).toHaveBeenCalled();
+    expect(m.poolThumb).toHaveBeenCalledWith('thumbnail', { path: 'D:\\Batch\\scan.JPG', long_edge: 512 }, expect.anything());
+    expect(m.poolThumb).toHaveBeenCalledWith('thumbnail', { path: 'D:\\Batch\\p0.ARW', long_edge: 512, embedded_only: true }, expect.anything());
     expect(m.hostThumb).not.toHaveBeenCalled();
     expect(m.poolShutdown).toHaveBeenCalledTimes(1);
   });

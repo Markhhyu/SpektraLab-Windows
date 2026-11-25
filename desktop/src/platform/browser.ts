@@ -1,6 +1,7 @@
 // The browser stand-in: a fixed mock roll and localStorage for sidecars.
 
 import type { AppPaths, FileEntry, Platform } from './index';
+import { matchesImportFormat } from '@shared/fileTypes';
 import { decodePair } from '@shared/pair';
 
 const ROLL = '/mock/Roll 01';
@@ -101,7 +102,7 @@ export function browserPlatform(): Platform {
       version: '1.10.0',
     }),
     pickFolder: async () => ROLL,
-    pickFiles: async () => entries(ROLL).slice(0, 3).map((e) => e.path),
+    pickFiles: async (_title, format = 'all') => entries(ROLL).filter((e) => matchesImportFormat(e.path, format)).slice(0, 3).map((e) => e.path),
     pickSave: async (_t, defaultPath) => defaultPath,
     reveal: async (p) => console.info('reveal', p),
     openUrl: async (u) => void window.open(u, '_blank'),

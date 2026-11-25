@@ -15,7 +15,7 @@
 // unticked and do nothing.
 
 import type { DecodeSettings } from './sidecar.ts';
-import { RAW_EXTENSIONS } from './fileTypes.ts';
+import { matchesImportFormat } from './fileTypes.ts';
 
 export type WhiteBalanceMode = 'As Shot' | 'Daylight' | 'Cloudy' | 'Shade' | 'Tungsten' | 'Fluorescent' | 'Custom';
 export const WB_MODES: WhiteBalanceMode[] = ['As Shot', 'Daylight', 'Cloudy', 'Shade', 'Tungsten', 'Fluorescent', 'Custom'];
@@ -85,9 +85,8 @@ export function withPreset(d: DecodeSettings, asShot: AsShot | null, mode: White
   return { ...d, whiteBalance: mode };
 }
 
-const RAW_EXT = new Set<string>(RAW_EXTENSIONS);
 export function isRawPath(path: string): boolean {
-  return RAW_EXT.has((path.split('.').pop() ?? '').toLowerCase());
+  return matchesImportFormat(path, 'raw');
 }
 
 export interface WireDecode {

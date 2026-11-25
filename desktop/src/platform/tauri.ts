@@ -6,7 +6,7 @@ import { ask, message, open, save } from '@tauri-apps/plugin-dialog';
 import { error as logError, info as logInfo, warn as logWarn } from '@tauri-apps/plugin-log';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { AppPaths, FileEntry, Platform } from './index';
-import { PHOTO_PICKER_EXTENSIONS } from '@shared/fileTypes';
+import { matchesImportFormat, PHOTO_PICKER_EXTENSIONS } from '@shared/fileTypes';
 
 export function tauriPlatform(): Platform {
   return {
@@ -38,14 +38,14 @@ export function tauriPlatform(): Platform {
       const r = await open({ directory: true, multiple: false, title });
       return typeof r === 'string' ? r : null;
     },
-    async pickFiles(title) {
+    async pickFiles(title, format = 'all') {
       const r = await open({
         multiple: true,
         title,
         filters: [
           {
-            name: 'Photographs',
-            extensions: PHOTO_PICKER_EXTENSIONS,
+            name: format === 'all' ? 'Photographs' : format.toUpperCase(),
+            extensions: PHOTO_PICKER_EXTENSIONS.filter((ext) => matchesImportFormat('.' + ext, format)),
           },
           { name: 'All files', extensions: ['*'] },
         ],

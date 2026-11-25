@@ -10,6 +10,7 @@ for (const folder of [true, false]) {
     await expect(open).toBeEnabled();
     if (folder) {
       await open.click();
+      await page.getByTestId('library-import-start').click();
       await expect(page.getByTestId('library-cell')).toHaveCount(8);
       await page.getByTestId('library-cell').first().dblclick();
     } else await open.press('Space');

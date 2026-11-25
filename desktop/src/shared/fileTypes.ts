@@ -6,3 +6,12 @@ export const RAW_EXTENSIONS = [
 ] as const;
 export const RASTER_EXTENSIONS = ['tif', 'tiff', 'jpg', 'jpeg', 'png', 'heic', 'heif', 'hif', 'exr'] as const;
 export const PHOTO_PICKER_EXTENSIONS = [...RAW_EXTENSIONS, ...RASTER_EXTENSIONS].flatMap((ext) => [ext, ext.toUpperCase()]);
+
+export type ImportFormat = 'all' | 'raw' | 'jpeg';
+
+export function matchesImportFormat(path: string, format: ImportFormat): boolean {
+  if (format === 'all') return true;
+  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  return format === 'jpeg' ? extension === 'jpg' || extension === 'jpeg' : rawExtensions.has(extension);
+}
+const rawExtensions = new Set<string>(RAW_EXTENSIONS);

@@ -4,7 +4,9 @@
 // catalog and the preview thumbnails. Double-clicking a photograph opens it in
 // the editor exactly like File › Open, with the visible page in the filmstrip.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import * as Menu from '@radix-ui/react-dropdown-menu';
+import type { ImportFormat } from '@shared/fileTypes';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { tz } from '../i18n';
 import { importFolderDialog, openFilesDialog } from './actions';
@@ -37,6 +39,8 @@ import {
   setFlag,
   setFilters,
   setLibraryOpen,
+  libraryStore,
+  setImportOpen,
   setRating,
   setSort,
   showAllPhotographs,
@@ -69,10 +73,6 @@ const LABELS: { value: ColorLabel; en: string; zh: string }[] = [
   { value: 'purple', en: 'Purple', zh: '紫' },
 ];
 
-function Stars({ rating }: { rating: number }) {
-  return <span className="library-stars" aria-label={`${rating} stars`}>{'★'.repeat(rating)}<span className="library-stars-empty">{'★'.repeat(5 - rating)}</span></span>;
-}
-
 /** Five clickable stars; clicking the current value clears the rating. */
 function RatingButtons({ value, onChange, label }: { value: number | null; onChange: (next: Rating) => void; label: string }) {
   return (
@@ -86,18 +86,18 @@ function RatingButtons({ value, onChange, label }: { value: number | null; onCha
   );
 }
 
-function FlagButtons({ value, onChange, compact }: { value: Flag | null; onChange: (next: Flag) => void; compact?: boolean }) {
-  const options: { value: Flag; en: string; zh: string; short: string }[] = [
-    { value: 'pick', en: 'Pick', zh: '留用', short: '留' },
-    { value: 'reject', en: 'Reject', zh: '排除', short: '排' },
-    { value: 'none', en: 'None', zh: '无', short: '无' },
-  ];
+const FLAGS: { value: Flag; en: string; zh: string }[] = [
+  { value: 'pick', en: 'Pick', zh: '留用' },
+  { value: 'reject', en: 'Reject', zh: '排除' },
+  { value: 'none', en: 'None', zh: '无' },
+];
+function FlagButtons({ value, onChange }: { value: Flag | null; onChange: (next: Flag) => void }) {
   return (
-    <span className={`mark-flags${compact ? ' is-compact' : ''}`}>
-      {options.map((o) => (
+    <span className="mark-flags">
+      {FLAGS.map((o) => (
         <button key={o.value} type="button" className={`mark-flag is-${o.value}${value === o.value ? ' is-on' : ''}`}
           aria-pressed={value === o.value} title={tz(o.en, o.zh)}
-          onClick={() => onChange(o.value)}>{compact ? o.short : tz(o.en, o.zh)}</button>
+          onClick={() => onChange(o.value)}>{tz(o.en, o.zh)}</button>
       ))}
     </span>
   );
@@ -116,6 +116,35 @@ function LabelSwatches({ value, onChange }: { value: ColorLabel | null; onChange
     </span>
   );
 }
+
+const PhotoMarksMenu = memo(function PhotoMarksMenu({ entry }: { entry: CatalogEntry }) {
+  useSettings((s) => s.language);
+  const label = tz(`Mark ${entry.name}`, `标记 ${entry.name}`);
+  return <div className="library-mark-menu" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+    onKeyDown={(e) => e.stopPropagation()}>
+    <Menu.Root>
+      <Menu.Trigger asChild><button type="button" className="library-more" aria-label={label} title={label}>⋯</button></Menu.Trigger>
+      <Menu.Portal><Menu.Content className="menu library-marks-popup" align="end" sideOffset={4} collisionPadding={8}
+        onEscapeKeyDown={(event) => event.stopPropagation()}>
+        <Menu.Label className="menu-label">{tz('Flag', '旗标')}</Menu.Label>
+        <Menu.RadioGroup value={entry.flag} onValueChange={(value) => void setFlag(value as Flag, [entry.path])}>
+          {FLAGS.map((flag) => <Menu.RadioItem className="menu-item" key={flag.value} value={flag.value}>
+            <Menu.ItemIndicator>✓ </Menu.ItemIndicator>{tz(flag.en, flag.zh)}
+          </Menu.RadioItem>)}
+        </Menu.RadioGroup>
+        <Menu.Separator className="menu-sep" />
+        <Menu.Label className="menu-label">{tz('Colour label', '色标')}</Menu.Label>
+        <Menu.RadioGroup value={entry.label} onValueChange={(value) => void setColorLabel(value as ColorLabel, [entry.path])}>
+          {LABELS.map((item) => <Menu.RadioItem className="menu-item" key={item.value} value={item.value}>
+            <Menu.ItemIndicator>✓ </Menu.ItemIndicator>
+            <span className="library-menu-swatch" style={{ backgroundColor: labelColor(item.value) }} />
+            {tz(item.en, item.zh)}
+          </Menu.RadioItem>)}
+        </Menu.RadioGroup>
+      </Menu.Content></Menu.Portal>
+    </Menu.Root>
+  </div>;
+});
 
 function labelColor(value: ColorLabel | 'all'): string {
   switch (value) {
@@ -312,30 +341,53 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
   const busy = useLibrary((s) => s.busy);
   const progress = useLibrary((s) => s.progress);
   const failures = useLibrary((s) => s.failures);
+  const error = useLibrary((s) => s.error);
+  const [format, setFormat] = useState<ImportFormat>('all');
   const [kind, setKind] = useState<'folder' | 'files'>('folder');
 
+  const [picking, setPicking] = useState(false);
+  const locked = picking || !!busy;
   const start = async () => {
-    const title = kind === 'folder' ? tz('Import Folder…', '导入文件夹…') : tz('Import Photos…', '导入照片…');
-    const picked = kind === 'folder' ? await platform().pickFolder(title) : null;
-    const paths = kind === 'folder' ? (picked ? [picked] : []) : await platform().pickFiles(title);
-    if (paths.length === 0) return;
-    await importPaths(paths);
-    onClose();
+    if (locked) return;
+    setPicking(true);
+    try {
+      const title = kind === 'folder' ? tz('Import Folder…', '导入文件夹…') : tz('Import Photos…', '导入照片…');
+      const folder = kind === 'folder' ? await platform().pickFolder(title) : null;
+      const paths = kind === 'files' ? await platform().pickFiles(title, format) : folder ? [folder] : [];
+      if (paths.length === 0) return;
+      await importPaths(paths, format);
+      const result = libraryStore.getState();
+      if (!result.error && !result.failures.length) onClose();
+    } catch (e) {
+      libraryStore.setState({ error: tz(`Could not choose photos: ${String(e)}`, `无法选择照片：${String(e)}`) });
+    } finally {
+      setPicking(false);
+    }
   };
 
   return (
     <div className="library-modal-backdrop" data-testid="library-import-dialog" onClick={onClose}>
-      <div className="library-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="library-modal" role="dialog" aria-modal="true" aria-label={tz('Import photographs', '导入照片')}
+        onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onClose(); }}>
         <div className="library-modal-title">{tz('Import photographs', '导入照片')}</div>
         <div className="library-modal-body">
           <label className="library-radio">
-            <input type="radio" checked={kind === 'folder'} onChange={() => setKind('folder')} />
+            <input type="radio" disabled={locked} checked={kind === 'folder'} onChange={() => setKind('folder')} />
             {tz('Folder (includes sub-folders)', '文件夹（含子文件夹）')}
           </label>
           <label className="library-radio">
-            <input type="radio" checked={kind === 'files'} onChange={() => setKind('files')} />
+            <input type="radio" disabled={locked} checked={kind === 'files'} onChange={() => setKind('files')} />
             {tz('Individual photographs', '单张照片')}
           </label>
+          <label className="library-import-format">
+            {tz('File type', '文件类型')}
+            <select value={format} disabled={locked} onChange={(e) => setFormat(e.target.value as ImportFormat)} data-testid="library-import-format">
+              <option value="all">{tz('All supported photos', '全部支持的照片')}</option>
+              <option value="raw">{tz('RAW only', '仅 RAW')}</option>
+              <option value="jpeg">{tz('JPEG only (.jpg, .jpeg)', '仅 JPEG（.jpg、.jpeg）')}</option>
+            </select>
+          </label>
+          {error && <div role="alert">{error}</div>}
           <div className="library-meta-hint">
             {tz('Photos are referenced in place; originals are never copied or modified.', '照片按原位置引用，不会复制或修改原图。')}
           </div>
@@ -363,7 +415,7 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="library-modal-actions">
           <button className="library-btn" onClick={onClose}>{tz('Cancel', '取消')}</button>
-          <button className="library-btn is-primary" onClick={() => void start()} data-testid="library-import-start">
+          <button className="library-btn is-primary" disabled={locked} onClick={() => void start()} data-testid="library-import-start">
             {tz('Choose…', '选择…')}
           </button>
         </div>
@@ -384,7 +436,7 @@ export function LibraryView() {
   const editorHasPhoto = useSession((s) => !!s.selection);
   const thumbSize = useSettings((s) => s.libraryThumbSize);
   const gridRef = useRef<HTMLDivElement>(null);
-  const [importOpen, setImportOpen] = useState(false);
+  const importOpen = useLibrary((s) => s.importOpen);
   const [collectionDraft, setCollectionDraft] = useState<string | null>(null);
   const [smartDraft, setSmartDraft] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState<{ kind: 'collection' | 'smart'; id: string; name: string } | null>(null);
@@ -412,6 +464,7 @@ export function LibraryView() {
   // from the catalog, Enter opens, Esc returns to the editor.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (importOpen || document.querySelector('.library-marks-popup')) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       const list = visibleEntries();
@@ -442,7 +495,7 @@ export function LibraryView() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selection, editorHasPhoto]);
+  }, [selection, editorHasPhoto, importOpen]);
 
   const doubleClickSet = useRef<string[]>([]);
   const onCellClick = (event: ReactMouseEvent, path: string) => {
@@ -674,7 +727,6 @@ export function LibraryView() {
               data-testid="library-cell"
               onClick={(e) => onCellClick(e, entry.path)}
               onDoubleClick={() => void openSelection(doubleClickSet.current.includes(entry.path) ? doubleClickSet.current : [entry.path], entry.path)}
-              title={entry.title || entry.path}
             >
               <div className="library-thumb">
                 {thumbs[entry.path]
@@ -683,15 +735,17 @@ export function LibraryView() {
                 {entry.flag === 'pick' && <span className="library-flag library-flag-pick">{tz('Pick', '留用')}</span>}
                 {entry.flag === 'reject' && <span className="library-flag library-flag-reject">{tz('Reject', '排除')}</span>}
                 {entry.edited && <span className="library-flag library-flag-edited">{tz('Edited', '已修改')}</span>}
-                <span className="library-dot" data-label={entry.label} style={{ background: labelColor(entry.label), display: entry.label === 'none' ? 'none' : undefined }} />
-                <Stars rating={entry.rating} />
-                <div className="library-quick" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                <div className={'library-rating' + (entry.rating ? ' has-rating' : '')}
+                  onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}>
                   <RatingButtons value={entry.rating} onChange={(r) => void setRating(r, [entry.path])} label={tz('Rating', '星级')} />
-                  <FlagButtons compact value={entry.flag} onChange={(f) => void setFlag(f, [entry.path])} />
-                  <LabelSwatches value={entry.label} onChange={(l) => void setColorLabel(l, [entry.path])} />
                 </div>
               </div>
-              <div className="library-cell-name">{entry.name || baseName(entry.path)}</div>
+              <div className="library-cell-footer">
+                <span className="library-dot" data-label={entry.label} style={{ background: labelColor(entry.label), display: entry.label === 'none' ? 'none' : undefined }} />
+                <span className="library-cell-name" title={entry.path}>{entry.name || baseName(entry.path)}</span>
+                <PhotoMarksMenu entry={entry} />
+              </div>
             </div>
           ))}
           {entries.length === 0 && (

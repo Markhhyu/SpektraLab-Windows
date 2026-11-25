@@ -164,17 +164,7 @@
   white-space: nowrap;
 }
 
-.library-stars {
-  position: absolute;
-  left: 4px;
-  bottom: 3px;
-  color: var(--accent);
-  font-size: calc(11px * var(--ui-scale));
-  letter-spacing: 1px;
-  text-shadow: 0 1px 2px #000;
-}
 
-.library-stars-empty { color: #ffffff40; }
 
 .library-flag {
   position: absolute;
@@ -269,11 +259,9 @@
   font-size: var(--fs-small);
 }
 
-/* Colour label dot on the thumbnail. */
+/* Keep the colour label beside the filename, clear of the edited badge. */
 .library-dot {
-  position: absolute;
-  top: 5px;
-  right: 5px;
+  flex: none;
   width: calc(9px * var(--ui-scale));
   height: calc(9px * var(--ui-scale));
   border-radius: 50%;
@@ -657,14 +645,6 @@
   color: var(--dim);
 }
 
-.library-stars {
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: #00000070;
-  transition: opacity var(--dur) var(--ease);
-}
-.library-cell:hover .library-stars { opacity: 0; }
-
 .library-flag {
   padding: 1px 6px;
   border: 1px solid currentColor;
@@ -692,23 +672,28 @@
 .library-cell:hover .library-cell-name,
 .library-cell.is-selected .library-cell-name { color: var(--text); }
 
-/* Marks as controls: stars, flags and colour labels share one geometry, so
-   the same widget works in the hover overlay and in the metadata panel. */
-.library-quick {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 18px 6px 5px;
-  background: linear-gradient(180deg, transparent, #08090ad9 55%);
-  opacity: 0;
-  transform: translateY(2px);
-  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+.library-cell { min-width: 0; }
+.library-cell-footer { display: flex; gap: 4px; align-items: center; }
+.library-cell-name { flex: 1; min-width: 0; }
+.library-more {
+  display: grid; place-items: center; width: 26px; height: 24px;
+  color: var(--dim); background: transparent; border: 0; border-radius: var(--radius-sm); cursor: pointer;
 }
-.library-cell:hover .library-quick { opacity: 1; transform: none; }
+.library-more:hover, .library-more:focus-visible, .library-more[data-state=open] { background: var(--field); color: var(--text); }
+.library-marks-popup { max-height: var(--radix-dropdown-menu-content-available-height); overflow-y: auto; }
+.library-menu-swatch { display: inline-block; width: 9px; height: 9px; border: 1px solid var(--border-strong); border-radius: 50%; margin-right: 6px; }
+.library-rating {
+  position: absolute; left: 3px; bottom: 3px; max-width: calc(100% - 6px);
+  padding: 2px 3px; box-sizing: border-box; border-radius: 4px; background: #000a;
+  opacity: 0; pointer-events: none;
+}
+.library-cell:hover .library-rating, .library-cell:focus-within .library-rating, .library-rating.has-rating {
+  opacity: 1; pointer-events: auto;
+}
+.library-rating .mark-stars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; }
+.library-rating .mark-star { min-width: 0; width: 100%; padding: 2px 1px; }
+.library-import-format { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.library-import-format select { font: inherit; color: var(--text); background: var(--field); padding: 4px 8px; }
 
 .mark-stars, .mark-flags, .mark-labels { display: inline-flex; align-items: center; gap: 3px; }
 .mark-flags { margin-left: auto; }
@@ -836,32 +821,6 @@
   box-shadow: var(--shadow-3);
 }
 .library-modal-title { font-size: calc(14px * var(--ui-scale)); font-weight: 600; }
-
-/* The hover overlay has to fit inside a thumbnail, so the flag set collapses
-   to single glyphs there; the metadata panel keeps the spelled-out labels. */
-.mark-flag { white-space: nowrap; }
-.library-quick {
-  padding: 26px 6px 6px;
-  gap: 4px;
-}
-.library-quick .mark-star { font-size: calc(12px * var(--ui-scale)); }
-.library-quick .mark-flags { margin-left: auto; }
-.mark-flags.is-compact { gap: 3px; }
-.mark-flags.is-compact .mark-flag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: calc(17px * var(--ui-scale));
-  height: calc(17px * var(--ui-scale));
-  padding: 0;
-  border-radius: 50%;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-}
-.mark-flags.is-compact .mark-flag.is-pick.is-on { border-color: #93d69388; background: #14311bdd; }
-.mark-flags.is-compact .mark-flag.is-reject.is-on { border-color: #e8949488; background: #331416dd; }
-.mark-flags.is-compact .mark-flag.is-none.is-on { border-color: var(--border-strong); background: #ffffff22; }
 
 /* The active sidebar row is a button; keep its focus ring inside the row so
    it reads as a selection rather than a stray box. */

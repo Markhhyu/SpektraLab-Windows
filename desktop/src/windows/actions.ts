@@ -1,7 +1,7 @@
 // actions.ts — commands shared by the menu, the keys and the buttons.
 
 import { showModule } from './ModuleBar';
-import { importPaths, libraryStore, setLibraryOpen } from '../state/library';
+import { libraryStore, setImportOpen } from '../state/library';
 import { tz } from '../i18n';
 import { platform } from '../platform';
 import { host } from '../host/client';
@@ -19,13 +19,8 @@ export async function openFilesDialog() {
   if (files.length) await openPaths(files);
 }
 
-export async function importFolderDialog() {
-  if (sessionStore.getState().batchExporting) return;
-  const folder = await platform().pickFolder(tz('Import folder', '导入文件夹'));
-  if (folder) {
-    setLibraryOpen(true);
-    await importPaths([folder]);
-  }
+export function importFolderDialog() {
+  if (!sessionStore.getState().batchExporting) setImportOpen(true);
 }
 
 export async function revealSettings() {

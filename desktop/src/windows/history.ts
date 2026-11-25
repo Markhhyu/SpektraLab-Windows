@@ -54,6 +54,9 @@ export function describeChange(before: Snapshot | null, after: Snapshot, stockNa
   if ((before.noFilm ?? false) !== (after.noFilm ?? false)) {
     return (after.noFilm ?? false) ? tz('Film simulation off', '关闭胶片模拟') : tz('Film simulation on', '开启胶片模拟');
   }
+  const minutes = p1.development.trixD76Minutes ?? 0;
+  if ((p0.development.trixD76Minutes ?? 0) !== minutes)
+    return minutes ? tz(`D-76 · ${minutes} min`, `D-76 · ${minutes} 分钟`) : tz('Stock development', '原片种显影');
   if (p0.development.active !== p1.development.active) return tz('Development', '显影');
   if (p0.development.active) {
     if (p0.development.pushStops !== p1.development.pushStops) {

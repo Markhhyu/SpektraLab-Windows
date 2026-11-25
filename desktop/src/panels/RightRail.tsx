@@ -13,6 +13,8 @@ import {
   CONTRAST_MASK_DEFAULT,
   CONTRAST_MASK_SCALE,
   DEVELOPMENT_DEFAULT,
+  supportsTriXD76,
+  TRIX_D76_TIMES,
   DEVELOPMENT_PUSH_RANGE,
   DEVELOPMENT_TEMPERATURE_RANGE,
   EFFECTS_DEFAULT,
@@ -493,17 +495,36 @@ function FilmFormatSection() {
 function DevelopmentSection() {
   const p = useSession((s) => s.sidecar.params);
   const d = p.development;
+  const gate = useSession((s) => s.gate);
+  const eligible = supportsTriXD76(p, gate);
+  const minutes = d.trixD76Minutes ?? 0;
+  const measured = eligible && minutes !== 0;
   const setD = (patch: Partial<typeof d>) => setParams((q) => ({ ...q, development: { ...q.development, ...patch } }));
   return (
     <Section
       id="development"
       title={tz('Development', '显影')}
       onReset={() => setD(DEVELOPMENT_DEFAULT)}
-      resetHelp={tz('Reset push/pull and temperature.', '重置推拉与显影温度。')}
+      resetHelp={tz('Restore the stock development settings.', '恢复片种默认显影设置。')}
     >
+      {eligible && (
+        <PillMenu
+          label={tz('D-76 · 35 mm, large tank', 'D-76 · 35 mm 大罐')}
+          value={minutes}
+          options={TRIX_D76_TIMES.map((minutes) => ({
+            value: minutes,
+            label: minutes === 0 ? tz('Stock profile', '原片种曲线')
+              : tz(`${minutes} min · 20 °C`, `${minutes} 分钟 · 20 °C`),
+          }))}
+          onChange={(trixD76Minutes) => setD({ trixD76Minutes })}
+          testId="trix-d76-minutes"
+        />
+      )}
       <ToggleRow
+        disabled={measured}
+        reason={tz('D-76 uses the selected time at 20 °C, with agitation every minute.', 'D-76 按所选时间、20 °C、每分钟搅动显影。')}
         label={tz('Push / pull', '推拉显影')}
-        on={d.active}
+        on={d.active && !measured}
         onChange={(v) => setD({ active: v })}
         testId="development-toggle"
       />
@@ -514,8 +535,9 @@ function DevelopmentSection() {
         zero={0}
         snap={1 / 3}
         format={(v) => (v > 0 ? '+' : '') + v.toFixed(2)}
-        disabled={!d.active}
-        reason={tz('Enable push/pull first.', '请先启用推拉显影。')}
+        disabled={!d.active || measured}
+        reason={measured ? tz('The measured D-76 process uses a fixed temperature and time.', '原厂 D-76 曲线使用指定温度与时间。')
+          : tz('Enable push/pull first.', '请先启用推拉显影。')}
         onChange={(v) => setD({ pushStops: v })}
         testId="development-push"
       />
@@ -526,8 +548,9 @@ function DevelopmentSection() {
         zero={20}
         snap={0.5}
         format={(v) => v.toFixed(1) + ' °C'}
-        disabled={!d.active}
-        reason={tz('Enable push/pull first.', '请先启用推拉显影。')}
+        disabled={!d.active || measured}
+        reason={measured ? tz('The measured D-76 process uses a fixed temperature and time.', '原厂 D-76 曲线使用指定温度与时间。')
+          : tz('Enable push/pull first.', '请先启用推拉显影。')}
         onChange={(v) => setD({ temperatureC: v })}
         testId="development-temperature"
       />

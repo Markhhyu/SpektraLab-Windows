@@ -343,6 +343,10 @@ NATIVE_ONLY = {
         "path": "film_render.development.active", "type": "bool", "layer": "shoot",
         "default": False, "live": False, "range": None,
     },
+    "trix_d76_minutes": {
+        "path": "film_render.development.trix_d76_minutes", "type": "int", "layer": "shoot",
+        "default": 0, "live": False, "range": [0, 12],
+    },
     "development_push_stops": {
         "path": "film_render.development.push_stops", "type": "float", "layer": "shoot",
         "default": 0.0, "live": False, "range": [-3.0, 3.0],

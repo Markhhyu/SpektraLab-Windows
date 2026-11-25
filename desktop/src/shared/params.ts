@@ -13,7 +13,7 @@
 
 import { tz } from '../i18n';
 import type { StockCatalog } from './stocks.ts';
-import { dateCamera, dateEffective, datePrints, dateScale, edgeEffective, filmFormatForWire } from './filmEdge.ts';
+import { dateCamera, dateEffective, datePrints, dateScale, edgeEffective, edgeFormat, filmFormatForWire } from './filmEdge.ts';
 
 export type ParamLayer = 'shoot' | 'print';
 export type WireValue = number | boolean | string;
@@ -177,12 +177,20 @@ export const EFFECT_RANGES = {
 /** P1-7: the parametric development model (push/pull and developer temperature).
  *  `pushStops` bends the measured density curve; `temperatureC` folds C-41's
  *  rule of thumb (1 °C ≈ 1/6 stop) into an equivalent push. */
+export const TRIX_D76_TIMES = [0, 6, 8, 10, 12] as const;
+
+export function supportsTriXD76(p: FilmParams, gate?: FeatureGate): boolean {
+  const gauge = edgeEffective(p.filmEdge, gate) ? edgeFormat(p.filmEdge.format)?.gauge : p.filmFrame;
+  return p.filmStock === 'kodak_tri_x_400' && gauge === '135';
+}
+
 export interface DevelopmentSettings {
+  trixD76Minutes: number;
   active: boolean;
   pushStops: number;
   temperatureC: number;
 }
-export const DEVELOPMENT_DEFAULT: DevelopmentSettings = { active: false, pushStops: 0, temperatureC: 20 };
+export const DEVELOPMENT_DEFAULT: DevelopmentSettings = { active: false, pushStops: 0, temperatureC: 20, trixD76Minutes: 0 };
 export const DEVELOPMENT_PUSH_RANGE: [number, number] = [-3, 3];
 export const DEVELOPMENT_TEMPERATURE_RANGE: [number, number] = [18, 24];
 
@@ -667,6 +675,7 @@ export function decodeFilmParams(raw: unknown): FilmParams {
   base.scanUnsharpAmount = Math.min(2, Math.max(0, Number(base.scanUnsharpAmount) || 0));
   base.overscanCarrier = (OVERSCAN_CARRIERS as readonly string[]).includes(base.overscanCarrier) ? base.overscanCarrier : 'none';
   base.development = decodeShape(o.development, DEVELOPMENT_DEFAULT);
+  if (!TRIX_D76_TIMES.some((m) => m === base.development.trixD76Minutes)) base.development.trixD76Minutes = 0;
   base.contrastMask = decodeShape(o.contrastMask, CONTRAST_MASK_DEFAULT);
   base.sceneLatitude = decodeShape(o.sceneLatitude, SCENE_LATITUDE_DEFAULT);
   base.sceneLatitudeOther = decodeShape(o.sceneLatitudeOther, SCENE_LATITUDE_DEFAULT);
@@ -874,7 +883,9 @@ export function wire(p: FilmParams, gate: FeatureGate = ALL_FEATURES, catalog?: 
     // 1.3.4 (API-SPEC §18): sent always; every film with an anti-halation layer ignores it.
     { name: 'halation_headroom_ev', value: clamp(e.highlightHeadroom, r.highlightHeadroom[0], r.highlightHeadroom[1]), layer: 'shoot' },
   );
-  f.push({ name: 'development_active', value: p.development.active, layer: 'shoot' });
+  const d76Minutes = supportsTriXD76(p, gate) ? p.development.trixD76Minutes ?? 0 : 0;
+  f.push({ name: 'trix_d76_minutes', value: d76Minutes, layer: 'shoot' });
+  f.push({ name: 'development_active', value: p.development.active && !d76Minutes, layer: 'shoot' });
   if (p.development.active) {
     f.push(
       { name: 'development_push_stops', value: clamp(p.development.pushStops, -3, 3), layer: 'shoot' },

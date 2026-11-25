@@ -1244,6 +1244,14 @@
     ]
   },
   {
+    "name": "trix_d76_minutes",
+    "path": "film_render.development.trix_d76_minutes",
+    "type": "int",
+    "layer": "shoot",
+    "live": false,
+    "range": [0, 12]
+  },
+  {
     "name": "development_active",
     "path": "film_render.development.active",
     "type": "bool",

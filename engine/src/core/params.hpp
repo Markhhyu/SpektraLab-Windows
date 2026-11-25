@@ -283,6 +283,7 @@ struct DateImprintParams {
 // Off by default, and off is exact: `active = false` leaves the film curve,
 // the DIR inverse and the grain exactly as they were.
 struct DevelopmentParams {
+    int trix_d76_minutes = 0;      // F-4017 large tank, 135; 0 keeps the stock profile
     bool active = false;
     double push_stops = 0.0;       // -3..+3, 1/3-stop steps are the UI's
     double temperature_c = 20.0;   // 18..24; 20 °C is the process's own

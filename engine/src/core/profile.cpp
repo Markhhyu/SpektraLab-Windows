@@ -1,5 +1,8 @@
 #include "profile.hpp"
 #include "file_path.hpp"
+#include "trix_d76.hpp"
+
+#include <algorithm>
 
 #include <cmath>
 #include <cstdio>
@@ -173,6 +176,40 @@ bool Profile::from_json(const Json& root, std::string& error) {
         density_max[c] = nanmax(normalized_curves.data() + c, data.n_exposure, 3);
     }
     return true;
+}
+
+void Profile::apply_trix_d76(int minutes) {
+    if (info.stock != "kodak_tri_x_400" || minutes == 0) return;
+    const auto& curve = kTriXGrossDensity.at(static_cast<size_t>((minutes - 6) / 2));
+    const double base = curve.front();
+    const double step = (kTriXLogHLast - kTriXLogHFirst) / (curve.size() - 1);
+    // The stock's relative logE=0 is log10(0.8/400)+1 in Kodak's log lux-seconds.
+    const auto gross = [&](double log_e) {
+        const double position = (log_e + std::log10(0.8 / 400) + 1 - kTriXLogHFirst) / step;
+        if (position <= 0) return base;
+        const size_t last = curve.size() - 1;
+        const size_t left = std::min(static_cast<size_t>(position), last - 1);
+        // Last-segment slope above the chart, capped at the profile's 3 D ceiling.
+        return std::min(3.0, curve[left] + (position - left) * (curve[left + 1] - curve[left]));
+    };
+    for (size_t i = 0; i < data.n_exposure; ++i) {
+        const double net = gross(data.log_exposure[i]) - base;
+        for (size_t c = 0; c < 3; ++c) {
+            data.density_curves[i * 3 + c] = normalized_curves[i * 3 + c] = net;
+            // Retain the stock's estimated sublayer fractions at this exposure.
+            // F-4017 only measures total visual density, not individual layers.
+            if (!data.density_curves_layers.empty()) {
+                double* layer = data.density_curves_layers.data() + 9 * i + c;
+                const double sum = layer[0] + layer[3] + layer[6];
+                for (size_t j = 0; j < 3; ++j)
+                    layer[3 * j] = sum > 0 ? net * layer[3 * j] / sum : (j == 0 ? net : 0.0);
+            }
+        }
+    }
+    std::fill_n(density_min, 3, 0.0);
+    std::fill_n(density_max, 3, normalized_curves.back());
+    std::fill(data.base_density.begin(), data.base_density.end(), base);
+    std::fill(data.midscale_neutral_density.begin(), data.midscale_neutral_density.end(), gross(0));
 }
 
 bool Profile::load(const std::string& path, std::string& error) {

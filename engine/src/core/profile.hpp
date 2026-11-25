@@ -76,6 +76,7 @@ struct Profile {
     double density_min[3] = {0, 0, 0};
     double density_max[3] = {0, 0, 0};
 
+    void apply_trix_d76(int minutes);  // on a freshly loaded stock profile
     bool load(const std::string& path, std::string& error);
     bool from_json(const Json& root, std::string& error);
 };

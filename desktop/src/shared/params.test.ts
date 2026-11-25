@@ -38,6 +38,19 @@ describe('the wire', () => {
     }
   });
 
+  it('round-trips the measured Tri-X process only for 135 and restores the saved push settings', () => {
+    const old = decodeFilmParams({ filmStock: 'kodak_tri_x_400', development: { active: true, pushStops: 1 } });
+    expect(old.development.trixD76Minutes).toBe(0);
+    const measured = decodeFilmParams({ ...old, development: { ...old.development, trixD76Minutes: 10 } });
+    expect(fullDelta(measured)).toMatchObject({ trix_d76_minutes: 10, development_active: false });
+    for (const patch of [{ filmFrame: '120' }, { filmStock: 'kodak_portra_400' }])
+      expect(fullDelta({ ...measured, ...patch })).toMatchObject({ trix_d76_minutes: 0, development_active: true });
+    const on120 = { ...measured, filmEdge: { ...measured.filmEdge, active: true, format: '120_645' as const } };
+    expect(fullDelta(on120).trix_d76_minutes).toBe(0);
+    const invalid = decodeFilmParams({ ...old, development: { trixD76Minutes: 9 } });
+    expect(invalid.development.trixD76Minutes).toBe(0);
+  });
+
   it('sends no row for a feature the host cannot do', () => {
     const gate = featureGate(['digital_intermediate', 'scene_latitude_mapping', 'contrast_mask', 'overscan', 'date_imprint']);
     const names = new Set(wire({ ...FILM_PARAMS_DEFAULT, digitalIntermediate: true }, gate).map((f) => f.name));

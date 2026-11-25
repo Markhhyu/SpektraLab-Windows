@@ -6,7 +6,9 @@
 // ranges, `active = false` is a byte-exact bypass, a push actually changes the
 // print in the expected direction, and temperature is exactly the documented
 // push equivalent.
+#include <cmath>
 #include <cstdint>
+#include "core/profile.hpp"
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -162,6 +164,47 @@ int main(int argc, char** argv) {
         const std::vector<uint16_t> warm_equiv = push_session(0.0, 23.0);
         check(mean_abs_diff(warm, warm_equiv) < 1.0,
               "23 C does not match +0.5 stop of development");
+
+        // Independent chart reads at absolute logH = -2, -1, 0 (F-4017 p8).
+        const double density[4][3] = {{0.542, 1.057, 1.581}, {0.713, 1.336, 1.929},
+                                      {0.874, 1.599, 2.249}, {1.067, 1.890, 2.577}};
+        const std::string tri = std::string(kDeterministic).substr(0, std::strlen(kDeterministic) - 1) +
+            R"(,"film_stock":"kodak_tri_x_400","print_stock":"ilford_multigrade_iv_rc","scan_film":true)";
+        Session changing(spk_open(engine.get(), &image, (tri + "}").c_str(), nullptr), spk_session_release);
+        check(bool(changing), spk_last_error(engine.get()));
+        const auto original = render_live(changing.get());
+        auto previous = original;
+        for (int i = 0; i < 4; ++i) {
+            const int minutes = 6 + i * 2;
+            Profile stock;
+            std::string why;
+            check(load_profile(argv[1], "kodak_tri_x_400", stock, why), why);
+            stock.apply_trix_d76(minutes);
+            Vec net(stock.data.n_exposure);
+            for (size_t j = 0; j < net.size(); ++j) net[j] = stock.normalized_curves[j * 3];
+            for (int j = 0; j < 3; ++j) {
+                const double log_e = (-2.0 + j) - (std::log10(0.8 / 400) + 1);
+                const double gross = stock.data.base_density[0] +
+                    interp(log_e, stock.data.log_exposure.data(), net.data(), net.size());
+                check(std::abs(gross - density[i][j]) < 0.006, "D-76 chart density mismatch");
+            }
+            const std::string field = "\"trix_d76_minutes\":" + std::to_string(minutes);
+            check(spk_set_params(changing.get(), ("{" + field + "}").c_str(), nullptr) == SPK_OK,
+                  spk_last_error(engine.get()));
+            Session opened(spk_open(engine.get(), &image, (tri + "," + field + "}").c_str(), nullptr),
+                           spk_session_release);
+            check(bool(opened), spk_last_error(engine.get()));
+            const auto frame = render_live(changing.get());
+            check(frame == render_live(opened.get()), "changing D-76 time differs from reopening");
+            check(mean_abs_diff(frame, previous) > 1, "D-76 time left the render unchanged");
+            previous = frame;
+        }
+        check(spk_set_params(changing.get(), R"({"trix_d76_minutes":7})", nullptr) != SPK_OK,
+              "accepted an unmeasured D-76 time");
+        check(render_live(changing.get()) == previous, "invalid time changed render");
+        check(spk_set_params(changing.get(), R"({"trix_d76_minutes":0})", nullptr) == SPK_OK,
+              spk_last_error(engine.get()));
+        check(render_live(changing.get()) == original, "stock curve was not restored");
 
         // Out-of-range values are rejected at the wire boundary.
         Session probe(spk_open(engine.get(), &image, kDeterministic, nullptr), spk_session_release);

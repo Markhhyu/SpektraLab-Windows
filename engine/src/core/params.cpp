@@ -264,6 +264,7 @@ const SchemaField kFields[] = {
     // SHOOT (it sits between the film and the negative), before the app's
     // preview resolution like every extension. `active = false` is the exact
     // bypass; the two numbers are meaningful only when it is on.
+    {"trix_d76_minutes",         "film_render.development.trix_d76_minutes", I, SHOOT, true, 0, 12, false},
     {"development_active",       "film_render.development.active",        B, SHOOT, false, 0, 0, false},
     {"development_push_stops",   "film_render.development.push_stops",    F, SHOOT, true, -3.0, 3.0, false},
     {"development_temperature_c","film_render.development.temperature_c", F, SHOOT, true, 18.0, 24.0, false},
@@ -438,6 +439,7 @@ std::string* str_slot(Params& p, const std::string& path) {
 }
 
 int* int_slot(Params& p, const std::string& path) {
+    if (path == "film_render.development.trix_d76_minutes") return &p.film_render.development.trix_d76_minutes;
     if (path == "settings.film_seed") return &p.settings.film_seed;
     if (path == "io.geometry.quarter_turns") return &p.io.geometry.quarter_turns;
     if (path == "io.preview_long_edge") return &p.io.preview_long_edge;
@@ -591,6 +593,14 @@ bool validate_delta(const Json& delta, std::string& error, std::string& param) {
         }
         // A closed set of names is not a range, so `has_range` cannot express
         // it; this, `contrast_mask_scheme` and `scene_latitude_norm` are the enumerated strings.
+        if (kv.first == "trix_d76_minutes") {
+            const double m = v.as_double();
+            if (m != 0 && m != 6 && m != 8 && m != 10 && m != 12) {
+                param = kv.first;
+                error = "trix_d76_minutes must be 0, 6, 8, 10 or 12";
+                return false;
+            }
+        }
         if (kv.first == "camera_filter" && !is_known_camera_filter(v.as_string())) {
             error = "'camera_filter' = '" + v.as_string() +
                     "' is not a camera filter ('' for none, w8, w11, w12, w15, w21, w25, w47, w58)";

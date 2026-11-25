@@ -937,6 +937,7 @@ spk_session* open_frame(spk_engine* engine, const FrameIn& frame, const char* pa
     apply_product_defaults(session->params, session->product_defaults);
     session->params.settings.working_precision = "float32";
     if (!digest(session->params, engine->neutral_filters, error)) { g_error = error; return nullptr; }
+    session->params.film.apply_trix_d76(session->params.film_render.development.trix_d76_minutes);
     apply_stock_grain_calibration(session->params);
 
     // Uploaded as handed over, alpha and all; `spk_take_rgb` drops the fourth
@@ -2523,7 +2524,9 @@ spk_status spk_set_params(spk_session* session, const char* params_delta_json, c
     }
 #endif
     const bool stock_change = delta.has("film_stock") || delta.has("print_stock");
-    const bool rebuild = stock_change || delta_needs_rebuild(delta);
+    const bool process_change = delta.has("trix_d76_minutes") &&
+        delta.at("trix_d76_minutes").as_int() != session->params.film_render.development.trix_d76_minutes;
+    const bool rebuild = stock_change || process_change || delta_needs_rebuild(delta);
     // The live tier is the one piece of cached state a print-layer field can
     // invalidate: `preview_long_edge` changes both the size of its image and
     // the resolution its cached negative was made at. Taken before the delta
@@ -2531,6 +2534,8 @@ spk_status spk_set_params(spk_session* session, const char* params_delta_json, c
     // compare against.
     const uint32_t live_edge_before = tier_long_edge(session->params, kTiers[0]);
 
+    Params fresh;
+    Params& next = (stock_change || process_change) ? fresh : session->params;
     if (stock_change) {
         // A stock change rebuilds the parameter tree, because it needs a
         // profile load and a fresh digest. `settings` is carried across
@@ -2541,7 +2546,6 @@ spk_status spk_set_params(spk_session* session, const char* params_delta_json, c
         const SettingsParams settings = session->params.settings;
         Json current = read_params(session->params);
         for (const auto& kv : delta.fields()) current.set(kv.first, kv.second);
-        Params fresh;
         std::string error;
         if (!init_params(engine->resources_dir,
                          current.at("film_stock").as_string(),
@@ -2562,7 +2566,16 @@ spk_status spk_set_params(spk_session* session, const char* params_delta_json, c
         apply_product_defaults(fresh, session->product_defaults);
         if (!digest(fresh, engine->neutral_filters, error)) { g_error = error; return SPK_ERR_USER; }
         apply_stock_grain_calibration(fresh);
-        session->params = fresh;
+    } else if (process_change) {
+        // Keep all current edits; read the original emulsion so switching time
+        // or restoring the stock curve never compounds a previous process.
+        fresh = session->params;
+        std::string error;
+        if (!load_profile(engine->resources_dir, fresh.film_stock, fresh.film, error)) {
+            g_error = error; return SPK_ERR_USER;
+        }
+        apply_delta(fresh, delta);
+        if (delta.has("antihalation_removed")) apply_halation_preset(fresh);
     } else {
         apply_delta(session->params, delta);
         // The one field whose meaning is a preset rather than a number: no
@@ -2570,11 +2583,15 @@ spk_status spk_set_params(spk_session* session, const char* params_delta_json, c
         if (delta.has("antihalation_removed")) apply_halation_preset(session->params);
     }
 
+    if (stock_change || process_change)
+        fresh.film.apply_trix_d76(fresh.film_render.development.trix_d76_minutes);
+
     if (rebuild) {
         std::string error;
         auto pipeline = std::make_unique<Pipeline>(engine->gpu, &engine->colour, &engine->blob,
                                                    &engine->setup_cache);
-        if (!pipeline->build(session->params, error)) { g_error = error; return SPK_ERR_USER; }
+        if (!pipeline->build(next, error)) { g_error = error; return SPK_ERR_USER; }
+        if (stock_change || process_change) session->params = std::move(fresh);
         session->pipeline = std::move(pipeline);
     } else {
         // The live path: written straight onto the pipeline's own copy, which

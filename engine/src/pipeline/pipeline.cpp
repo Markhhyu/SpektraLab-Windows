@@ -307,7 +307,8 @@ bool Pipeline::build(const Params& params, std::string& error) {
     // itself, so they go into both curve tables (the finished curve and the
     // one the DIR inverse produces) and into the grain's strength.
     DevelopmentMorph dev;
-    development_morph(params_.film_render.development, dev);
+    if (film.info.stock != "kodak_tri_x_400" || params_.film_render.development.trix_d76_minutes == 0)
+        development_morph(params_.film_render.development, dev);
     dev_grain_scale_ = dev.grain_scale;
     {
         InterpTables t;

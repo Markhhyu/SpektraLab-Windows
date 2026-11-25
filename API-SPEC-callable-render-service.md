@@ -1210,3 +1210,13 @@ from the decode).
 ### Personal Windows fork integration (2026-10-29)
 
 The integrated host also advertises `hello.view_options: ["no_film"]` and accepts bypass on `render_view`. Unlike the upstream RGBA16 intermediate described above, this fork retains encoded floating-point ProPhoto until post-processing and output, so reducing exposure can recover highlights above 1. This is an intentional precision extension, not a claim of identical upstream bypass pixels. Both `frame_options` and `view_options` are advertised for their respective methods. DI plus `no_film: true` is rejected. The paired tests are `host_no_film.py` (native view/RAW/cache) and `host_no_film_upstream.py` (R4 export/proof).
+
+### Windows Tri-X 400 development time
+
+`trix_d76_minutes` is a shoot-layer integer on open and set-params. The default
+0 selects the original stock profile. Values 6, 8, 10 and 12 select the
+published 35 mm D-76 large-tank curves at 20 °C, with agitation every minute.
+Other values are rejected. For Tri-X, a selected curve takes precedence over
+generic push and temperature. Other stocks ignore this setting. A change
+invalidates the cached negative. The desktop sends 0 outside the 135 Tri-X
+combination and stores the selection in the photograph's development settings.

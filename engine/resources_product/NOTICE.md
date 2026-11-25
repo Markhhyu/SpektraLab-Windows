@@ -26,3 +26,20 @@ notice into the app's `Resources/engine/`; the app lists them only where
 `FeatureFlags.blackAndWhite` is on. `engine/tests/bw_checks.py` renders them from a scratch
 resources directory that overlays this one on `engine/resources/`. The engine does not read `paper_grades.json` or this
 directory's `neutral_print_filters.json`; a caller sends the pack on the wire.
+
+### Optional Tri-X 400 / D-76 large-tank development
+
+Source: [Kodak F-4017, February 2016, p. 8, upper-left graph](https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4017_TriX.pdf).
+Four 400TX 35 mm vector paths give diffuse visual gross density at 6, 8, 10 and
+12 minutes, D-76 at 20 °C with agitation every minute. The table in
+`engine/src/core/trix_d76.hpp` samples each path at 33 equal log-exposure
+intervals. PDF coordinates in points from the page's top left map the graph
+rectangle (81.404, 63.481)–(265.841, 247.978) to log H −4…+1 and density 4…0.
+The drawn data run from log H −3.45 to +0.35. Maximum interpolation error
+against the vector paths is below 0.0025 D before sampling on the engine grid.
+
+The stock's original relative exposure anchor is retained. The first sample
+approximates base plus fog. Below the chart that value is held; above the
+chart the last slope continues up to gross density 3.0. The neutral silver
+spectrum and estimated sublayer proportions come from the original profile.
+There are no measured time-specific grain or sharpness data in these curves.

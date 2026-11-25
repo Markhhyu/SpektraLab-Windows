@@ -156,3 +156,16 @@ it('keeps the source highlights by default (H-3), and files the flag under shoot
   expect(sessionStore.getState().sidecar.params.halationRenormalize).toBe(true);
   expect(button('halation-keep-highlights').getAttribute('aria-checked')).toBe('false');
 });
+
+it('shows measured D-76 times for 135 Tri-X and disables the generic push while selected', async () => {
+  expect(button('trix-d76-minutes')).toBeNull();
+  await act(async () => setParams((p) => ({
+    ...p, filmStock: 'kodak_tri_x_400', filmFrame: '135',
+    development: { ...p.development, active: true, trixD76Minutes: 8 },
+  })));
+  expect(button('trix-d76-minutes').textContent).toContain('8 min');
+  expect(button('development-toggle').getAttribute('aria-disabled')).toBe('true');
+  await act(async () => setParams((p) => ({ ...p, filmFrame: '120' })));
+  expect(button('trix-d76-minutes')).toBeNull();
+  expect(button('development-toggle').getAttribute('aria-checked')).toBe('true');
+});

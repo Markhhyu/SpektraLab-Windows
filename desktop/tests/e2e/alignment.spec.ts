@@ -68,6 +68,24 @@ for (const language of ['english', 'simplifiedChinese'] as const) {
         return control.right <= rail.right && control.left >= rail.left;
       });
       expect(inside).toBe(true);
+      const rail = page.getByTestId('right-rail');
+      const tabs = rail.getByRole('tab');
+      await expect(tabs).toHaveCount(2);
+      for (const tab of await tabs.all()) {
+        expect(await tab.evaluate(el => {
+          const rail = el.closest('aside')!.getBoundingClientRect();
+          const button = el.getBoundingClientRect();
+          const label = document.createRange();
+          label.selectNodeContents(el.firstChild!);
+          const text = label.getBoundingClientRect();
+          return rail.left <= button.left && button.left <= text.left &&
+            text.right <= button.right && button.right <= rail.right;
+        })).toBe(true);
+      }
+      await tabs.last().click();
+      await expect(rail.getByTestId('adj-exposure')).toBeVisible();
+      await tabs.first().click();
+      await expect(rail.getByTestId('film-exposure')).toBeVisible();
       await page.screenshot({ path: test.info().outputPath(`alignment-${language}-${scale}.png`) });
     });
   }

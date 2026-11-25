@@ -963,12 +963,16 @@ input {
 
 /* segmented switch (Pre-Dev / Post-Dev) */
 .segmented {
-  display: flex;
-  gap: 11px;
-  padding: 0 0 8px var(--row-inset);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 var(--row-inset) 8px;
+}
+.stage-help {
+  margin: 8px var(--row-inset);
 }
 .segmented button {
-  min-width: calc(83.5px * var(--ui-scale));
+  min-width: 0;
   height: calc(19px * var(--ui-scale));
   border-radius: 999px;
   border: 1px solid var(--dim);

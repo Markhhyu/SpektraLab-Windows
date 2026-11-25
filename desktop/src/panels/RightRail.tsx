@@ -80,14 +80,16 @@ export function RightRail() {
         value={tab}
         onChange={(v) => settingsStore.getState().set('parametersTab', v)}
         options={[
-          { value: 'basic', label: tz('Basic', '常用调整') },
           { value: 'preDev', label: t('tabPreDev') },
-          { value: 'postDev', label: t('tabPostDev'), marked: edited, markHelp: tz('The grade is not neutral.', '调色不是中性的。') },
+          { value: 'postDev', label: t('tabPostDev'), marked: edited, markHelp: tz('Output adjustments applied', '已应用成片调整') },
         ]}
       />
       <div className="hairline" />
       <div className="rail-scroll">
-        {tab === 'basic' ? <><ExposureSection /><WhiteBalanceSection /><LocalAdjustmentsSection /></> : tab === 'preDev' ? (
+        <p className="caption stage-help">{tab === 'preDev'
+          ? tz('Set the exposure and white balance that feed the film simulation.', '调整送入胶片模拟的曝光和白平衡。')
+          : tz('Fine-tune brightness, colour and local detail on the finished image.', '调整成片的明暗、色彩和局部细节。')}</p>
+        {tab === 'preDev' ? (
           <>
             <LatitudeSection />
             <CameraSection />
@@ -100,14 +102,14 @@ export function RightRail() {
           </>
         ) : (
           <>
-            <PresetsSection />
-            <WhiteBalanceSection />
-            <ScanSection />
             <ExposureSection />
+            <WhiteBalanceSection />
+            <LocalAdjustmentsSection />
+            <PresetsSection />
+            <ScanSection />
             <CurveSection />
             <ColorBalanceSection />
             <ToneMaskSection />
-            <LocalAdjustmentsSection />
           </>
         )}
       </div>
@@ -233,7 +235,6 @@ function CameraSection() {
   const pickerReady = useSession(() => canPickNeutral());
   const state = useSession((s) => s);
   const p = cameraParams(state), focus = pairFocus(state), hole = focus ? state.pair?.[focus] : null;
-  const vignette = useSession((s) => shownAdjustments(s).vignette.amount);
   const ae = aeMethodOf(p);
   const baseline = cameraExposureBaseline(state), total = cameraExposureTotal(state);
   // Keep the track fixed while ordinary values move. Expand only for an
@@ -331,7 +332,6 @@ function CameraSection() {
       <button className="pill" disabled={!pickerReady} onClick={startNeutralPick} aria-pressed={tool === 'neutral'} data-testid="pick-neutral">
         {tool === 'neutral' ? tz('Cancel neutral picker', '取消中性灰取样') : tz('Pick neutral white balance', '吸取中性灰白平衡')}
       </button>
-      <ScrubSlider label={t('cameraVignetting')} value={vignette} range={[-100, 100]} snap={5} format={signed(0)} onChange={(v) => setAdjustments((a) => ({ ...a, vignette: { ...a.vignette, amount: v } }))} />
       <ToggleRow label={t('cameraLensCorrection')} on={selectedDecode(state).lensCorrection} onChange={(v) => setDecode((d) => ({ ...d, lensCorrection: v }))} disabled={!lensReady} reason={!lensReady ? lensReason : undefined} testId="lens-correction" />
       <p className="caption" data-testid="lens-profile">{lensReady ? `${lens?.profile ?? ''}${lensParts ? ` · ${lensParts}` : ''}` : lensReason}</p>
     </Section>
@@ -907,7 +907,7 @@ function ExposureSection() {
     <Section
       id="exposure2"
       title={t('sectionExposure')}
-      onReset={() => setAdjustments((q) => ({ ...q, exposure: 0, contrast: 0, brightness: 0, saturation: 0, highlights: 0, shadows: 0, blackPoint: 0, whitePoint: 0 }))}
+      onReset={() => setAdjustments((q) => ({ ...q, exposure: 0, contrast: 0, brightness: 0, saturation: 0, highlights: 0, shadows: 0, blackPoint: 0, whitePoint: 0, vignette: { ...q.vignette, amount: 0 } }))}
       resetHelp={t('helpReset')}
     >
       {row(tz('Output exposure (EV)', '成片曝光（EV）'), 'exposure', [-3, 3], 2, 1 / 4)}
@@ -918,6 +918,7 @@ function ExposureSection() {
       {row(t('exposureShadows'), 'shadows', [-100, 100], 0, 5)}
       {row(t('exposureBlackPoint'), 'blackPoint', [0, 50], 0, 1)}
       {row(t('exposureWhitePoint'), 'whitePoint', [0, 50], 0, 1)}
+      <ScrubSlider label={t('cameraVignetting')} value={a.vignette.amount} range={[-100, 100]} snap={5} format={signed(0)} onChange={(v) => setAdjustments((q) => ({ ...q, vignette: { ...q.vignette, amount: v } }))} />
     </Section>
   );
 }

@@ -42,6 +42,22 @@ link. Both installer names on that release contain the same bytes.
 
 ## History
 
+### v1.12.0 — 径向蒙版与照片工作流 / Radial masks and photo workflow
+
+<h4 id="cn-1.12.0">选片、试片与局部曝光</h4>
+
+- 在「编辑 → 常用调整 → 局部调整 · 蒙版」选择「＋径向蒙版」，从脸部中心向外拖出椭圆即可调整局部曝光。中心点可移动蒙版，两个边缘手柄可分别调整宽和高。羽化控制亮度过渡。旧照片保留原有径向蒙版的效果。
+- 导入文件夹或单张照片时可选择全部、仅 RAW 或仅 JPEG。修复 JPG 缩略图显示「无预览」的问题，重新打开图库会自动补齐缺失预览。缩略图上可直接评分，旗标和色标收进文件名旁的菜单。
+- 在胶片试片台上用当前照片比较 A、B 两款胶片，再应用选中的效果。图库、编辑与导出共用顶部导航。
+
+<h4 id="en-1.12.0">Photo selection, film comparisons and local exposure</h4>
+
+- In Edit → Basic → Local Adjustments · Masks, choose + Radial mask and drag outwards from the centre of a face to place an ellipse. Move the centre dot or resize each axis with the edge handles. Adjust Exposure and Feather to blend the change. Existing radial masks retain their original falloff.
+- Import folders or individual files with an All, RAW or JPEG filter. JPEG thumbnails now render in the library, and missing previews are rebuilt when the catalog reopens. Rate directly on the thumbnail and set flags or colour labels in the filename menu.
+- Compare two film stocks on the current photograph in the film contact sheet before applying a look. The top navigation connects Library, Edit and Export.
+
+Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.11.0...v1.12.0
+
 ### v1.11.0 — Tri-X 400 的 D-76 显影时间 / D-76 development times for Tri-X 400
 
 <h4 id="cn-1.11.0">胶片显影</h4>

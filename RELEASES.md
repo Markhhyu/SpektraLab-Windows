@@ -42,6 +42,24 @@ link. Both installer names on that release contain the same bytes.
 
 ## History
 
+### v1.11.0 — Tri-X 400 的 D-76 显影时间 / D-76 development times for Tri-X 400
+
+<h4 id="cn-1.11.0">胶片显影</h4>
+
+- 选择 Kodak Tri-X 400 和 135 画幅，在「显影」面板即可选用 6、8、10 或 12 分钟的 D-76 曲线。曲线取自柯达 F-4017 的 35 mm 数据，条件为大罐、20 °C、每分钟搅动。切回「原片种曲线」即可恢复原设置，旧照片默认沿用原显影效果。
+- 原厂数据描述曝光与底片密度的关系。颗粒仍沿用片种模型。
+- 修正了 50D 显影与颗粒的验证：测试开启显影、固定颗粒种子，并在相同成片亮度下比较不同片种的颗粒强度。
+
+<h4 id="en-1.11.0">Film development</h4>
+
+- Select Kodak Tri-X 400 in 135 format and open Development to choose a 6, 8, 10 or 12 minute D-76 curve. The curves follow Kodak's 35 mm data for a large tank at 20 °C with agitation every minute. Select Stock profile to restore the previous rendering. Existing edits retain their original development by default.
+- The measured curves describe negative density as a function of exposure. Grain continues to use the stock model.
+- The 50D development checks now enable development and hold the grain seed fixed. Cross-stock grain checks match the rendered print level before comparing grain strength.
+
+[Kodak F-4017, p. 8](https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4017_TriX.pdf#page=8)
+
+Full Changelog: https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.10.0...v1.11.0
+
 ### v1.10.0 — macOS 2.x 成像移植与胶片真实感校准 / macOS 2.x imaging port and film realism calibration
 
 <h4 id="cn-1.10.0">胶片模拟</h4>

@@ -35,7 +35,7 @@ export interface Settings extends NewPhotoDefaults {
   decoupleEffects: boolean;
   recalculateEffectsAfterCrop: boolean;
   diBlueCompensation: boolean;
-  parametersTab: 'preDev' | 'postDev';
+  parametersTab: 'basic' | 'preDev' | 'postDev';
   leftCollapsed: boolean;
   rightCollapsed: boolean;
   filmstripCollapsed: boolean;
@@ -65,7 +65,7 @@ export const SETTINGS_DEFAULT: Settings = {
   sideUnit: 'mm',
   decoupleEffects: false,
   ...RENDER_PREFERENCES_DEFAULT,
-  parametersTab: 'preDev',
+  parametersTab: 'basic',
   leftCollapsed: false,
   rightCollapsed: false,
   filmstripCollapsed: false,
@@ -98,6 +98,7 @@ export function loadSettings(storage: Pick<Storage, 'getItem'> | null): Settings
     if (!INTERFACE_SCALES.includes(s.interfaceScale)) s.interfaceScale = SETTINGS_DEFAULT.interfaceScale;
     if (!(PREVIEW_EDGES as readonly number[]).includes(s.previewLongEdge)) s.previewLongEdge = SETTINGS_DEFAULT.previewLongEdge;
     if (!(['auto', 'srgb', 'display-p3'] as const).includes(s.previewGamut)) s.previewGamut = SETTINGS_DEFAULT.previewGamut;
+    if (!['basic', 'preDev', 'postDev'].includes(s.parametersTab)) s.parametersTab = 'basic';
     s.leftWidth = boundedPanelWidth('leftWidth', s.leftWidth);
     s.rightWidth = boundedPanelWidth('rightWidth', s.rightWidth);
     if (!Number.isInteger(s.filmEdgeBodySeed) || s.filmEdgeBodySeed < 0 || s.filmEdgeBodySeed > 2147483647) s.filmEdgeBodySeed = 0;

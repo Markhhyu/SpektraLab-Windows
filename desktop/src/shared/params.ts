@@ -748,6 +748,13 @@ export function normalizeStockPair(p: FilmParams, catalog: StockCatalog): FilmPa
   return scanFilm === p.scanFilm && printStock === p.printStock ? p : { ...p, scanFilm, printStock };
 }
 
+/** Picking from the list follows the stock's paper; trials hold a compatible paper fixed. */
+export function pickedFilmParams(p: FilmParams, filmStock: string, catalog: StockCatalog, keepPaper = false): FilmParams {
+  const target = catalog.stock(filmStock)?.targetPrint;
+  const printStock = !keepPaper && target && catalog.stock(target) ? target : p.printStock;
+  return normalizeStockPair({ ...p, filmStock, printStock, scanFilm: catalog.isPositive(filmStock) }, catalog);
+}
+
 /** Upstream 1.3.3's per-film RMS grain calibration; the UI strength multiplies it. */
 export function ownGrain(stock: string): number {
   switch (stock) {

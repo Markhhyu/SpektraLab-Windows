@@ -6,7 +6,7 @@ import { useRef, useState } from 'react';
 import { Checkbox, NumberField, PillMenu, ScrubSlider, Section, SegmentedSwitch, ToggleRow, signed } from '../controls/controls';
 import { isChinese, t, tz } from '../i18n';
 import { hostMessage } from '../host/messages';
-import { cameraParams, cameraExposureBaseline, cameraExposureTotal, setCameraMetering, setCameraExposureTotal, resetCameraExposure, pairFocus, shownAdjustments, shownDecode as selectedDecode, updatePair, canPickNeutral, currentPlacementWindow, hostRedecodes, placeScene, placementReady, resetScenePlacement, setAdjustments, setDecode, setFilmFrame, setFilmSide, setParams, setSideLengthMM, startNeutralPick, useSession } from '../state/session';
+import { cameraParams, cameraExposureBaseline, cameraExposureTotal, setCameraMetering, setCameraExposureTotal, resetCameraExposure, pairFocus, shownAdjustments, shownDecode as selectedDecode, updatePair, canPickNeutral, currentPlacementWindow, hostRedecodes, placeScene, placementReady, resetScenePlacement, setAdjustments, setDecode, setFilmFrame, setFilmSide, setParams, setSideLengthMM, startNeutralPick, zoomTo, useSession } from '../state/session';
 import { settingsStore, useSettings } from '../state/settings';
 import {
   type AEMethod,
@@ -68,7 +68,6 @@ import { CurveEditor } from './CurveEditor';
 import { unsupportedReason } from './gate';
 import { type LatitudeReply, type PlacementSide, placementMessage } from '@shared/latitude';
 import { edgeEffective, edgeFormat } from '@shared/filmEdge';
-import { setLibraryOpen } from '../state/library';
 import { applyPreset, deletePreset, renamePreset, saveCurrentPreset, usePresets } from '../state/presets';
 
 export function RightRail() {
@@ -76,22 +75,19 @@ export function RightRail() {
   const edited = useSession((s) => shownAdjustments(s).enabled && !isNeutral(shownAdjustments(s)));
   return (
     <aside className="rail right" data-testid="right-rail">
-      <div className="rail-modules" data-testid="rail-modules">
-        <button className="rail-module" onClick={() => setLibraryOpen(true)} data-testid="rail-library">{tz('Library', '图库')}</button>
-        <button className="rail-module is-active" data-testid="rail-develop">{tz('Develop', '修改')}</button>
-      </div>
       <div className="rail-header">{t('railParameters')}</div>
       <SegmentedSwitch
         value={tab}
         onChange={(v) => settingsStore.getState().set('parametersTab', v)}
         options={[
+          { value: 'basic', label: tz('Basic', '常用调整') },
           { value: 'preDev', label: t('tabPreDev') },
           { value: 'postDev', label: t('tabPostDev'), marked: edited, markHelp: tz('The grade is not neutral.', '调色不是中性的。') },
         ]}
       />
       <div className="hairline" />
       <div className="rail-scroll">
-        {tab === 'preDev' ? (
+        {tab === 'basic' ? <><ExposureSection /><WhiteBalanceSection /></> : tab === 'preDev' ? (
           <>
             <LatitudeSection />
             <CameraSection />
@@ -460,6 +456,7 @@ function FilmFormatSection() {
         />
       </div>
       <ToggleRow label={t('filmGrain')} on={p.grainActive} onChange={(v) => setParams((q) => ({ ...q, grainActive: v }))} testId="grain-toggle" />
+      <button className="btn" onClick={() => zoomTo(1)}>{tz('Inspect grain at 100%', '100% 查看颗粒')}</button>
       {decouple && strength(t('filmGrainStrength'), 'grain', p.grainActive)}
       <ToggleRow label={t('filmHalation')} on={p.halationActive} onChange={(v) => setParams((q) => ({ ...q, halationActive: v }))} />
       {noLayer ? (
@@ -913,7 +910,7 @@ function ExposureSection() {
       onReset={() => setAdjustments((q) => ({ ...q, exposure: 0, contrast: 0, brightness: 0, saturation: 0, highlights: 0, shadows: 0, blackPoint: 0, whitePoint: 0 }))}
       resetHelp={t('helpReset')}
     >
-      {row(t('clipExposure'), 'exposure', [-3, 3], 2, 1 / 4)}
+      {row(tz('Output exposure (EV)', '成片曝光（EV）'), 'exposure', [-3, 3], 2, 1 / 4)}
       {row(t('exposureContrast'), 'contrast', [-50, 50], 0, 5)}
       {row(t('exposureBrightness'), 'brightness', [-50, 50], 0, 5)}
       {row(t('exposureSaturation'), 'saturation', [-100, 100], 0, 5)}

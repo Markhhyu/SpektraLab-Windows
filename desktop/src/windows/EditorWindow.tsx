@@ -21,6 +21,7 @@ export function EditorWindow() {
   const right = useSettings((s) => s.rightCollapsed);
   const strip = useSettings((s) => s.filmstripCollapsed);
   const batch = useSession((s) => s.batchExporting);
+  const dialogOpen = useSession((s) => s.settingsOpen || s.aboutOpen || s.historyOpen || s.shortcutsOpen);
   const libraryOpen = useLibrary((s) => s.open);
   return (
     <>
@@ -46,7 +47,7 @@ export function EditorWindow() {
       <AboutDialog />
       <ShortcutsDialog />
       <HistoryDialog />
-      <ExportPage />
+      <ExportPage editorVisible={!libraryOpen && !dialogOpen} />
       {libraryOpen && <LibraryView />}
     </>
   );

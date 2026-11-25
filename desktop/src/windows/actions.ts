@@ -1,9 +1,11 @@
 // actions.ts — commands shared by the menu, the keys and the buttons.
 
+import { showModule } from './ModuleBar';
+import { importPaths, libraryStore, setLibraryOpen } from '../state/library';
 import { tz } from '../i18n';
 import { platform } from '../platform';
 import { host } from '../host/client';
-import { flushSave, openFolder, openPaths, pairComplete, sessionStore, setPages } from '../state/session';
+import { flushSave, openFolder, openPaths, sessionStore } from '../state/session';
 
 export async function openDialog() {
   if (sessionStore.getState().batchExporting) return;
@@ -15,6 +17,15 @@ export async function openFilesDialog() {
   if (sessionStore.getState().batchExporting) return;
   const files = await platform().pickFiles(tz('Open photographs', '打开照片'));
   if (files.length) await openPaths(files);
+}
+
+export async function importFolderDialog() {
+  if (sessionStore.getState().batchExporting) return;
+  const folder = await platform().pickFolder(tz('Import folder', '导入文件夹'));
+  if (folder) {
+    setLibraryOpen(true);
+    await importPaths([folder]);
+  }
 }
 
 export async function revealSettings() {
@@ -34,5 +45,5 @@ export async function restartHost() {
 }
 
 export function openExport() {
-  if (sessionStore.getState().selection && pairComplete()) setPages({ exportOpen: true });
+  if (sessionStore.getState().selection || (libraryStore.getState().open && libraryStore.getState().selection.length)) showModule('export');
 }

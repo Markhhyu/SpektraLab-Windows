@@ -10,6 +10,7 @@ const exposure = (page: Page) => page.evaluate(() =>
 async function openRoll(page: Page, allFeatures = false) {
   await page.goto(allFeatures ? '/?open=&allFeatures=1' : '/?open=');
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 20_000 });
+  await page.getByRole('button', { name: 'Film exposure (EV)', exact: true }).click();
 }
 
 test('negative input keeps its sign on Enter, blur, unchanged focus, and undo', async ({ page }) => {

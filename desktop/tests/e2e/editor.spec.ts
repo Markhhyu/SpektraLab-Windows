@@ -104,6 +104,7 @@ test('returning from a slide selects the negative target paper and restores the 
 test('trap 32: an arrow typed in a field does not change the frame', async ({ page }) => {
   await openRoll(page);
   const first = await state(page, 's.selection');
+  await page.getByRole('button', { name: 'Film exposure (EV)', exact: true }).click();
   const field = page.getByRole('textbox', { name: 'Film Exposure value' });
   await field.click();
   await page.keyboard.press('ArrowLeft');
@@ -117,6 +118,7 @@ test('trap 32: an arrow typed in a field does not change the frame', async ({ pa
 
 test('Escape cancels a slider draft without adding history; Enter and blur commit', async ({ page }) => {
   await openRoll(page);
+  await page.getByRole('button', { name: 'Film exposure (EV)', exact: true }).click();
   const field = page.getByRole('textbox', { name: 'Film Exposure value', exact: true });
   const before = await state(page, 's.sidecar.params.exposureCompensationEV');
   const history = await state(page, 's.undo.length');
@@ -135,6 +137,7 @@ test('Escape cancels a slider draft without adding history; Enter and blur commi
 
 test('Escape cancels a unit draft without adding history; Enter and blur commit', async ({ page }) => {
   await openRoll(page);
+  await page.getByRole('button', { name: 'Film exposure (EV)', exact: true }).click();
   const section = page.locator('[data-section="filmFormat"]');
   await section.getByRole('button', { name: '135', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Custom', exact: true }).click();

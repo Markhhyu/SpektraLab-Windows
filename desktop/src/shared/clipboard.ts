@@ -11,6 +11,7 @@ import { placementIntent } from './latitude.ts';
 
 export const CLIPBOARD_GROUPS = [
   'filmAndPaper',
+  'development',
   'exposure',
   'whiteBalance',
   'filmEffects',
@@ -21,6 +22,7 @@ export type ClipboardGroup = (typeof CLIPBOARD_GROUPS)[number];
 
 export const GROUP_PATHS: Record<ClipboardGroup, string[]> = {
   filmAndPaper: ['params.filmStock', 'params.printStock', 'params.scanFilm', 'params.digitalIntermediate', 'params.extendedDynamicRange'],
+  development: ['params.development'],
   exposure: ['params.autoExposure', 'params.autoExposureMethod', 'params.exposureCompensationEV', 'params.exposureBaselineEV', 'params.printBrightnessStops'],
   whiteBalance: ['decode.whiteBalance', 'decode.temperature', 'decode.tint', 'params.yFilterShift', 'params.mFilterShift'],
   filmEffects: [

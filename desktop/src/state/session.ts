@@ -27,6 +27,7 @@ import {
   filmFrameNamed,
   fullDelta,
   normalizeStockPair,
+  pickedFilmParams,
   SCENE_LATITUDE_DEFAULT,
   jsonEqual,
   clamp,
@@ -872,7 +873,7 @@ export function setParams(fn: (p: FilmParams) => FilmParams) {
  * scanFilm flag. Re-picking a negative also repairs an old saved direct scan.
  * Manual no-paper selection remains available until the next stock pick.
  */
-export function selectFilmStock(filmStock: string) {
+export function selectFilmStock(filmStock: string, keepPaper = false) {
   const s = get();
   if (s.batchExporting) return;
   // Stock picks are discrete edits, not a slider gesture to coalesce.
@@ -883,12 +884,7 @@ export function selectFilmStock(filmStock: string) {
     discardModePreview();
   }
   const catalog = get().catalog;
-  const target = catalog.stock(filmStock)?.targetPrint;
-  setParams((p) => ({ ...p, filmStock, scanFilm: catalog.isPositive(filmStock),
-    // A stock click follows its declared paper; restoring saved settings only
-    // repairs incompatible pairs and preserves a user's valid custom paper.
-    printStock: target && catalog.stock(target) ? target : p.printStock,
-  }));
+  setParams((p) => pickedFilmParams(p, filmStock, catalog, keepPaper));
   // Re-picking the same film still exits bypass, even if its params match.
   if (s.sidecar.noFilm) { scheduleSave(); void requestPrint(); }
 }
@@ -1745,6 +1741,11 @@ export async function openPaths(paths: string[]) {
     void import('./library').then((library) => library.registerOpened(entries, folder)).catch(() => undefined);
     // A folder came in whole (launch, drop): it is one people may want back.
     if (!singleFile && paths.length === 1) rememberFolder(folder);
+    if (paths.every((path) => entries.some((entry) => entry.path === path))) {
+      const library = await import('./library');
+      library.setLibraryOpen(false);
+      setPages({ exportOpen: false });
+    }
     await select(get().frames[0]!.path);
     if (copiedPair) set({ status: tz('Imported an editable copy of the pair; the shared recipe was kept.', '已导入可编辑的半格副本，原拼接文件已保留。') });
   } catch (e) {
@@ -1790,12 +1791,13 @@ async function setLibrary(folder: string, files: FileEntry[]) {
  * The list is authoritative (it comes from the catalog, not from expanding a
  * folder again), so a filtered collection keeps its order and members.
  */
-export async function openCollection(folder: string, files: FileEntry[], focusPath?: string): Promise<void> {
+export async function openCollection(folder: string, files: FileEntry[], focusPath?: string, picked: string[] = []): Promise<void> {
   if (!files.length) return;
   try {
     await setLibrary(folder, files);
     void import('./library').then((library) => library.registerOpened(files, folder)).catch(() => undefined);
     const target = focusPath && files.some((f) => f.path === focusPath) ? focusPath : files[0]!.path;
+    if (picked.includes(target)) set({ picked });
     await select(target);
     if (files.length > 1) {
       set({ status: tz(`Filmstrip: ${files.length} photos from the library.`, `胶片条：图库中的 ${files.length} 张照片。`) });
@@ -2317,10 +2319,10 @@ export async function pasteSettings() {
   });
 }
 
-export async function syncSettings() {
+export async function syncSettings(groups = get().clipboardGroups) {
   const s = get();
   if (s.batchExporting || !s.selection) return;
-  const clip = { groups: s.clipboardGroups, settings: s.sidecar, sourceName: baseName(s.selection) };
+  const clip = { groups, settings: s.sidecar, sourceName: baseName(s.selection) };
   let written = 0;
   for (const p of s.picked) if (p !== s.selection && (await pasteOffline(clip, p))) written++;
   set({ status: tz(`Synced to ${written} frames.`, `已同步到 ${written} 张照片。`) });

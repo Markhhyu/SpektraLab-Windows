@@ -8,7 +8,7 @@
 // whatever tier is on the canvas (§7.3: zoom selects no tier).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { openDialog, openFilesDialog } from '../windows/actions';
+import { importFolderDialog, openFilesDialog } from '../windows/actions';
 import {
   type Geometry,
   type Point,
@@ -568,12 +568,10 @@ export function Canvas() {
         </div>
         <div className="canvas-empty-actions" onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => { if (e.code === 'Space') e.stopPropagation(); }}>
-          <button className="btn primary" disabled={batch} onClick={() => void openDialog()} title="Ctrl+O">
-            {tz('Open folder…', '打开文件夹…')}
+          <button className="btn primary" disabled={batch} onClick={() => void openFilesDialog()} title="Ctrl+Shift+O">
+            {tz('Open photos…', '打开照片…')}
           </button>
-          <button className="btn" disabled={batch} onClick={() => void openFilesDialog()} title="Ctrl+Shift+O">
-            {tz('Open photographs…', '打开图片…')}
-          </button>
+          <button className="btn" disabled={batch} onClick={() => void importFolderDialog()}>{tz('Import folder…', '导入文件夹…')}</button>
         </div>
         <span>{tz('You can also drag photographs or a folder here.', '也可以将图片或文件夹拖到这里。')}</span>
       </div>}

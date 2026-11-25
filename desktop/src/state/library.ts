@@ -631,8 +631,12 @@ export async function openSelection(paths: string[] = store().selection, focusPa
   const focus = focusPath ?? store().anchor ?? paths[paths.length - 1]!;
   const folder = (collection.find((e) => e.path === focus) ?? collection[0]!).folder;
   const files: FileEntry[] = collection.map((e) => ({ path: e.path, name: e.name, size: e.size, mtime_ms: e.mtimeMs }));
-  set({ open: false, selection: [focus], anchor: focus });
-  await openCollection(folder, files, focus);
+  const browsable = new Set(collection.map((e) => e.path));
+  const picked = paths.filter((path) => browsable.has(path));
+  const active = picked.includes(focus) ? focus : picked[picked.length - 1];
+  if (!active) return;
+  set({ open: false, selection: picked, anchor: active });
+  await openCollection(folder, files, active, picked);
 }
 
 export function clearError() {

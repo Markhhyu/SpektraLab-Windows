@@ -265,47 +265,34 @@ describe('export progress and completion', () => {
     expect(div.textContent).not.toContain('stopped');
     expect(run()).toBeTruthy();
   });
-  it('announces the finished batch after the page is free again, and shows the folder on request', async () => {
-    fake.confirm.mockImplementation(async () => {
-      expect(sessionStore.getState().batchExporting).toBe(false);
-      return true;
-    });
-    await mount(); await click(run()); await settle();
-    expect(fake.confirm).toHaveBeenCalledOnce();
-    const [title, text, kind] = fake.confirm.mock.calls[0]! as [string, string, string];
-    expect(title).toBe('Export finished');
-    expect(kind).toBe('info');
-    expect(text).toContain('2 written, 0 skipped, 0 failed.');
-    expect(text).toContain('Folder: D:/out');
-    expect(fake.reveal).toHaveBeenCalledExactlyOnceWith('D:/out/image.jpg');
-    expect(fake.message).not.toHaveBeenCalled();
-  });
-  it('offers the Library after a finished batch when the catalogue has photographs', async () => {
+  it('reports completion inline and reveals the file only on request', async () => {
     libState.entries = [{}];
-    fake.confirm.mockResolvedValue(true);
     await mount(); await click(run()); await settle();
-    expect(fake.confirm).toHaveBeenCalledTimes(2);
-    expect(fake.confirm.mock.calls[1]![0]).toBe('Back to the Library?');
-    expect(libState.open).toBe(true);
-    const { setPages } = await import('../state/session');
-    expect(setPages).toHaveBeenCalledWith({ exportOpen: false });
+    expect(div.textContent).toContain('2 exported');
+    expect(fake.confirm).not.toHaveBeenCalled();
+    expect(libState.open).toBe(false);
+    expect(fake.reveal).not.toHaveBeenCalled();
+    await click([...div.querySelectorAll('button')].find((button) => button.textContent === 'Open folder')!);
+    expect(fake.reveal).toHaveBeenCalledExactlyOnceWith('D:/out/image.jpg');
   });
-  it('warns about a failed frame, and only informs when nothing was written', async () => {
+  it('quick export reuses the saved recipe and explicitly writes only the current image in a multi-selection', async () => {
+    fake.storeRead.mockImplementation(async (_area, file) => file === 'last-used.json' ? 'tiff-prophoto' : null);
+    sessionStore.setState({ exportOpen: false });
+    await mount();
+    await click(div.querySelector('[data-testid=quick-current]')!); await settle();
+    expect(fake.request).toHaveBeenCalledOnce();
+    expect(fake.request.mock.calls[0]![1]).toMatchObject({ source_path: 'D:/photos/a.NEF', format: 'tiff16' });
+    expect(div.textContent).toContain('1 exported');
+    expect(sessionStore.getState().picked).toHaveLength(2);
+  });
+  it('shows completion totals and the cause on partial or total failure', async () => {
     fake.request.mockRejectedValueOnce(new Error('disk full')).mockResolvedValueOnce(reply());
     await mount(); await click(run()); await settle();
-    expect(fake.confirm).toHaveBeenCalledOnce();
-    expect(fake.confirm.mock.calls[0]![2]).toBe('warning');
-    expect(fake.confirm.mock.calls[0]![1]).toContain('1 written, 0 skipped, 1 failed.');
-    expect(fake.confirm.mock.calls[0]![1]).toContain('disk full');
+    expect(fake.message.mock.calls[0]).toEqual(['Export finished', '1 written, 0 skipped, 1 failed.\ndisk full', 'warning']);
     expect(fake.reveal).not.toHaveBeenCalled();
-    fake.confirm.mockClear();
     fake.request.mockRejectedValue(new Error('disk full'));
     await click(run()); await settle();
-    expect(fake.confirm).not.toHaveBeenCalled();
-    expect(fake.message).toHaveBeenCalledOnce();
-    expect(fake.message.mock.calls[0]![0]).toBe('Export finished');
-    expect(fake.message.mock.calls[0]![1]).toContain('0 written, 0 skipped, 2 failed.');
-    expect(fake.message.mock.calls[0]![2]).toBe('warning');
+    expect(fake.message.mock.calls[1]![1]).toContain('0 written, 0 skipped, 2 failed.');
   });
 });
 

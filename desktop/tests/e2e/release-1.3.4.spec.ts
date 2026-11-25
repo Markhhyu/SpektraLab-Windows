@@ -19,6 +19,7 @@ test('CineStill 800T: the layer switch reads off and fixed, and the headroom sit
   await openRoll(page);
   await page.locator('[data-stock="cinestill_800t"]').click();
   expect(await state(page, 's.sidecar.params.filmStock')).toBe('cinestill_800t');
+  await page.getByRole('button', { name: 'Film exposure (EV)', exact: true }).click();
   const layer = page.getByTestId('antihalation-toggle');
   await expect(layer).toHaveAttribute('aria-checked', 'false');
   await expect(layer).toHaveAttribute('aria-disabled', 'true');

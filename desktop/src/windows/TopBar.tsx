@@ -6,11 +6,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { BeforeAfter, Crop, Cursor, Export, Import, SidebarLeft, SidebarRight, ZoomIn, ZoomOut } from '../controls/icons';
 import { t, tz } from '../i18n';
-import { canMakePair, makePair, currentFitZoom, openFolder, pairComplete, reloadExternalEdits, sessionStore, setOriginal, setPages, setTool, solveNow, toggleCompare, useSession, zoomStep, zoomTo, zoomToFit } from '../state/session';
+import { canMakePair, makePair, currentFitZoom, openFolder, pairComplete, reloadExternalEdits, setOriginal, setPages, setTool, solveNow, toggleCompare, useSession, zoomStep, zoomTo, zoomToFit } from '../state/session';
 import { forgetRecentFolders, settingsStore, useSettings } from '../state/settings';
 import { openDialog } from './actions';
 import { baseName } from '../platform';
-import { libraryStore, selectOnly as selectLibraryEntry } from '../state/library';
 import { showModule } from './ModuleBar';
 import type { PreviewGamut } from '../canvas/colorSpace';
 import { sourceGeometryFor } from '@shared/filmEdge';
@@ -63,11 +62,7 @@ export function TopBar() {
           <button className="icon-btn" title={t('helpOpen') + ' (Ctrl+O)'} onClick={() => void openDialog()} data-testid="open-button">
             <Import />
           </button>
-          <button className="pill-menu library-entry" title={tz('Library (Ctrl+Shift+L)', '图库（Ctrl+Shift+L）')} onClick={() => {
-            const current = sessionStore.getState().selection;
-            if (current && libraryStore.getState().catalog.entries.some((entry) => entry.path === current)) selectLibraryEntry(current);
-            showModule('library');
-          }} data-testid="library-button">
+          <button className="pill-menu library-entry" title={tz('Library (Ctrl+Shift+L)', '图库（Ctrl+Shift+L）')} onClick={() => showModule('library')} data-testid="library-button">
             <span aria-hidden="true">▦</span>
             <span>{tz('Library', '图库')}</span>
           </button>

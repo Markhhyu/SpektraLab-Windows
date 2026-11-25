@@ -53,6 +53,14 @@ describe('library openSelection', () => {
     expect(libraryStore.getState().selection).toEqual(['D:\\Photos\\b.ARW']);
   });
 
+  it('keeps the picked subset distinct from the visible roll and focus', async () => {
+    const [a, b, c] = seed();
+    libraryStore.setState({ selection: [a!.path, c!.path], anchor: c!.path });
+    await openSelection();
+    expect(libraryStore.getState().selection).toEqual([a!.path, c!.path]);
+    expect(openCollection).toHaveBeenCalledWith(a!.folder, expect.arrayContaining([expect.objectContaining({ path: b!.path })]), c!.path, [a!.path, c!.path]);
+  });
+
   it('falls back to the last selected path when no focus is given', async () => {
     seed();
     await openSelection();

@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { tz } from '../i18n';
+import { importFolderDialog, openFilesDialog } from './actions';
 import { Import } from '../controls/icons';
 import { baseName, platform } from '../platform';
 import { useSession } from '../state/session';
@@ -443,7 +444,9 @@ export function LibraryView() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selection, editorHasPhoto]);
 
+  const doubleClickSet = useRef<string[]>([]);
   const onCellClick = (event: ReactMouseEvent, path: string) => {
+    if (event.detail === 1) doubleClickSet.current = selected.has(path) ? selection : [path];
     if (event.shiftKey) selectRange(path);
     else if (event.ctrlKey || event.metaKey) toggleSelection(path);
     else selectOnly(path);
@@ -474,12 +477,6 @@ export function LibraryView() {
   return (
     <div className="library" data-testid="library">
       <div className="library-toolbar">
-        <div className="library-modules">
-          <button className="library-module is-active" data-testid="library-module-library">{tz('Library', '图库')}</button>
-          <button className="library-module" disabled={!editorHasPhoto} onClick={() => setLibraryOpen(false)} data-testid="library-module-develop">
-            {tz('Develop', '修改')}
-          </button>
-        </div>
         <button className="library-btn" onClick={() => setImportOpen(true)} data-testid="library-import">
           <Import /> {tz('Import…', '导入…')}
         </button>
@@ -676,7 +673,7 @@ export function LibraryView() {
               data-path={entry.path}
               data-testid="library-cell"
               onClick={(e) => onCellClick(e, entry.path)}
-              onDoubleClick={() => void openSelection([entry.path], entry.path)}
+              onDoubleClick={() => void openSelection(doubleClickSet.current.includes(entry.path) ? doubleClickSet.current : [entry.path], entry.path)}
               title={entry.title || entry.path}
             >
               <div className="library-thumb">
@@ -702,13 +699,14 @@ export function LibraryView() {
               <div className="library-empty-title">{tz('No photographs', '没有照片')}</div>
               <div className="library-empty-hint">
                 {total === 0
-                  ? tz('Import a folder to start a catalog. The originals stay where they are.', '导入一个文件夹来建立图库。原文件仍留在原处。')
+                  ? tz('Open a photo to edit, or import a folder to browse a shoot.', '打开照片开始编辑，或导入文件夹挑选一组照片。')
                   : tz('Nothing matches the current filters.', '没有照片匹配当前筛选。')}
               </div>
               {total === 0 && (
-                <button className="library-btn is-primary" onClick={() => setImportOpen(true)} data-testid="library-empty-import">
-                  {tz('Import a folder…', '导入文件夹…')}
-                </button>
+                <div className="empty-actions">
+                  <button className="library-btn is-primary" onClick={() => void openFilesDialog()}>{tz('Open photos…', '打开照片…')}</button>
+                  <button className="library-btn" onClick={() => void importFolderDialog()} data-testid="library-empty-import">{tz('Import a folder…', '导入文件夹…')}</button>
+                </div>
               )}
             </div>
           )}
@@ -719,7 +717,7 @@ export function LibraryView() {
       <div className="library-footer">
         <span>{selection.length > 0 ? `${selection.length} ${tz('selected', '项已选')}` : tz('Nothing selected', '未选择')}</span>
         {busy && <span className="library-busy">{busy}{progress ? ` ${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` : ''}</span>}
-        <span className="library-hint">{tz('Double-click to develop · 1–5 rate · P/X/U flag · Delete removes from catalog', '双击进入修改 · 1–5 打分 · P/X/U 旗标 · Delete 从图库移除')}</span>
+        <span className="library-hint">{tz('Double-click to develop · 1–5 rate · P/X/U flag · Delete removes from catalog', '双击进入编辑 · 1–5 打分 · P/X/U 旗标 · Delete 从图库移除')}</span>
         {error && <button className="library-error" onClick={clearError}>{error} ✕</button>}
       </div>
       {importOpen && <ImportDialog onClose={() => setImportOpen(false)} />}

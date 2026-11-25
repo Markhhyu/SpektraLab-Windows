@@ -2005,3 +2005,33 @@ body,
 .settings-group h3 {
   letter-spacing: 0.02em;
 }
+
+.empty-actions, .film-actions, .trial-tools, .quick-export, .export-notice {
+  display: flex; align-items: center; gap: 6px;
+}
+.empty-actions { justify-content: center; }
+.film-actions { flex-wrap: wrap; margin-top: 5px; }
+.quick-export { position: fixed; top: 0; right: 10px; height: var(--module-bar-h); z-index: 61; }
+.quick-summary { max-width: 24vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); }
+@media (max-width: 760px) { .quick-summary { display: none; } }
+.export-notice { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 65; padding: 8px 12px; background: var(--card); border: 1px solid var(--rule); border-radius: 6px; }
+.trial-trigger { width: 100%; margin-bottom: 6px; }
+.trial-overlay { z-index: 70; }
+.trial-sheet { z-index: 71; width: min(920px, 94vw); overflow-y: auto; padding: 0 16px; }
+.trial-sheet h2 { padding-left: 0; }
+.trial-compare, .trial-grid { display: grid; gap: 8px; }
+.trial-compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.trial-compare figure { margin: 0; }
+.trial-image { display: grid; place-items: center; background: var(--ground); overflow: hidden; color: var(--dim); }
+.trial-compare .trial-image { height: clamp(100px, 36vh, 360px); }
+.trial-image canvas { width: 100%; height: 100%; object-fit: contain; min-height: 0; }
+.trial-compare figcaption { padding: 6px 0; }
+.trial-tools { margin: 8px 0; }
+.trial-tools input { flex: 1; }
+.trial-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.trial-grid button { background: var(--card); color: var(--text); border: 1px solid var(--rule); padding: 3px; }
+.trial-grid button[aria-pressed=true] { border-color: var(--accent); }
+.trial-grid .trial-image { height: clamp(50px, 13vh, 115px); }
+.trial-grid button > span { display: flex; gap: 4px; align-items: center; padding: 4px; }
+.trial-grid img { width: 20px; height: 20px; object-fit: contain; }
+.trial-error { font-size: var(--fs-small); overflow-wrap: anywhere; }

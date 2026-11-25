@@ -19,13 +19,14 @@ test('creates a pair in strip order, edits one hole, and reloads the owned recip
   expect(await state(page, '[s.pair.left.path,s.pair.right.path]')).toEqual(['/mock/Roll 01/DSC_0001.NEF', '/mock/Roll 01/DSC_0002.NEF']);
   await expect(page.getByTestId('export-button')).toBeEnabled();
   await page.getByTestId('pair-layer-left').click();
+  await page.getByRole('button', { name: 'Film exposure (EV)', exact: true }).click();
   const exposure = page.getByTestId('film-exposure').locator('input');
   await exposure.press('ArrowUp');
   expect(await state(page, 's.pair.left.exposureBaselineEV')).toBeCloseTo(1 / 3);
   expect(await state(page, 's.pair.right.exposureEV')).toBe(0);
   await expect.poll(() => page.evaluate((path) => localStorage.getItem(`pair:${path}`), savedPath)).toContain('0.3333333333333333');
   await page.reload();
-  await page.getByTestId('library-module-develop').click();
+  await page.getByTestId('module-develop').click();
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await expect(page.locator('.thumb')).toHaveCount(9);
   await page.locator('.thumb').filter({ hasText: 'Half-Frame Pair' }).click();

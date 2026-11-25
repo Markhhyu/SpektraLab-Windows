@@ -51,7 +51,10 @@ import {
 import { clamp } from '@shared/params';
 import { useOutput } from '../canvas/output';
 import { paintOutput } from '../canvas/colorSpace';
+import { FilmTrials } from './FilmTrials';
 import { StockList } from './StockList';
+import { settingsStore } from '../state/settings';
+import { supportsTriXD76 } from '@shared/params';
 import { unsupportedReason } from './gate';
 import { PairSection } from './PairSection';
 
@@ -64,13 +67,13 @@ export function LeftRail() {
       <div className="rail-scroll">
         <NavigatorSection />
         <PairSection />
-        <ClipboardSection />
         <FilmSection />
+        <PrintSection />
+        <EnlargerSection />
+        <CropSection />
+        <ClipboardSection />
         <FilmEdgeSection />
         <DateBackSection />
-        <PrintSection />
-        <CropSection />
-        <EnlargerSection />
       </div>
     </aside>
   );
@@ -155,6 +158,7 @@ function NavigatorBox({ vis, aspect }: { vis: { x: number; y: number; w: number;
 
 const GROUP_LABEL: Record<ClipboardGroup, () => string> = {
   filmAndPaper: () => t('clipFilmAndPaper'),
+  development: () => tz('Development', '显影设置'),
   exposure: () => t('clipExposure'),
   whiteBalance: () => t('clipWhiteBalance'),
   filmEffects: () => t('clipFilmEffects'),
@@ -196,7 +200,18 @@ function ClipboardSection() {
 
 // --------------------------------------------------------------------- Film
 
+function showFilmControl(section: string) {
+  const settings = settingsStore.getState();
+  settings.set('rightCollapsed', false);
+  settings.set('parametersTab', 'preDev');
+  if (settings.collapsedSections[section]) settings.toggleSection(section);
+  requestAnimationFrame(() => document.querySelector(`[data-section="${section}"]`)?.scrollIntoView({ block: 'nearest' }));
+}
+
 function FilmSection() {
+  const others = useSession((s) => s.picked.filter((path) => path !== s.selection).length);
+  const trialPath = useSession((s) => s.selection);
+  const d76 = useSession((s) => supportsTriXD76(s.sidecar.params, s.gate));
   const catalog = useSession((s) => s.catalog);
   const film = useSession((s) => s.sidecar.params.filmStock);
   const noFilm = useSession((s) => s.sidecar.noFilm);
@@ -228,7 +243,15 @@ function FilmSection() {
         },
       ]}
     >
+      <FilmTrials key={trialPath} />
       <StockList rows={rows} selected={film} onSelect={selectFilmStock} testId="film-list" searchPlaceholder={tz('Search films…', '搜索胶片…')} />
+      {!noFilm && <div className="film-actions">
+        <button className="btn" onClick={() => showFilmControl('camera')}>{tz('Film exposure (EV)', '胶片曝光（EV）')}</button>
+        {others > 0 && <button className="btn" onClick={() => void syncSettings(['filmAndPaper', 'development'])}>
+          {tz(`Sync film, paper and development to ${others}`, `将胶片、相纸和显影同步到其余 ${others} 张`)}
+        </button>}
+        {d76 && <button className="btn" onClick={() => showFilmControl('development')}>{tz('D-76 development', 'D-76 显影')}</button>}
+      </div>}
       {noFilm && <p className="caption" data-testid="no-film-state">{supportsBypass
         ? tz('Film simulation is off. Post-processing and crop still apply.', '已关闭胶片模拟，后期调整与裁剪仍然生效。')
         : tz('This engine cannot show this saved source view. Choose a film to restore simulation.', '当前引擎无法显示保存的无胶片视图，请选择胶片以恢复模拟。')}</p>}
@@ -478,7 +501,7 @@ function EnlargerSection() {
         options={[{ value: 'frame', label: tz('Frame', '这一格') }, { value: 'film', label: tz('+ Film', '+ 胶片') }]}
         onChange={(v) => updatePair((p) => ({ ...p, [side]: { ...p[side]!, printScope: v } }))} />}
       <ScrubSlider
-        label={tz('Brightness', '亮度')}
+        label={tz('Print brightness', '印放亮度')}
         sublabel={tz('stops', '档')}
         value={p.printBrightnessStops}
         range={[-3, 3]}

@@ -4,6 +4,7 @@ import type { sessionStore } from '../../src/state/session';
 test('auto reading is visible; custom, slider, undo, reload and As Shot preserve the exposure contract', async ({ page }) => {
   await page.goto('/?open=');
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
+  await page.getByRole('button', { name: 'Film exposure (EV)', exact: true }).click();
   const field = page.getByTestId('film-exposure').locator('input');
   const metering = page.getByTestId('metering');
   const read = () => page.evaluate(() => (window as unknown as { __spk: { sessionStore: typeof sessionStore } }).__spk.sessionStore.getState().sidecar);
@@ -26,7 +27,7 @@ test('auto reading is visible; custom, slider, undo, reload and As Shot preserve
   // Wait for the actual sidecar write before reopening the app.
   await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes('"exposureBaselineEV":0.6333') && v.includes('"autoExposure":false')))).toBe(true);
   await page.reload();
-  await page.getByTestId('library-module-develop').click();
+  await page.getByTestId('module-develop').click();
   await expect(field).toHaveValue('+0.6');
   await expect(metering).toContainText('Custom');
   await page.getByTestId('film-exposure').getByRole('checkbox').click();

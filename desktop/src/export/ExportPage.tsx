@@ -8,9 +8,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Checkbox, NumberField, PillMenu, ScrubSlider, Section } from '../controls/controls';
 import { t, tz } from '../i18n';
-import { platform, baseName, dirName } from '../platform';
+import { platform, baseName } from '../platform';
 import { sessionStore, setPages, useSession } from '../state/session';
-import { libraryStore, setLibraryOpen } from '../state/library';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { settingsStore } from '../state/settings';
 import { host, type ProofReply } from '../host/client';
 import { hostMessage } from '../host/messages';
@@ -60,42 +60,6 @@ export function progressText(p: ExportProgress): string {
   return `${base} · ${(STAGE_LABEL[p.stage] ?? (() => p.stage!))()} ${Math.round(p.fraction * 100)}%`;
 }
 
-/** The finished batch, in a dialog: what was written, what was not, and the
- * folder. A stopped batch is not announced; the page shows where it stopped. */
-export async function reportFinished(outcomes: readonly ExportOutcome[]): Promise<void> {
-  if (!outcomes.length || outcomes.some((o) => o.kind === 'cancelled')) return;
-  const written = outcomes.filter((o): o is Extract<ExportOutcome, { kind: 'written' }> => o.kind === 'written');
-  const failed = outcomes.filter((o): o is Extract<ExportOutcome, { kind: 'failed' }> => o.kind === 'failed');
-  const skipped = outcomes.length - written.length - failed.length;
-  const lines = [tz(
-    `${written.length} written, ${skipped} skipped, ${failed.length} failed.`,
-    `已写入 ${written.length} 张，跳过 ${skipped} 张，失败 ${failed.length} 张。`,
-  )];
-  if (written[0]) lines.push(tz(`Folder: ${dirName(written[0].path)}`, `文件夹：${dirName(written[0].path)}`));
-  if (failed[0]) lines.push(failed[0].message);
-  const title = tz('Export finished', '导出完成');
-  if (!written[0]) {
-    await platform().message(title, lines.join('\n'), 'warning');
-    return;
-  }
-  const show = await platform().confirm(title,
-    `${lines.join('\n')}\n\n${tz('Show the files in their folder?', '是否在文件夹中显示这些文件？')}`,
-    failed.length ? 'warning' : 'info');
-  if (show) await platform().reveal(written[0].path);
-  // Close the loop on the workflow: after a batch, the person usually either
-  // goes back to the Library to pick the next frame or stays on this one.
-  if (libraryStore.getState().catalog.entries.length > 0) {
-    const back = await platform().confirm(tz('Back to the Library?', '回到图库？'), tz(
-      'Yes opens the Library with the current selection. No keeps editing this photograph.',
-      '是：回到图库并保留当前选中。否：留在修改页继续编辑这张照片。',
-    ), 'info');
-    if (back) {
-      setPages({ exportOpen: false });
-      setLibraryOpen(true);
-    }
-  }
-}
-
 async function loadRecipes(): Promise<ExportRecipe[]> {
   try {
     return decodeRecipes(await platform().storeRead('Export', 'recipes.json'));
@@ -104,7 +68,11 @@ async function loadRecipes(): Promise<ExportRecipe[]> {
   }
 }
 
-export function ExportPage() {
+export function ExportPage({ editorVisible = true }: { editorVisible?: boolean }) {
+  const [lastRecipe, setLastRecipe] = useState<ExportRecipe | null>(null);
+  const [scope, setScope] = useState<'current' | 'selected'>('selected');
+  const [notice, setNotice] = useState<{ message: string; path?: string } | null>(null);
+  const fromEditor = useRef(false);
   const open = useSession((s) => s.exportOpen);
   const picked = useSession((s) => s.picked);
   const selection = useSession((s) => s.selection);
@@ -128,6 +96,7 @@ export function ExportPage() {
   const [proofEdge, setProofEdge] = useState(2048);
   const proofGeneration = useRef(0);
   const [recipes, setRecipes] = useState<ExportRecipe[]>(DEFAULT_RECIPES);
+  const [recipesReady, setRecipesReady] = useState(false);
   const [current, setCurrent] = useState(0);
   const [log, setLog] = useState<{ name: string; outcome: ExportOutcome }[]>([]);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
@@ -141,12 +110,25 @@ export function ExportPage() {
   const proof = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (open) void loadRecipes().then(setRecipes);
+    let live = true;
+    setRecipesReady(false);
+    void Promise.all([
+      loadRecipes(), platform().storeRead('Export', 'last-used.json').catch(() => null),
+    ]).then(([available, last]) => {
+      if (!live) return;
+      setRecipes(available);
+      const index = available.findIndex((recipe) => recipe.id === last);
+      setLastRecipe(available[index] ?? null);
+      setCurrent(Math.max(0, index));
+      setRecipesReady(true);
+    });
+    return () => { live = false; };
   }, [open]);
 
   // A page opened anew starts clean: the previous batch's bar text and log
   // belong to that batch. (The page cannot be closed while one runs.)
   useEffect(() => {
+    if (!open) { fromEditor.current = false; setScope('selected'); }
     if (open && !sessionStore.getState().batchExporting) { setProgress(null); setLog([]); }
   }, [open]);
 
@@ -247,8 +229,7 @@ export function ExportPage() {
     };
   }, [open, selection, batch, developing, engineSession, sidecar, native, metadata, pair, pairInfo, proofRecipe, proofNoFilm, bypassRefusal, hello, catalog, gate, display, proofEdge]);
 
-  if (!open) return null;
-  const frames = picked.length ? picked : selection ? [selection] : [];
+  const frames = scope === 'selected' && picked.length ? picked : selection ? [selection] : [];
   const writesEdits = hostWrites(hello?.methods as string[] | undefined);
   const spaceSupported = ['sRGB', 'display-p3', 'prophoto'].includes(r.colorSpace) || !!hello?.export_spaces?.includes(r.colorSpace);
   const supported = !bypassRefusal && (r.format === 'di' ? gate.digitalIntermediate && !!hello?.methods?.includes('export_cineon') : writesEdits && spaceSupported);
@@ -257,13 +238,13 @@ export function ExportPage() {
     ? proofImage ? tz('Updating export proof…', '正在更新导出软打样…') : tz('Preparing export proof…', '正在生成导出软打样…')
     : proofStatus;
 
-  const run = async () => {
-    if (sessionStore.getState().batchExporting) return;
+  const run = async (paths = [...frames]) => {
+    if (!recipesReady || !paths.length || sessionStore.getState().batchExporting) return;
     // This snapshot includes unsaved edits to the selected photo. No later
     // state read supplies parameters to an already-started batch.
     const state = sessionStore.getState();
     const recipe = structuredClone(r);
-    const paths = [...frames];
+    setNotice(null);
     const methods = state.hello?.methods ? [...state.hello.methods] : undefined;
     const selected = state.selection ? {
       path: state.selection, sidecar: structuredClone(state.sidecar),
@@ -363,7 +344,22 @@ export function ExportPage() {
       // stopped: the bar rests on the frames that were processed.
       setProgress((p) => p && { ...p, fraction: 0, stage: null, ...(stop.current ? { stopped: true } : {}) });
     }
-    if (!stop.current) await reportFinished(outcomes).catch((e) => platform().log('error', `export report: ${String(e)}`));
+    if (stop.current) return;
+    const written = outcomes.filter((item) => item.kind === 'written');
+    const failures = outcomes.filter((item) => item.kind === 'failed');
+    const skipped = outcomes.filter((item) => item.kind === 'skipped').length;
+    if (failures.length) {
+      const summary = tz(`${written.length} written, ${skipped} skipped, ${failures.length} failed.`, `已写入 ${written.length} 张，跳过 ${skipped} 张，失败 ${failures.length} 张。`);
+      await platform().message(tz('Export finished', '导出完成'), summary + '\n' + failures[0]!.message, 'warning');
+    } else if (written.length || skipped) {
+      if (written.length) {
+        setLastRecipe(recipe);
+        await platform().storeWrite('Export', 'last-used.json', recipe.id).catch(() => {});
+      }
+      setNotice({ message: tz(`${written.length} exported`, `已导出 ${written.length} 张`) +
+        (skipped ? tz(` · ${skipped} skipped`, ` · 跳过 ${skipped} 张`) : ''), path: written[0]?.path });
+      if (open && fromEditor.current) setPages({ exportOpen: false });
+    }
   };
 
   const cancel = () => {
@@ -378,15 +374,52 @@ export function ExportPage() {
     }
   };
 
+  const currentLabel = tz('Export current photo', '导出当前照片');
+  const selectedLabel = tz(`Export ${picked.length} selected`, `导出选中的 ${picked.length} 张`);
+  const configure = (next: typeof scope) => {
+    fromEditor.current = true;
+    setScope(next);
+    setPages({ exportOpen: true });
+  };
+  const quick = (next: typeof scope) => {
+    if (!lastRecipe || !supported || lastRecipe.id !== r.id) { configure(next); return; }
+    void run(next === 'selected' ? [...picked] : selection ? [selection] : []);
+  };
+  const result = notice && <div className="export-notice" role="status">
+    {notice.message}
+    {notice.path && <button className="btn" onClick={() => void platform().reveal(notice.path!)}>{tz('Open folder', '打开文件夹')}</button>}
+    <button className="icon-btn" aria-label={tz('Dismiss', '关闭提示')} onClick={() => setNotice(null)}>×</button>
+  </div>;
+  if (!open) {
+    if (!editorVisible || !selection) return null;
+    const disabled = !recipesReady || (!!pair && (!pairInfo?.left?.available || !pairInfo?.right?.available));
+    const destination = r.folder.kind === 'fixed' ? r.folder.path : tz('Beside original', '原图旁');
+    const summary = [r.format.toUpperCase(), r.colorSpace, [destination, r.subfolder].filter(Boolean).join('/')].join(' · ');
+    return <><div className="quick-export">
+      {batch ? <><span role="status">{progress ? progressText(progress) : tz('Exporting…', '正在导出…')}</span><button className="btn" onClick={cancel}>{tz('Stop', '停止')}</button></> : <>
+        {lastRecipe && <span className="quick-summary" title={summary}>{summary}</span>}
+        <button className="btn" disabled={disabled} onClick={() => quick('current')} data-testid="quick-current">{currentLabel}</button>
+        <DropdownMenu.Root><DropdownMenu.Trigger asChild>
+          <button className="btn" disabled={disabled} aria-label={tz('Export options', '导出选项')}>▾</button>
+        </DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="menu" align="end">
+          {picked.length > 1 && <DropdownMenu.Item className="menu-item" onSelect={() => quick('selected')}>{selectedLabel}</DropdownMenu.Item>}
+          <DropdownMenu.Item className="menu-item" onSelect={() => configure('selected')}>{tz('Export settings…', '导出设置…')}</DropdownMenu.Item>
+        </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+      </>}
+    </div>{result}</>;
+  }
   return (
     <div className="export-page" data-testid="export-page">
+      {result}
       <div className="topbar">
         <span style={{ fontWeight: 700, fontSize: 'var(--fs-rail-title)' }}>{t('helpExport')}</span>
         <span className="bar-status" data-testid="export-status">
           {progress ? progressText(progress) : ''}
         </span>
         <span className="pill-menu" style={{ marginRight: 12 }}>
-          {tz(`${frames.length} image${frames.length === 1 ? '' : 's'}`, `${frames.length} 张`)}
+          {picked.length > 1 ? <select aria-label={tz('Export scope', '导出范围')} value={scope} disabled={batch} onChange={(e) => setScope(e.target.value as typeof scope)}>
+            <option value="current">{currentLabel}</option><option value="selected">{selectedLabel}</option>
+          </select> : tz('1 photo', '1 张照片')}
         </span>
         {batch ? (
           <button className="btn" onClick={cancel}>
@@ -397,8 +430,8 @@ export function ExportPage() {
             <button className="btn" onClick={() => setPages({ exportOpen: false })} style={{ marginRight: 8 }}>
               {tz('Close', '关闭')}
             </button>
-            <button className="btn primary" disabled={!frames.length || !supported} onClick={() => void run()} data-testid="export-run">
-              {tz('Export', '导出')}
+            <button className="btn primary" disabled={!recipesReady || !frames.length || !supported} onClick={() => void run()} data-testid="export-run">
+              {frames.length > 1 ? selectedLabel : currentLabel}
             </button>
           </>
         )}

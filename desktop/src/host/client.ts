@@ -161,6 +161,8 @@ export class Host {
   async renderView(session: string, tier: Tier, opts: {
     adjustments: Adjustments; geometry: Geometry; display: 'srgb' | 'display-p3'; generation: number; long_edge?: number;
     source_geometry?: Geometry;
+    params?: WireParams;
+    progress_id?: string;
     no_film?: boolean;
   }): Promise<RenderReply> {
     const snapshot = structuredClone(opts);

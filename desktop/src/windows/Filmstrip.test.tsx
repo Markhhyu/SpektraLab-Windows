@@ -44,7 +44,8 @@ it('does not request a whole imported folder before visibility is known; request
   const { Filmstrip } = await import('./Filmstrip');
   await act(async () => root.render(<Filmstrip />));
   expect(observed.size).toBe(100);
-  expect(options).toMatchObject({ root: container.querySelector('.filmstrip-cells'), rootMargin: '0px 320px' });
+  expect(options?.root).toBe(container.querySelector('.filmstrip-cells'));
+  expect(options?.rootMargin).toBe('0px 320px');
   expect(fake.thumbnail).not.toHaveBeenCalled();
   const cells = [...observed];
   await act(async () => callback([

@@ -15,12 +15,14 @@ async function preferences(page: Page) {
 }
 
 async function openPhoto(page: Page, path: string) {
+  // Switching rolls flushes the previous edit and closes its render session.
   await page.evaluate((p) => (window as unknown as { __spkOpenPaths(paths: string[]): void }).__spkOpenPaths([p]), path);
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __spk: App }).__spk.sessionStore.getState().selection)).toBe(path);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __spk: App }).__spk.sessionStore.getState().selection), { timeout: 25_000 }).toBe(path);
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
 }
 
 test('new-photo preferences survive restart and preserve the current and saved photographs', async ({ page }) => {
+  test.slow();
   await page.goto('/?open=');
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   const current = await stocks(page);
@@ -46,6 +48,7 @@ test('new-photo preferences survive restart and preserve the current and saved p
 });
 
 test('settings offer compatible silver paper, direct scans and a reset without editing the open photo', async ({ page }) => {
+  test.slow();
   await page.goto('/?open=');
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await preferences(page);

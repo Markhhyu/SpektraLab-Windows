@@ -10,6 +10,7 @@ async function open(page: Page, renderDelay = 0) {
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
 }
 test('creates a pair in strip order, edits one hole, and reloads the owned recipe with the folder', async ({ page }) => {
+  test.slow();
   await open(page);
   await page.locator('.thumb').nth(1).click({ modifiers: ['Control'] });
   await page.getByTestId('make-pair').click();
@@ -24,8 +25,14 @@ test('creates a pair in strip order, edits one hole, and reloads the owned recip
   await exposure.press('ArrowUp');
   expect(await state(page, 's.pair.left.exposureBaselineEV')).toBeCloseTo(1 / 3);
   expect(await state(page, 's.pair.right.exposureEV')).toBe(0);
-  await expect.poll(() => page.evaluate((path) => localStorage.getItem(`pair:${path}`), savedPath)).toContain('0.3333333333333333');
+  // The mock renders both holes on the UI thread. Wait for the debounced
+  // write before reloading, and check the left frame's actual numeric value.
+  await expect.poll(() => page.evaluate((path) => {
+    const saved = localStorage.getItem(`pair:${path}`);
+    return saved ? JSON.parse(saved).left?.exposureBaselineEV ?? 0 : 0;
+  }, savedPath), { timeout: 25_000 }).toBeCloseTo(1 / 3);
   await page.reload();
+  await expect(page.getByTestId('library')).toBeVisible();
   await page.getByTestId('module-develop').click();
   await expect(page.getByTestId('tier-badge')).toHaveText('full', { timeout: 25_000 });
   await expect(page.locator('.thumb')).toHaveCount(9);

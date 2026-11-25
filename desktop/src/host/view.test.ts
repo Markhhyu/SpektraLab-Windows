@@ -39,7 +39,7 @@ describe('Host.renderView', () => {
     const host = new Host({ request, state } as unknown as Transport);
     const opts = options();
     opts.adjustments.local = [
-      { ...createLocalAdjustment('radial'), exposure: 1.25, feather: 0.4 },
+      { ...createLocalAdjustment('radial'), exposure: 1.25, feather: 0.4, radius: 0.12, radiusY: 0.3 },
       { ...createLocalAdjustment('linear'), exposure: -0.5, invert: true },
     ];
     await host.renderView('s1', 'live', opts);

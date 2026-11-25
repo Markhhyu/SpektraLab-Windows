@@ -39,6 +39,19 @@ describe('local adjustments', () => {
     expect(maskWeight(a, 0.5, 0.75, 1)).toBeLessThan(0.2);
   });
 
+  it('retains the two normalised ellipse axes on reload and preserves legacy radial falloff', () => {
+    const legacy = { ...createLocalAdjustment('radial'), radius: 0.1, feather: 0.8 };
+    const [ellipse, old] = decodeLocalAdjustments([{ ...legacy, radiusY: 0.3 }, legacy]);
+    for (const aspect of [0.5, 2]) {
+      expect(maskWeight(ellipse!, 0.5, 0.65, aspect)).toBe(1);
+      expect(maskWeight(ellipse!, 0.65, 0.5, aspect)).toBe(0);
+      expect(maskWeight(ellipse!, 0.5, 0.74, aspect)).toBeCloseTo(0.5);
+    }
+    expect(old).not.toHaveProperty('radiusY');
+    expect(maskWeight(old!, 0.5, 0.61, 2)).toBe(0);
+    expect(maskWeight(old!, 0.5, 0.61, 0.5)).toBe(1);
+  });
+
   it('inverts the mask without changing its edge', () => {
     const a = createLocalAdjustment('radial');
     expect(maskWeight({ ...a, invert: true }, 0.5, 0.5)).toBe(0);

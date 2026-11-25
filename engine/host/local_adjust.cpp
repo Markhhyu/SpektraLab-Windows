@@ -61,7 +61,7 @@ double linear_weight(const LocalLayer& layer, double x, double y) {
 
 double radial_weight(const LocalLayer& layer, double x, double y, double aspect) {
     const double dx = x - layer.cx;
-    const double dy = (y - layer.cy) * aspect;  // keep the mask circular on canvas
+    const double dy = (y - layer.cy) * (layer.radius_y > 0.0 ? layer.radius / layer.radius_y : aspect);
     const double d = std::sqrt(dx * dx + dy * dy) / std::max(layer.radius, 1e-3);
     const double edge = std::max(layer.feather * 0.5, 1e-3);
     return smooth01((1.0 - d) / edge);
@@ -160,6 +160,7 @@ bool parse_local_layers(const Json& adjustments, std::vector<LocalLayer>& out, s
         layer.cx = number_field(raw, "cx", 0.5, -1.0, 2.0, error, name.c_str());
         layer.cy = number_field(raw, "cy", 0.5, -1.0, 2.0, error, name.c_str());
         layer.radius = number_field(raw, "radius", 0.5, 0.01, 2.0, error, name.c_str());
+        if (raw.has("radiusY")) layer.radius_y = number_field(raw, "radiusY", 0.5, 0.02, 2.0, error, name.c_str());
         layer.feather = number_field(raw, "feather", 0.35, 0.0, 2.0, error, name.c_str());
         layer.invert = bool_field(raw, "invert", false, error, name.c_str());
         layer.exposure_ev = number_field(raw, "exposure", 0.0, -4.0, 4.0, error, name.c_str());

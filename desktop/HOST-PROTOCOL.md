@@ -256,6 +256,12 @@ gamut compression with **lightness compression disabled** because the print
 already applied its lightness shoulder. As on Mac, the target chroma knee
 also runs on same-space ProPhoto exports. This corrects the former Windows
 double-shoulder / same-space bypass; legacy methods retain their old processing.
+For radial layers in `adjustments.localAdjustments`, `cx` and `cy` are
+normalised coordinates in the finished frame. `radius` is the horizontal
+semi-axis in frame widths. The optional `radiusY` is the vertical semi-axis
+in frame heights. Omitting it preserves the original radial falloff. View,
+proof and standard photo export use the same ellipse and feather weights.
+
 `render_view` uses ordinary display conversion. `long_edge`
 limits the final cropped result; zero keeps its native dimensions. The print
 cache depends on session, source size and film/print parameters. Grade,

@@ -63,6 +63,7 @@ import { settingsStore, useSettings } from '../state/settings';
 import { resolveDisplaySpace } from './colorSpace';
 import { inTauri } from '../host/transport';
 import { onFrameDrop } from '../windows/frameDrag';
+import { RadialMaskOverlay } from './RadialMaskOverlay';
 import { clampZoom } from './zoom';
 
 // The surround is the colour the GL viewport is cleared to, so it is the empty
@@ -127,6 +128,8 @@ export function Canvas() {
   const noFilm = useSession((s) => s.sidecar.noFilm);
   const gate = useSession((s) => s.gate);
   const adjustments = useSession((s) => s.sidecar.adjustments);
+  const radialMaskId = useSession((s) => s.radialMaskId);
+  const radialMask = radialMaskId ? adjustments.local?.find((l) => l.id === radialMaskId && l.kind === 'radial') : null;
   const nativeSize = useSession((s) => s.nativeSize);
   const view = useSession((s) => s.view);
   const tool = useSession((s) => s.tool);
@@ -532,6 +535,11 @@ export function Canvas() {
       data-testid="canvas"
     >
       <canvas ref={canvas} className="canvas-gl" />
+      {layout && radialMask && selection && engineSession && !originalFallback && !showingOriginal && !comparing && !batch && !exportOpen
+        && tool === 'select' && (!pair || pairLayer === 'film') && (
+          <RadialMaskOverlay key={selection + radialMask.id} layer={radialMask}
+            left={css(layout.offset.x)} top={css(layout.offset.y)} width={css(layout.outSize.width)} height={css(layout.outSize.height)} />
+        )}
       {pair && pairGates && layout && <svg className="crop-overlay" width="100%" height="100%" data-testid="pair-overlay">
         {PAIR_SIDES.map((side) => {
           const r = pairGates[side], x = css(layout.offset.x + r.x * layout.outSize.width), y = css(layout.offset.y + r.y * layout.outSize.height);

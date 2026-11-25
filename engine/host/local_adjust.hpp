@@ -24,8 +24,8 @@ struct LocalLayer {
     int kind = 0;  // 0 = linear gradient, 1 = radial
     // Linear gradient: the mask ramps from 0 at (x0,y0) to 1 at (x1,y1).
     double x0 = 0.5, y0 = 0.0, x1 = 0.5, y1 = 1.0;
-    // Radial: centre and radius (fractions of the frame's short edge).
-    double cx = 0.5, cy = 0.5, radius = 0.5;
+    // Normalised centre and horizontal radius. A missing vertical radius uses the legacy aspect rule.
+    double cx = 0.5, cy = 0.5, radius = 0.5, radius_y = 0.0;
     // Feather softens the mask edge; 0 is a hard edge.
     double feather = 0.35;
     bool invert = false;

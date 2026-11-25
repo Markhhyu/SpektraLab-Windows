@@ -134,6 +134,7 @@ export interface SessionState {
   fitZoom: number;
   /** The canvas in device px (the navigator draws the visible part from it). */
   canvasPx: { width: number; height: number };
+  radialMaskId: string | null;
   showingOriginal: boolean;
   comparing: boolean;
   comparePosition: number;
@@ -188,6 +189,7 @@ const INITIAL: SessionState = {
   externalEditConflict: false,
   latitude: EMPTY_LATITUDE,
   exposureReadings: [],
+  radialMaskId: null,
   tool: 'select',
   fitZoom: 1,
   canvasPx: { width: 1, height: 1 },
@@ -1953,6 +1955,7 @@ export async function select(path: string, options: { externalReload?: boolean; 
   pendingExternalPaths.clear();
   set({
     selection: path,
+    radialMaskId: null,
     picked: get().picked.includes(path) ? get().picked : [path],
     sidecar,
     externalEditConflict: false, lastError: null,
@@ -2367,7 +2370,15 @@ export function noteFitZoom(z: number) {
   if (Math.abs(get().fitZoom - z) > 1e-4) set({ fitZoom: z });
 }
 
+export function editRadialMask(id: string | null) {
+  if (id) {
+    setTool('select');
+    set({ radialMaskId: id, showingOriginal: false, comparing: false });
+  } else if (get().radialMaskId) set({ radialMaskId: null });
+}
+
 export function setTool(tool: Tool) {
+  if (get().radialMaskId) set({ radialMaskId: null });
   if (tool === 'crop' && get().pair) { togglePairPlacing(); return; }
   if (tool === 'select' && get().pairPlacing) { togglePairPlacing(); return; }
   const previous = get().tool;

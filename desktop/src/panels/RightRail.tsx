@@ -2,11 +2,11 @@
 //   Pre-Dev:  Latitude · Input / Camera · Film Format · Scene Placement
 //   Post-Dev: White Balance · Exposure · Curve · Color Balance (Layer 2)
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Checkbox, NumberField, PillMenu, ScrubSlider, Section, SegmentedSwitch, ToggleRow, signed } from '../controls/controls';
 import { isChinese, t, tz } from '../i18n';
 import { hostMessage } from '../host/messages';
-import { cameraParams, cameraExposureBaseline, cameraExposureTotal, setCameraMetering, setCameraExposureTotal, resetCameraExposure, pairFocus, shownAdjustments, shownDecode as selectedDecode, updatePair, canPickNeutral, currentPlacementWindow, hostRedecodes, placeScene, placementReady, resetScenePlacement, setAdjustments, setDecode, setFilmFrame, setFilmSide, setParams, setSideLengthMM, startNeutralPick, zoomTo, useSession } from '../state/session';
+import { editRadialMask, cameraParams, cameraExposureBaseline, cameraExposureTotal, setCameraMetering, setCameraExposureTotal, resetCameraExposure, pairFocus, shownAdjustments, shownDecode as selectedDecode, updatePair, canPickNeutral, currentPlacementWindow, hostRedecodes, placeScene, placementReady, resetScenePlacement, setAdjustments, setDecode, setFilmFrame, setFilmSide, setParams, setSideLengthMM, startNeutralPick, zoomTo, useSession } from '../state/session';
 import { settingsStore, useSettings } from '../state/settings';
 import {
   type AEMethod,
@@ -87,7 +87,7 @@ export function RightRail() {
       />
       <div className="hairline" />
       <div className="rail-scroll">
-        {tab === 'basic' ? <><ExposureSection /><WhiteBalanceSection /></> : tab === 'preDev' ? (
+        {tab === 'basic' ? <><ExposureSection /><WhiteBalanceSection /><LocalAdjustmentsSection /></> : tab === 'preDev' ? (
           <>
             <LatitudeSection />
             <CameraSection />
@@ -1236,6 +1236,10 @@ function PresetsSection() {
 function LocalAdjustmentsSection() {
   const adjustments = useSession((s) => shownAdjustments(s));
   const layers = adjustments.local ?? [];
+  const activeMask = useSession((s) => s.radialMaskId);
+  const canPlace = useSession((s) => !!s.selection && !!s.engineSession && !s.batchExporting && (!s.pair || s.pairLayer === 'film'));
+  const collapsed = useSettings((s) => !!s.collapsedSections.local);
+  useEffect(() => () => editRadialMask(null), [collapsed, canPlace]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = layers.find((l) => l.id === selectedId) ?? layers[0];
 
@@ -1247,12 +1251,16 @@ function LocalAdjustmentsSection() {
     }));
   };
   const add = (kind: 'linear' | 'radial') => {
+    if (layers.length >= 16) return;
     const layer = createLocalAdjustment(kind);
+    if (kind === 'radial') Object.assign(layer, { radius: 0.13, radiusY: 0.2, feather: 0.9 });
     setAdjustments((a) => ({ ...a, local: [...(a.local ?? []), layer] }));
     setSelectedId(layer.id);
+    editRadialMask(kind === 'radial' && canPlace ? layer.id : null);
   };
   const remove = (id: string) => {
     setAdjustments((a) => ({ ...a, local: (a.local ?? []).filter((l) => l.id !== id) }));
+    if (activeMask === id) editRadialMask(null);
     if (selectedId === id) setSelectedId(null);
   };
 
@@ -1261,14 +1269,14 @@ function LocalAdjustmentsSection() {
   return (
     <Section
       id="local"
-      title={tz('Local Adjustments', '局部调整')}
-      onReset={() => setAdjustments((a) => ({ ...a, local: [] }))}
+      title={tz('Local Adjustments · Masks', '局部调整 · 蒙版')}
+      onReset={() => { editRadialMask(null); setAdjustments((a) => ({ ...a, local: [] })); }}
       resetHelp={tz('Remove all local adjustments', '移除全部局部调整')}
       resetEnabled={layers.length > 0}
     >
       <div className="local-add-row">
-        <button className="btn" data-testid="local-add-linear" onClick={() => add('linear')}>{tz('+ Linear gradient', '＋线性渐变')}</button>
-        <button className="btn" data-testid="local-add-radial" onClick={() => add('radial')}>{tz('+ Radial', '＋径向')}</button>
+        <button className="btn" disabled={layers.length >= 16} data-testid="local-add-linear" onClick={() => add('linear')}>{tz('+ Linear gradient', '＋线性渐变')}</button>
+        <button className="btn" disabled={layers.length >= 16} data-testid="local-add-radial" onClick={() => add('radial')}>{tz('+ Radial mask', '＋径向蒙版')}</button>
       </div>
       {layers.length === 0 ? (
         <p className="caption">
@@ -1285,9 +1293,9 @@ function LocalAdjustmentsSection() {
                 key={layer.id}
                 className={'local-chip' + (layer.id === selected?.id ? ' is-active' : '')}
                 data-testid={'local-layer-' + index}
-                onClick={() => setSelectedId(layer.id)}
+                onClick={() => { setSelectedId(layer.id); editRadialMask(layer.kind === 'radial' && canPlace ? layer.id : null); }}
               >
-                <span className="local-chip-label">{localAdjustmentLabel(layer, index)}</span>
+                <span className="local-chip-label">{isChinese() ? `${layer.kind === 'radial' ? '径向' : '线性'} ${index + 1}` : localAdjustmentLabel(layer, index)}</span>
                 <span
                   className="local-chip-remove"
                   title={tz('Remove', '移除')}
@@ -1298,9 +1306,16 @@ function LocalAdjustmentsSection() {
           </div>
           {selected && (
             <>
+              {selected.kind === 'radial' && canPlace && (
+                <button type="button" className="btn" data-testid="local-place" aria-pressed={activeMask === selected.id}
+                  onClick={() => editRadialMask(activeMask === selected.id ? null : selected.id)}>
+                  {activeMask === selected.id ? tz('Done placing', '完成定位') : tz('Place on photo', '在照片上定位')}
+                </button>
+              )}
               <p className="caption">
                 {selected.kind === 'linear'
                   ? tz('Linear gradient: the grade ramps in from one point to another.', '线性渐变：调色沿两点之间的方向渐入。')
+                  : activeMask === selected.id ? tz('Drag outwards from the centre of the area. Drag the centre dot to move the mask.', '从要调整的位置向外拖出椭圆，拖动中心圆点可以移动蒙版。')
                   : tz('Radial: the grade is strongest at the centre and fades out.', '径向：中心最强，向外淡出。')}
               </p>
               <ScrubSlider
@@ -1339,7 +1354,8 @@ function LocalAdjustmentsSection() {
                 <>
                   <ScrubSlider label={tz('Centre X', '中心 X')} value={selected.cx} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ cx: v })} testId="local-cx" />
                   <ScrubSlider label={tz('Centre Y', '中心 Y')} value={selected.cy} range={[-0.2, 1.2]} snap={0.01} format={pct} onChange={(v) => update({ cy: v })} testId="local-cy" />
-                  <ScrubSlider label={tz('Radius', '半径')} value={selected.radius * 100} range={[2, 200]} snap={1} format={(v) => `${Math.round(v)}%`} onChange={(v) => update({ radius: v / 100 })} testId="local-radius" />
+                  <ScrubSlider label={selected.radiusY === undefined ? tz('Radius', '半径') : tz('Horizontal radius', '横向半径')} value={selected.radius * 100} range={[2, 200]} snap={1} format={(v) => `${Math.round(v)}%`} onChange={(v) => update({ radius: v / 100 })} testId="local-radius" />
+                  {selected.radiusY !== undefined && <ScrubSlider label={tz('Vertical radius', '纵向半径')} value={selected.radiusY * 100} range={[2, 200]} snap={1} format={(v) => `${Math.round(v)}%`} onChange={(v) => update({ radiusY: v / 100 })} testId="local-radius-y" />}
                 </>
               )}
               <p className="caption">

@@ -194,7 +194,8 @@ describe('host frame export', () => {
   });
   it('sends masked local grades under the key the host parses, on export and on proof', async () => {
     const f = frame();
-    f.adjustments.local = [{ ...createLocalAdjustment('linear'), exposure: -0.75, contrast: 20 }];
+    f.adjustments.local = [{ ...createLocalAdjustment('linear'), exposure: -0.75, contrast: 20 },
+      { ...createLocalAdjustment('radial'), cx: .35, cy: .4, radius: .12, radiusY: .2, exposure: .5 }];
     await exportFrame(recipe(), f, catalog, ['export_frame']);
     const sent = fake.request.mock.calls[0]![1] as { adjustments: Record<string, unknown> };
     expect(sent.adjustments.localAdjustments).toEqual(f.adjustments.local);

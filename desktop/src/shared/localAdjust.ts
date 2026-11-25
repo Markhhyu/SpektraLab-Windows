@@ -18,10 +18,12 @@ export interface LocalAdjustment {
   y0: number;
   x1: number;
   y1: number;
-  /** Radial: centre and radius, fractions of the frame's short edge. */
+  /** Normalised centre; radius is a fraction of frame width. */
   cx: number;
   cy: number;
   radius: number;
+  /** Vertical radius in frame heights. Absent in legacy radial masks. */
+  radiusY?: number;
   feather: number;
   invert: boolean;
   /** Exposure in EV; the other grades are -100..100 UI units. */
@@ -105,6 +107,7 @@ export function clampLocalAdjustment(a: LocalAdjustment): LocalAdjustment {
     cx: clamp(a.cx, -1, 2),
     cy: clamp(a.cy, -1, 2),
     radius: clamp(a.radius, 0.02, 2),
+    ...(a.radiusY !== undefined && { radiusY: clamp(a.radiusY, 0.02, 2) }),
     feather: clamp(a.feather, 0, 2),
     exposure: clamp(a.exposure, LOCAL_GRADE_RANGE.exposure[0], LOCAL_GRADE_RANGE.exposure[1]),
     contrast: clamp(a.contrast, -100, 100),
@@ -138,6 +141,7 @@ export function decodeLocalAdjustments(raw: unknown): LocalAdjustment[] {
         cx: num(o.cx, base.cx),
         cy: num(o.cy, base.cy),
         radius: num(o.radius, base.radius),
+        ...(typeof o.radiusY === 'number' && Number.isFinite(o.radiusY) && { radiusY: o.radiusY }),
         feather: num(o.feather, base.feather),
         invert: typeof o.invert === 'boolean' ? o.invert : base.invert,
         exposure: num(o.exposure, 0),
@@ -173,9 +177,9 @@ function smooth01(v: number): number {
 export function maskWeight(a: LocalAdjustment, x: number, y: number, aspect = 1): number {
   let weight: number;
   if (a.kind === 'radial') {
-    const dx = x - a.cx;
-    const dy = (y - a.cy) * aspect;
-    const d = Math.sqrt(dx * dx + dy * dy) / Math.max(a.radius, 1e-3);
+    const dx = (x - a.cx) / a.radius;
+    const dy = (y - a.cy) / (a.radiusY ?? a.radius / aspect);
+    const d = Math.hypot(dx, dy);
     const edge = Math.max(a.feather * 0.5, 1e-3);
     weight = smooth01((1 - d) / edge);
   } else {

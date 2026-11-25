@@ -110,7 +110,7 @@ export function shortcutTable(): Record<string, Action> {
     arrowright: () => selectRelative(1),
     // The picked frames leave the roll (Lightroom's Delete; the file stays).
     // Only from the plain editor: not mid-crop, mid-pick or while placing a pair.
-    delete: () => { const s = sessionStore.getState(); if (s.tool === 'select' && !s.pairPlacing) void removeSelectedFrames(); },
+    delete: () => { const s = sessionStore.getState(); if (s.tool === 'select' && !s.pairPlacing && !s.radialMaskId) void removeSelectedFrames(); },
     escape: () => {
       const s = sessionStore.getState();
       if (s.exportOpen && !s.batchExporting) setPages({ exportOpen: false });
@@ -118,7 +118,7 @@ export function shortcutTable(): Record<string, Action> {
       else if (s.aboutOpen) setPages({ aboutOpen: false });
       else if (s.shortcutsOpen) setPages({ shortcutsOpen: false });
       else if (s.historyOpen) setPages({ historyOpen: false });
-      else if (s.tool === 'crop' || s.tool === 'neutral' || s.pairPlacing) setTool('select');
+      else if (s.tool === 'crop' || s.tool === 'neutral' || s.pairPlacing || s.radialMaskId) setTool('select');
       else setOriginal(false);
     },
   };

@@ -9,14 +9,13 @@ Four things a "real film texture" claim for 50D has to pass:
                     must sit on the datasheet's page-4 curves (10/20/30/40
                     cy/mm target 1.014/0.857/0.611/0.435 R, 1.012/0.898/0.688/
                     0.543 G, 0.959/0.740/0.569/0.469 B), and be monotone.
-  push == warm      C-41's one-sixth stop per degree: push 0.5 at 20 C and
+  push == warm      In the generic development model, push 0.5 at 20 C and
                     push 0 at 23 C are *one* development -- the same negative
                     and the same grain (the audit's C-11 had them 8.3% apart).
   grain seed        `grain_seed` holds one realisation (two renders identical);
                     two seeds differ; 0 keeps a fresh grain per render.
-  grain structure   50D is the catalogue's finest-structured stock: its grain's
-                    physical correlation length is below the higher-speed
-                    VISION3s (whose clump sizes follow their sigma ratios).
+  grain amplitude   at a matched print level, the 50D green-channel grain
+                    sigma is lower than the other stocks in this comparison.
 """
 from __future__ import annotations
 
@@ -31,6 +30,7 @@ from scipy.ndimage import convolve as nd_convolve
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import spk_ctypes as spk  # noqa: E402
+from grain_stock_checks import grain_at_level  # noqa: E402
 
 BASE = {
     "film_stock": "kodak_vision3_50d", "print_stock": "kodak_2383",
@@ -168,21 +168,27 @@ def main() -> int:
     check(0.85 * 483.0 < aperture < 1.15 * 483.0,
           f"48 um aperture grain sigma {aperture:.0f} counts (reference 483, sheet-calibrated)")
 
-    print("push 0.5 at 20 C == push 0 at 23 C (one development, C-41's 1/6 stop/C)")
+    print("generic development: a 1/6-stop push per degree")
     img = np.full((341, 512, 3), 0.18, np.float32)
-    a = render(engine, img, {"development_push_stops": 0.5, "development_temperature_c": 20.0,
-                             "grain_active": True, "halation_active": False})
-    b = render(engine, img, {"development_push_stops": 0.0, "development_temperature_c": 23.0,
-                             "grain_active": True, "halation_active": False})
-    d = np.abs(a - b).max()
-    report["push_temp_max_delta"] = float(d)
-    check(d <= 1, f"the two renders agree (max |d| {d:.0f} code)")
-    c = render(engine, img, {"development_push_stops": 0.667, "development_temperature_c": 20.0,
-                             "grain_active": True, "halation_active": False})
-    e = render(engine, img, {"development_push_stops": 0.0, "development_temperature_c": 24.0,
-                             "grain_active": True, "halation_active": False})
-    check(np.abs(c - e).max() <= 1,
-          f"and +4 C equals its own push (+2/3): max |d| {np.abs(c - e).max():.0f}")
+    def develop(push, temperature):
+        return render(engine, img, {
+            "development_active": True, "development_push_stops": push,
+            "development_temperature_c": temperature, "grain_active": True,
+            "grain_seed": 12345, "halation_active": False,
+        })
+
+    normal = develop(0, 20)
+    for temperature in (23, 24):
+        pushed = develop((temperature - 20) / 6, 20)
+        warmed = develop(0, temperature)
+        for name, result in (("push", pushed), ("temperature", warmed)):
+            shift = float(np.abs(result - normal).mean())
+            check(shift > 1, f"{name} at {temperature} C changes standard development ({shift:.1f} codes)")
+        difference = float(np.abs(pushed - warmed).max())
+        report[f"push_temp_{temperature}c_max_delta"] = difference
+        if temperature == 23:
+            report["push_temp_max_delta"] = difference
+        check(difference <= 1, f"{temperature} C matches its equivalent push (max {difference:.0f} codes)")
 
     print("grain_seed: one realisation held, two seeds different, 0 fresh")
     one = render(engine, img, {"grain_active": True, "halation_active": False, "grain_seed": 12345})
@@ -208,24 +214,12 @@ def main() -> int:
     # sheet says differs is amplitude (sigma-D), and that is what the per-stock
     # calibration reproduces. 50D (the anchor row) must sit below every faster
     # stock at a common print level.
-    def sigma(stock: str) -> float:
-        flat = np.full((341, 512, 3), 0.18, np.float32)
-        lo, hi = 0.01, 4.0
-        for _ in range(11):
-            mid = 0.5 * (lo + hi)
-            if render(engine, flat, {"film_stock": stock, "grain_active": True,
-                                     "halation_active": False}).mean() < 30000.0:
-                lo = mid
-            else:
-                hi = mid
-        delta = (render(engine, flat, {"film_stock": stock, "grain_active": True,
-                                       "halation_active": False})
-                 - render(engine, flat, {"film_stock": stock, "grain_active": False,
-                                         "halation_active": False}))[..., 1]
-        return float(delta.std())
-
-    sig = {st: sigma(st) for st in ("kodak_vision3_50d", "kodak_vision3_250d",
-                                    "kodak_vision3_500t", "kodak_portra_800")}
+    sig = {}
+    levels = {}
+    for stock in ("kodak_vision3_50d", "kodak_vision3_250d", "kodak_vision3_500t", "kodak_portra_800"):
+        sigma, levels[stock] = grain_at_level(engine, stock, BASE["print_stock"])
+        sig[stock] = float(sigma[1])
+    report["grain_print_levels"] = levels
     print("    " + "  ".join(f"{k.split('_')[-2]}_{k.split('_')[-1]}:{v:.0f}"
                              for k, v in sig.items()))
     report["grain_sigma_print"] = {k: float(v) for k, v in sig.items()}

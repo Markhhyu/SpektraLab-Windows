@@ -47,19 +47,23 @@ def render(engine, stock, value, delta):
     return rgba.astype(np.float64)[..., :3]
 
 
-def grain_at_level(engine, stock):
+def grain_at_level(engine, stock, print_stock=BASE["print_stock"]):
     """The stock's grain sigma (per channel, print codes) at a common print level."""
+    settings = {"print_stock": print_stock, "grain_active": True, "grain_seed": 12345}
     lo, hi = 0.01, 4.0
     for _ in range(14):
         mid = 0.5 * (lo + hi)
-        if render(engine, stock, mid, {}).mean() < LEVEL:
+        if render(engine, stock, mid, settings).mean() < LEVEL:
             lo = mid
         else:
             hi = mid
     value = 0.5 * (lo + hi)
-    on = render(engine, stock, value, {})
-    off = render(engine, stock, value, {"grain_active": False})
-    return (on - off).std(axis=(0, 1)), float(on.mean())
+    on = render(engine, stock, value, settings)
+    off = render(engine, stock, value, {**settings, "grain_active": False})
+    level = float(on.mean())
+    if abs(level - LEVEL) > LEVEL * 0.005:
+        raise AssertionError(f"{stock} on {print_stock}: matched level {level:.1f}, target {LEVEL}")
+    return (on - off).std(axis=(0, 1)), level
 
 
 def main() -> int:

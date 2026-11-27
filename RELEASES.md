@@ -42,6 +42,20 @@ link. Both installer names on that release contain the same bytes.
 
 ## History
 
+### v1.12.1 — 显影前与显影后调整 / Pre- and post-development controls
+
+<h4 id="cn-1.12.1">编辑面板</h4>
+
+- 参数面板按「显影前」和「显影后」分为两页，每页都说明了调整作用的位置。缩窄侧栏或放大界面时，两个页签都能完整显示。
+- 成片曝光、白平衡和局部蒙版位于「显影后」页顶部，成片暗角也移入该页。升级前停在「常用调整」的用户会直接进入「显影后」。
+
+<h4 id="en-1.12.1">Editing panel</h4>
+
+- The Parameters panel has two tabs, Pre-Dev and Post-Dev, each with a short explanation of what it adjusts. Both labels fit in the narrowest sidebar at all supported interface scales.
+- Output exposure, white balance and local masks appear at the top of Post-Dev. The output vignette control also moves to Post-Dev. Users who last selected Basic will open directly on Post-Dev after upgrading.
+
+[Full changelog](https://github.com/Markhhyu/SpektraLab-Windows/compare/v1.12.0...v1.12.1)
+
 ### v1.12.0 — 径向蒙版与照片工作流 / Radial masks and photo workflow
 
 <h4 id="cn-1.12.0">选片、试片与局部曝光</h4>
